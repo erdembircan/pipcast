@@ -5,7 +5,9 @@ import {
   filesChanged,
   finishedFoot,
   FINISHED,
+  LEAD,
   stoppedFoot,
+  storyLine,
   waited,
   waitingFoot,
   duration,
@@ -13,6 +15,7 @@ import {
 import type { Jingle, SessionRecord, Snapshot, Story } from '@pipcast/contract'
 import type { ClawdAct, NewsEvent, Scene } from '@pipcast/design'
 
+import type { TickerExtra } from './board.ts'
 import { DESK_MS, REDUCED_OPENER_MS, STINGER_MS, STORY_OUTRO_MS } from './timing.ts'
 import type { Step } from './types.ts'
 
@@ -21,6 +24,8 @@ export interface Segment {
   steps: Step[]
   // Reduced motion leaves the outro out; its jingle fires as the board returns
   endCue?: Jingle
+  // What the ticker adds at the desk while this segment is on air
+  ticker?: (snapshot: Snapshot) => TickerExtra
 }
 
 function newest(stories: Story[], kind: Story['kind']): Story | undefined {
@@ -145,8 +150,12 @@ export function storySegment(
     scene: ({ now, board }): Scene => ({ mode: 'outro', clock: clock(now), progress: 1, board }),
   }
   const id = `story:${story.id}`
+  const ticker = (): TickerExtra => ({
+    lead: { lead: LEAD.breaking, text: storyLine(story.kind, title) },
+    skipWaitingFor: sessionId,
+  })
   if (reducedMotion) {
-    return { id, steps: [opener, desk], endCue: 'breaking-out' }
+    return { id, steps: [opener, desk], endCue: 'breaking-out', ticker }
   }
-  return { id, steps: [opener, desk, outro] }
+  return { id, steps: [opener, desk, outro], ticker }
 }

@@ -102,6 +102,27 @@ describe('a story', () => {
     expect(h.cues().map((cue) => cue.jingle)).toEqual(['breaking', 'breaking-out'])
   })
 
+  it('leads the ticker at a needs-input desk with the story on air, and skips its own STILL WAITING', () => {
+    const h = harness(T0, [session('a'), session('b', { activity: [{ at: T0, text: 'editing b.ts' }] })])
+    h.land([asking('a', T0 + 1000), session('b', { activity: [{ at: T0, text: 'editing b.ts' }] })], T0 + 1000)
+    const desk = h.until(T0 + 3000).program
+    expect(desk.scene.mode).toBe('desk')
+    expect(lines(desk)).toEqual([
+      'BREAKING Title a needs your input',
+      'ON THE DESK 1 session working',
+      'project-b: editing b.ts',
+    ])
+  })
+
+  it('leads the ticker at a ready desk with the story on air', () => {
+    const done = story('a:1', 'ready', T0 + 1000, { added: 1, removed: 0, files: 1 })
+    const h = harness(T0, [session('a')])
+    h.land([session('a', { state: 'ready', stateAt: done.at, stories: [done] })], T0 + 1000)
+    const desk = h.until(T0 + 3000).program
+    expect(desk.scene.mode).toBe('desk')
+    expect(lines(desk)).toEqual(['BREAKING Title a ready for review', 'ON THE DESK 1 session on KLWD'])
+  })
+
   it('puts a story that lands during another in the ticker and airs it 2 s after the outro', () => {
     const h = harness(T0, [session('a'), session('b')])
     expect(h.land([asking('a', T0 + 1000), asking('b', T0 + 1000)], T0 + 1000).program.key).toBe('story:a:1:0')
@@ -284,6 +305,7 @@ describe('the hour', () => {
       strap: '1 needs you · 1 ready for review',
       event: { kind: 'hourly', figure: '+100 −20', sub: 'Across 2 sessions', foot: '14:00 to 15:00' },
     })
+    expect(lines(desk)[0]).toBe('ON THE HOUR 2 stories since 14:00')
 
     const review = h.until(at(15, 0, 13)).program
     expect(review.scene).toMatchObject({
@@ -295,7 +317,8 @@ describe('the hour', () => {
       ],
     })
 
-    // The review carries the board's ticker, like the desks
+    // The review carries the report's line and the board's ticker, like the desk
+    expect(lines(review)[0]).toBe('ON THE HOUR 2 stories since 14:00')
     expect(lines(review).some((line) => line.startsWith('ON THE DESK'))).toBe(true)
     expect(lines(review).some((line) => line.startsWith('STILL WAITING Title a'))).toBe(true)
 
@@ -370,6 +393,7 @@ describe('the hour', () => {
       headline: 'A QUIET HOUR',
       strap: '1 session working, nothing needs you',
     })
+    expect(lines(desk)[0]).toBe('ON THE HOUR A quiet hour: 1 session working')
     const board = h.until(at(15, 0, 30)).program
     expect(h.history.some((sample) => sample.program.scene.mode === 'review')).toBe(false)
     expect(board.key).toBe('board')

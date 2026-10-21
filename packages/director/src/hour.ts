@@ -2,10 +2,12 @@ import {
   acrossSessions,
   clock,
   figure,
+  LEAD,
   hourFoot,
   hourHeadline,
   hourKey,
   hourLabel,
+  hourSoFarLine,
   hourStrap,
   quietStrap,
   reviewDetail,
@@ -15,6 +17,7 @@ import {
 import type { SessionRecord, Snapshot, StoryCounts } from '@pipcast/contract'
 import type { HourRow, Scene } from '@pipcast/design'
 
+import type { TickerExtra } from './board.ts'
 import type { Segment } from './story.ts'
 import { DESK_MS, HOUR_OUTRO_MS, IDENT_MS, REDUCED_OPENER_MS, REVIEW_MS } from './timing.ts'
 import type { Step } from './types.ts'
@@ -170,8 +173,19 @@ export function hourReport(
 
   const id = `hour:${hour}`
   const shown = stories > 0 ? [ident, desk, review] : [ident, desk]
+  const ticker = (live: Snapshot): TickerExtra => ({
+    lead: {
+      lead: LEAD.onTheHour,
+      text: hourSoFarLine(
+        stories,
+        clock(from),
+        live.sessions.filter((session) => session.state === 'working').length,
+        live.sessions.length,
+      ),
+    },
+  })
   if (reducedMotion) {
-    return { segment: { id, steps: shown, endCue: 'hour-out' }, stories }
+    return { segment: { id, steps: shown, endCue: 'hour-out', ticker }, stories }
   }
-  return { segment: { id, steps: [...shown, outro] }, stories }
+  return { segment: { id, steps: [...shown, outro], ticker }, stories }
 }

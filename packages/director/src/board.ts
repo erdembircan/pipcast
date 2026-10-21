@@ -46,8 +46,16 @@ function titleOf(snapshot: Snapshot, sessionId: string): string | undefined {
   return snapshot.sessions.find((session) => session.id === sessionId)?.title
 }
 
-export function boardTicker(now: number, snapshot: Snapshot, state: BoardState): TickerItem[] {
-  const leads: TickerItem[] = []
+// What a segment on air adds to the ticker at its desk
+export interface TickerExtra {
+  // Leads the ticker
+  lead?: TickerItem
+  // A session whose STILL WAITING line would only repeat the story on air
+  skipWaitingFor?: string
+}
+
+export function boardTicker(now: number, snapshot: Snapshot, state: BoardState, extra: TickerExtra = {}): TickerItem[] {
+  const leads: TickerItem[] = extra.lead === undefined ? [] : [extra.lead]
 
   // 1. What is waiting its turn
   let comingUp = 0
@@ -86,7 +94,7 @@ export function boardTicker(now: number, snapshot: Snapshot, state: BoardState):
   // 3. Sessions that still need you, the longest waiting first
   const waiting: { at: number; item: TickerItem }[] = []
   for (const session of snapshot.sessions) {
-    if (session.state === 'needs-input' || session.state === 'error') {
+    if (session.id !== extra.skipWaitingFor && (session.state === 'needs-input' || session.state === 'error')) {
       const at = newestOfKind(session, session.state)?.at ?? session.stateAt
       waiting.push({
         at,

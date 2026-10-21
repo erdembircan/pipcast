@@ -83,6 +83,15 @@ export function afterReportLine(stories: number, hour: string, nextHour: string)
   return `${stories} ${plural(stories, 'story', 'stories')} at ${hour} · next report ${nextHour}`
 }
 
+// While the report on the hour is on air: "2 stories since 14:00", or, in a
+// quiet hour, "A quiet hour: 4 sessions working"
+export function hourSoFarLine(stories: number, from: string, working: number, onAir: number): string {
+  if (stories === 0) {
+    return `A quiet hour: ${deskLine(working, onAir)}`
+  }
+  return `${stories} ${plural(stories, 'story', 'stories')} since ${from}`
+}
+
 export function deskLine(working: number, onAir: number): string {
   if (working > 0) {
     return `${working} ${plural(working, 'session', 'sessions')} working`

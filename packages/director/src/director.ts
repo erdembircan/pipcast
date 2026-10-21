@@ -2,7 +2,7 @@ import { hourStart, STORY_FRESH_MS } from '@pipcast/contract'
 import type { Jingle, Snapshot, Story } from '@pipcast/contract'
 import type { Scene } from '@pipcast/design'
 
-import { boardScene } from './board.ts'
+import { boardScene, boardTicker } from './board.ts'
 import { hourReport } from './hour.ts'
 import { movedOn, storySegment } from './story.ts'
 import type { Segment } from './story.ts'
@@ -202,7 +202,14 @@ export function createDirector(options: DirectorOptions = {}): { tick(input: Tic
     if (current === null || step === undefined) {
       return { scene: board, key: 'board', cues, reported }
     }
-    const scene = step.scene({ now, ticker: board.ticker ?? [], board })
+    // At the desk and the review the ticker also carries the segment's own line
+    const extra = current.segment.ticker
+    const atDesk = step.role === 'desk' || step.role === 'review'
+    const ticker =
+      atDesk && snapshot !== null && extra !== undefined
+        ? boardTicker(now, snapshot, boardState(), extra(snapshot))
+        : (board.ticker ?? [])
+    const scene = step.scene({ now, ticker, board })
     return { scene, key: `${current.segment.id}:${current.index}`, cues, reported }
   }
 
