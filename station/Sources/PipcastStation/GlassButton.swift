@@ -75,10 +75,10 @@ final class GlassButton: NSView {
         return image
     }
 
-    /// White at 18% over the glass, 26% under the pointer.
+    /// The real glass needs no tint at rest; under the pointer it brightens with white at 10%.
     private func updateTint() {
         guard #available(macOS 26.0, *), let glass = glass as? NSGlassEffectView else { return }
-        glass.tintColor = NSColor.white.withAlphaComponent(isHovered ? 0.26 : 0.18)
+        glass.tintColor = isHovered ? NSColor.white.withAlphaComponent(0.10) : nil
     }
 
     // The glass and the symbol inside never take an event: the button is the target.

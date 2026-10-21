@@ -24,6 +24,8 @@ public enum Geometry {
     public static let minScale: CGFloat = 0.7
     /// How close to an edge a drag starts a resize.
     public static let edgeGrip: CGFloat = 8
+    /// How close to the inner corner a drag starts a corner resize: the window's corner radius.
+    public static let cornerGrip: CGFloat = 20
 
     /// The design system's `pipSize` applied to a visible frame: a quarter of
     /// it, less `margin` on every side, at 16:9.
@@ -79,23 +81,36 @@ public enum Geometry {
         }
     }
 
-    /// Which edge or corner a point in the window's own coordinates grips, if any.
-    public static func edge(at point: CGPoint, in size: CGSize, grip: CGFloat = edgeGrip) -> ResizeEdge? {
-        let left = point.x < grip
-        let right = point.x > size.width - grip
-        let bottom = point.y < grip
-        let top = point.y > size.height - grip
-        switch (top, bottom, left, right) {
-        case (true, _, true, _): return .topLeft
-        case (true, _, _, true): return .topRight
-        case (_, true, true, _): return .bottomLeft
-        case (_, true, _, true): return .bottomRight
-        case (true, _, _, _): return .top
-        case (_, true, _, _): return .bottom
-        case (_, _, true, _): return .left
-        case (_, _, _, true): return .right
-        default: return nil
+    /// Which resize grip a point in the window's own coordinates (origin bottom left) is on, if any. Only the edges
+    /// that face the middle of the screen resize, because the outer corner stays put: for a window in a right quadrant
+    /// its left edge, in a top quadrant its bottom edge, and the corner between them.
+    public static func grip(at point: CGPoint, in size: CGSize, quadrant: Quadrant,
+                            edgeGrip: CGFloat = edgeGrip, cornerGrip: CGFloat = cornerGrip) -> ResizeEdge? {
+        guard (0...size.width).contains(point.x), (0...size.height).contains(point.y) else { return nil }
+        let side: ResizeEdge = quadrant.isRight ? .left : .right
+        let sideDistance = quadrant.isRight ? point.x : size.width - point.x
+        let end: ResizeEdge = quadrant.isTop ? .bottom : .top
+        let endDistance = quadrant.isTop ? point.y : size.height - point.y
+        if sideDistance < cornerGrip && endDistance < cornerGrip {
+            switch (side, end) {
+            case (.left, .top): return .topLeft
+            case (.left, _): return .bottomLeft
+            case (_, .top): return .topRight
+            default: return .bottomRight
+            }
         }
+        if sideDistance < edgeGrip { return side }
+        if endDistance < edgeGrip { return end }
+        return nil
+    }
+
+    /// Which way a window of this width can still be resized: at full size only smaller, at the smallest only bigger.
+    public enum ResizeRoom: Equatable { case both, shrinkOnly, growOnly }
+
+    public static func room(width: CGFloat, full: CGSize) -> ResizeRoom {
+        if width >= full.width - 0.5 { return .shrinkOnly }
+        if width <= minSize(full: full).width + 0.5 { return .growOnly }
+        return .both
     }
 
     /// The window after a resize drag that started at `start` and has moved by

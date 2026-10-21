@@ -32,6 +32,7 @@ final class StationController: NSObject, InteractionDelegate, WKNavigationDelega
     private var lastSendError: String?
     private var watcher: DispatchSourceFileSystemObject?
     private var timers: [Timer] = []
+    private var selfCaptureScheduled = false
 
     init(options: StationOptions) {
         self.options = options
@@ -59,6 +60,12 @@ final class StationController: NSObject, InteractionDelegate, WKNavigationDelega
     /// screen before the app has finished launching makes AppKit activate it.
     func start() {
         log.write("start \(Constants.version) home \(paths.root)")
+        log.write(allowPointerInBackground()
+                  ? "pointer: set in the background"
+                  : "error cannot set the pointer in the background")
+        log.write(panel.hasForcedActiveAppearance
+                  ? "glass: active appearance forced"
+                  : "error cannot force the window's active appearance; the glass draws flat")
         jingles = Jingles(folder: "\(options.assets)/sounds", onProblem: { [log] in log.write("error \($0)") })
         place(on: NSScreen.main ?? NSScreen.screens[0], animated: false)
 
@@ -228,12 +235,35 @@ final class StationController: NSObject, InteractionDelegate, WKNavigationDelega
         isShown = want
         if want {
             // Never makeKeyAndOrderFront or activate: the station must not take the keyboard.
+            panel.forceActiveAppearance()
             panel.orderFrontRegardless()
+            scheduleSelfCaptureOnce()
         } else {
             panel.orderOut(nil)
         }
         log.write(want ? "shown" : "hidden")
         sendSnapshot()
+    }
+
+    /// With `PIPCAST_SELF_CAPTURE` set to a file path: once, 1.5 s after the window is first shown, shows the controls
+    /// and writes the station's own picture of its window there, for checking the glass by eye.
+    private func scheduleSelfCaptureOnce() {
+        guard !selfCaptureScheduled,
+              let path = ProcessInfo.processInfo.environment["PIPCAST_SELF_CAPTURE"], !path.isEmpty else { return }
+        selfCaptureScheduled = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
+            guard let self else { return }
+            self.chrome.setHover(true)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [weak self] in
+                guard let self else { return }
+                if writeSelfCapture(of: self.panel, to: path) {
+                    self.log.write("self-capture \(path)")
+                } else {
+                    self.log.write("error self-capture failed")
+                }
+                if !self.panel.frame.contains(NSEvent.mouseLocation) { self.chrome.setHover(false) }
+            }
+        }
     }
 
     private func currentScreen() -> NSScreen {
@@ -245,6 +275,8 @@ final class StationController: NSObject, InteractionDelegate, WKNavigationDelega
 
     private func place(on screen: NSScreen, animated: Bool) {
         let frame = Geometry.frame(quadrant: quadrant, scale: prefs.scale, visible: screen.visibleFrame)
+        // Screen-change notifications can come in bursts; a window already in place stays as it is.
+        if frame == panel.frame { return }
         log.write("place \(quadrant.rawValue) in \(NSStringFromRect(screen.visibleFrame)) at \(NSStringFromRect(frame))")
         if animated {
             NSAnimationContext.runAnimationGroup({ context in
