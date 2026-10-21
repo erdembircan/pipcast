@@ -8,6 +8,7 @@ import {
   errorWords,
   fallbackTitle,
   hourHeadline,
+  hourSoFarLine,
   hourStrap,
   reviewDetail,
   stillWaitingLine,
@@ -33,6 +34,12 @@ describe('the ticker', () => {
     expect(afterReportLine(2, '15:00', '16:00')).toBe('2 stories at 15:00 · next report 16:00')
     expect(afterReportLine(1, '15:00', '16:00')).toBe('1 story at 15:00 · next report 16:00')
     expect(afterReportLine(0, '15:00', '16:00')).toBe('A quiet hour · next report 16:00')
+  })
+
+  it('writes the line for the report while it is on air', () => {
+    expect(hourSoFarLine(2, '14:00', 3, 4)).toBe('2 stories since 14:00')
+    expect(hourSoFarLine(1, '14:00', 3, 4)).toBe('1 story since 14:00')
+    expect(hourSoFarLine(0, '10:00', 4, 4)).toBe('A quiet hour: 4 sessions working')
   })
 
   it('writes the desk line', () => {

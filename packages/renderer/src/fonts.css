@@ -1,0 +1,4 @@
+@font-face { font-family: "Anybody"; font-style: normal; font-weight: 100 900; font-stretch: 50% 150%; font-display: block; src: url("fonts/anybody.ttf") format("truetype"); }
+@font-face { font-family: "Anybody"; font-style: italic; font-weight: 100 900; font-stretch: 50% 150%; font-display: block; src: url("fonts/anybody-italic.ttf") format("truetype"); }
+@font-face { font-family: "Archivo"; font-style: normal; font-weight: 100 900; font-stretch: 62% 125%; font-display: block; src: url("fonts/archivo.ttf") format("truetype"); }
+@font-face { font-family: "Archivo"; font-style: italic; font-weight: 100 900; font-stretch: 62% 125%; font-display: block; src: url("fonts/archivo-italic.ttf") format("truetype"); }

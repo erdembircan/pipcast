@@ -1,0 +1,92 @@
+{
+  "snapshot": {
+    "now": 1792593360000,
+    "visible": true,
+    "sessions": [
+      {
+        "v": 1,
+        "id": "auth",
+        "title": "Refactor auth middleware",
+        "project": "api-server",
+        "state": "working",
+        "stateAt": 1792592760000,
+        "tunedInAt": 1792589760000,
+        "checkedInAt": 1792593360000,
+        "stories": [],
+        "activity": [
+          {
+            "at": 1792593358000,
+            "text": "editing src/auth/session.ts"
+          }
+        ],
+        "hours": []
+      },
+      {
+        "v": 1,
+        "id": "checkout",
+        "title": "Fix flaky checkout test",
+        "project": "web-shop",
+        "state": "working",
+        "stateAt": 1792592760000,
+        "tunedInAt": 1792589761000,
+        "checkedInAt": 1792593360000,
+        "stories": [],
+        "activity": [
+          {
+            "at": 1792593356000,
+            "text": "running the test suite"
+          }
+        ],
+        "hours": []
+      },
+      {
+        "v": 1,
+        "id": "notes",
+        "title": "Write release notes for 2.4",
+        "project": "docs-site",
+        "state": "ready",
+        "stateAt": 1792593355000,
+        "tunedInAt": 1792589762000,
+        "checkedInAt": 1792593360000,
+        "stories": [
+          {
+            "id": "notes:1",
+            "kind": "ready",
+            "at": 1792593355000,
+            "added": 182,
+            "removed": 40,
+            "files": 4,
+            "durationMs": 540000
+          }
+        ],
+        "activity": [
+          {
+            "at": 1792593354000,
+            "text": "drafting CHANGELOG.md"
+          }
+        ],
+        "hours": []
+      },
+      {
+        "v": 1,
+        "id": "sqlite",
+        "title": "Migrate settings to SQLite",
+        "project": "desktop-app",
+        "state": "working",
+        "stateAt": 1792592760000,
+        "tunedInAt": 1792589763000,
+        "checkedInAt": 1792593360000,
+        "stories": [],
+        "activity": [
+          {
+            "at": 1792593352000,
+            "text": "writing migration 004"
+          }
+        ],
+        "hours": []
+      }
+    ],
+    "lastReportAt": null
+  },
+  "at": 1792593362000
+}
