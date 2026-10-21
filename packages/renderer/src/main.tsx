@@ -28,7 +28,6 @@ function boot(): void {
       startDemo()
     }
   }
-  post({ type: 'ready' })
 }
 
 boot()

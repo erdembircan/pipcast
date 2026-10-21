@@ -99,13 +99,13 @@ describe('the still page', () => {
   it('posts rendered after the station sends a still', async () => {
     window.location.hash = '#still'
     act(() => root.render(<StillPage />))
-    expect(postMessage).not.toHaveBeenCalled()
+    expect(postMessage).not.toHaveBeenCalledWith({ type: 'rendered' })
     expect(container.querySelector('.pn-broadcast')).toBeNull()
 
     act(() => receive({ type: 'still', input: { scene: { mode: 'board', clock: '14:32', sessions: [], ticker: [] } } }))
     expect(container.querySelector('.pn-mode-board')).not.toBeNull()
     await vi.waitFor(() => expect(postMessage).toHaveBeenCalledWith({ type: 'rendered' }))
-    expect(postMessage).toHaveBeenCalledTimes(1)
+    expect(postMessage.mock.calls.filter(([message]) => message.type === 'rendered')).toHaveLength(1)
   })
 
   it('draws the input in its fragment without waiting', async () => {

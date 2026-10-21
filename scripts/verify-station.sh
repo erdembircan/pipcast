@@ -9,7 +9,7 @@ set -euo pipefail
 root="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$root"
 
-bash scripts/build-station.sh
+bash scripts/build.d/10-station.sh
 swift build -c release --package-path station --product station-inspect
 bin="$(swift build -c release --package-path station --show-bin-path)"
 station="$root/plugin/station/pipcast-station"
@@ -93,7 +93,8 @@ fi
 step "stop, then launch again"
 out="$("$station" stop --home "$home")"
 [[ "$out" == "stopped $pid" ]] || die "stop printed: $out"
-echo "ok   stopped $pid"
+[[ ! -e "$home/station.json" ]] || die "station.json is still there after stop"
+echo "ok   stopped $pid, and station.json is gone"
 before="$(log_lines)"
 if $locked; then
   target="com.example.pipcast.never-frontmost"

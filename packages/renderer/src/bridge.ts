@@ -12,8 +12,15 @@ export type Listener = (message: HostMessage) => void
 
 const listeners = new Set<Listener>()
 
+let readyPosted = false
+
 export function subscribe(listener: Listener): () => void {
   listeners.add(listener)
+  if (!readyPosted) {
+    readyPosted = true
+    // The station answers ready at once, so the page says it only once something listens
+    post({ type: 'ready' })
+  }
   return () => {
     listeners.delete(listener)
   }
