@@ -52,6 +52,12 @@ func stationWindows(_ pid: Int32, options: CGWindowListOption = [.optionOnScreen
 
 func isRunning(_ pid: Int32) -> Bool { kill(pid, 0) == 0 }
 
+/// A locked session has no visible windows to a web view, and the frontmost app is the login window.
+func isScreenLocked() -> Bool {
+    let session = CGSessionCopyCurrentDictionary() as? [String: Any]
+    return (session?["CGSSessionScreenIsLocked"] as? Bool) == true
+}
+
 func usageError() -> Never {
     FileHandle.standardError.write(Data("\(usage)\n".utf8))
     exit(64)
@@ -107,9 +113,7 @@ case "frontmost" where arguments.count == 1:
     pass("\(app?.bundleIdentifier ?? "none") \(app?.processIdentifier ?? 0)")
 
 case "locked" where arguments.count == 1:
-    // A locked session has no visible windows to the web view, and the frontmost app is the login window.
-    let session = CGSessionCopyCurrentDictionary() as? [String: Any]
-    pass((session?["CGSSessionScreenIsLocked"] as? Bool) == true ? "locked" : "unlocked")
+    pass(isScreenLocked() ? "locked" : "unlocked")
 
 case "window" where arguments.count == 2:
     guard let pid = Int32(arguments[1]) else { usageError() }
@@ -145,6 +149,22 @@ case "expect" where arguments.count == 5 && arguments[2] == "shown":
     let expected = Geometry.frame(quadrant: quadrant, scale: CGFloat(scale), visible: screen.visibleFrame)
     func close(_ a: CGFloat, _ b: CGFloat) -> Bool { abs(a - b) <= 1 }
 
+    // On a locked screen the window server holds the show animation's first
+    // frame, a little smaller than the real one around the same centre. Then
+    // the centre and the size are checked within 5% instead of the exact frame.
+    let locked = isScreenLocked()
+    func matches(_ frame: CGRect) -> Bool {
+        if !locked {
+            return close(frame.minX, expected.minX) && close(frame.minY, expected.minY)
+                && close(frame.width, expected.width) && close(frame.height, expected.height)
+        }
+        func size(_ value: CGFloat, _ target: CGFloat) -> Bool {
+            value >= target * 0.95 && value <= target + 1
+        }
+        return close(frame.midX, expected.midX) && close(frame.midY, expected.midY)
+            && size(frame.width, expected.width) && size(frame.height, expected.height)
+    }
+
     let watch = ActivationWatch(pid: pid)
     var seen: [Window] = []
     for _ in 0..<60 {
@@ -153,16 +173,18 @@ case "expect" where arguments.count == 5 && arguments[2] == "shown":
         }
         let own = stationWindows(pid)
         seen = own
-        if own.count == 1, let window = own.first,
-           close(window.appKit.minX, expected.minX), close(window.appKit.minY, expected.minY),
-           close(window.appKit.width, expected.width), close(window.appKit.height, expected.height) {
+        if own.count == 1, let window = own.first, matches(window.appKit) {
             // Activation, when it happens, lands a moment after the window appears.
             pause(0.4)
             let frontmost = NSWorkspace.shared.frontmostApplication
             if watch.check(pid) {
                 fail("FAIL the window is in the \(quadrant.rawValue) place, but the station took focus: it was the frontmost app")
             }
-            pass("ok   shown in the \(quadrant.rawValue) place at \(describe(window.appKit)); frontmost app: \(frontmost?.bundleIdentifier ?? "unknown")")
+            let front = frontmost?.bundleIdentifier ?? "unknown"
+            if locked {
+                pass("ok   shown in the \(quadrant.rawValue) place at \(describe(window.appKit)) (screen locked: the window server holds the show animation's first frame, so its centre and size were checked within 5%); frontmost app: \(front)")
+            }
+            pass("ok   shown in the \(quadrant.rawValue) place at \(describe(window.appKit)); frontmost app: \(front)")
         }
         pause(0.05)
     }

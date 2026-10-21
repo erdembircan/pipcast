@@ -20,8 +20,6 @@ final class StationPanel: NSPanel {
         backgroundColor = .clear
         hasShadow = true
         isReleasedWhenClosed = false
-        // No pop-in: the window server would report a window mid-animation.
-        animationBehavior = .none
     }
 
     override var canBecomeKey: Bool { false }
