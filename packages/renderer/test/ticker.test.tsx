@@ -114,11 +114,12 @@ describe('the ticker on air', () => {
 
   // How far the belt has moved past the view's left edge, from its transform
   function offset(): number {
-    const match = /^translateX\((-?[\d.]+)px\)$/.exec(belt().style.transform)
-    if (match === null) {
+    const match = /^translateX\((.+)px\)$/.exec(belt().style.transform)
+    const value = match === null ? Number.NaN : Number(match[1])
+    if (!Number.isFinite(value)) {
       throw new Error(`no transform: ${belt().style.transform}`)
     }
-    return -Number(match[1])
+    return -value
   }
 
   const lines: TickerItem[] = [
@@ -221,6 +222,7 @@ describe('the ticker on air', () => {
     )
     frames(40, 16)
     const wordsBefore = words()
+    const beltBefore = belt()
     const transformBefore = belt().style.transform
     expect(wordsBefore.length).toBeGreaterThan(0)
 
@@ -229,6 +231,7 @@ describe('the ticker on air', () => {
         <Broadcast key="desk:1" scene={desk} animate />
       </Stage>,
     )
+    expect(belt()).not.toBe(beltBefore)
     expect(words()).toEqual(wordsBefore)
     expect(belt().style.transform).toBe(transformBefore)
   })
