@@ -1,0 +1,44 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Pipcast test page</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #1d4e89; color: #ffffff; }
+  body { display: flex; align-items: center; justify-content: center; font: 700 72px/1 -apple-system, sans-serif; }
+</style>
+</head>
+<body>
+<div id="count">0</div>
+<script>
+(function () {
+  var still = location.hash === '#still'
+
+  function post(message) {
+    window.webkit.messageHandlers.pipcast.postMessage(message)
+  }
+
+  window.pipcast = {
+    receive: function (message) {
+      if (message.type === 'snapshot') {
+        document.getElementById('count').textContent = String(message.sessions.length)
+      } else if (message.type === 'still' && still) {
+        setTimeout(function () {
+          post({ type: 'rendered' })
+        }, 100)
+      }
+    }
+  }
+
+  // For the checks: what the page counts as, once it is on screen.
+  function reportVisibility() {
+    post({ type: 'log', level: 'info', text: 'visibilityState ' + document.visibilityState })
+  }
+  document.addEventListener('visibilitychange', reportVisibility)
+
+  post({ type: 'ready' })
+  setTimeout(reportVisibility, 1000)
+})()
+</script>
+</body>
+</html>
