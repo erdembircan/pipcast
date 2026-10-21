@@ -1,0 +1,210 @@
+import { hourStart, STORY_FRESH_MS } from '@pipcast/contract'
+import type { Jingle, Snapshot, Story } from '@pipcast/contract'
+import type { Scene } from '@pipcast/design'
+
+import { boardScene } from './board.ts'
+import { hourReport } from './hour.ts'
+import { movedOn, storySegment } from './story.ts'
+import type { Segment } from './story.ts'
+import { GAP_MS, HOUR_MS, IDENT_LEAD_MS, LAST_REPORT_KEEP_MS, REPORT_GRACE_MS } from './timing.ts'
+import type { BoardState, Carried, QueueItem, ReportMemory } from './types.ts'
+
+export interface DirectorOptions {
+  reducedMotion?: boolean
+}
+
+export interface Tick {
+  now: number
+  snapshot: Snapshot | null
+}
+
+export interface Program {
+  // What Broadcast draws now
+  scene: Scene
+  // 'board' between segments, else `${segmentId}:${stepIndex}`
+  key: string
+  // Jingles whose step started this tick
+  cues: Jingle[]
+  // The hour (ms) whose report started this tick
+  reported: number | null
+}
+
+interface OnAir {
+  item: QueueItem
+  segment: Segment
+  index: number
+  stepStartedAt: number
+}
+
+export function createDirector(options: DirectorOptions = {}): { tick(input: Tick): Program } {
+  const reducedMotion = options.reducedMotion === true
+
+  let initialized = false
+  const seen = new Set<string>()
+  const queue: QueueItem[] = []
+  let onAir: OnAir | null = null
+  let lastEnded: number | null = null
+  const carried = new Map<string, Carried>()
+  let lastReport: ReportMemory | null = null
+  let reportEndedAt: number | null = null
+  let scheduledHour = 0
+
+  function boardState(): BoardState {
+    const story = onAir?.item.kind === 'story' ? onAir.item.story : null
+    return {
+      queue,
+      carried,
+      onAirStoryId: story === null ? null : story.id,
+      lastReport,
+      reportEndedAt,
+    }
+  }
+
+  function tick({ now, snapshot }: Tick): Program {
+    const cues: Jingle[] = []
+    let reported: number | null = null
+
+    function end(at: number, normally: boolean): void {
+      if (onAir === null) {
+        return
+      }
+      const { item, segment } = onAir
+      if (item.kind === 'story') {
+        carried.set(item.story.id, { endedAt: at, kind: item.story.kind, sessionId: item.sessionId })
+      } else {
+        reportEndedAt = at
+      }
+      if (normally && segment.endCue !== undefined) {
+        cues.push(segment.endCue)
+      }
+      onAir = null
+      lastEnded = at
+    }
+
+    function enter(index: number, at: number): void {
+      if (onAir === null) {
+        return
+      }
+      onAir.index = index
+      onAir.stepStartedAt = at
+      const cue = onAir.segment.steps[index]?.cue
+      if (cue !== undefined) {
+        cues.push(cue)
+      }
+    }
+
+    if (snapshot !== null) {
+      // 1. The first tick
+      if (!initialized) {
+        initialized = true
+        for (const session of snapshot.sessions) {
+          for (const story of session.stories) {
+            if (story.at < now - STORY_FRESH_MS) {
+              seen.add(story.id)
+            }
+          }
+        }
+        scheduledHour = hourStart(now)
+        if (snapshot.lastReportAt !== null && now - snapshot.lastReportAt <= LAST_REPORT_KEEP_MS) {
+          lastReport = { hour: snapshot.lastReportAt, stories: 0 }
+        }
+      }
+
+      // 2. New stories, in the order they landed
+      const landed: { sessionId: string; story: Story }[] = []
+      for (const session of snapshot.sessions) {
+        for (const story of session.stories) {
+          if (!seen.has(story.id)) {
+            landed.push({ sessionId: session.id, story })
+          }
+        }
+      }
+      landed.sort((a, b) => a.story.at - b.story.at)
+      for (const { sessionId, story } of landed) {
+        queue.push({ kind: 'story', sessionId, story })
+        seen.add(story.id)
+      }
+
+      // 3. The hour
+      const next = hourStart(now) + HOUR_MS
+      if (now >= next - IDENT_LEAD_MS && next > scheduledHour) {
+        queue.push({ kind: 'hour', hour: next })
+        scheduledHour = next
+      }
+    }
+
+    const visible = snapshot !== null && snapshot.visible
+
+    if (!visible) {
+      // 4. Hidden: what is on air is cut and not restarted
+      end(now, false)
+    } else {
+      // 5. Advance
+      while (onAir !== null) {
+        const { item, segment, index, stepStartedAt } = onAir
+        const step = segment.steps[index]
+        if (step === undefined) {
+          end(now, true)
+          break
+        }
+        if (step.role === 'desk' && item.kind === 'story' && movedOn(snapshot, item.sessionId, item.story)) {
+          const outro = segment.steps.findIndex((other) => other.role === 'outro')
+          if (outro < 0) {
+            end(now, true)
+          } else {
+            enter(outro, now)
+          }
+          continue
+        }
+        if (now - stepStartedAt < step.length) {
+          break
+        }
+        const boundary = stepStartedAt + step.length
+        if (index + 1 >= segment.steps.length) {
+          end(boundary, true)
+        } else {
+          enter(index + 1, boundary)
+        }
+      }
+
+      // 6. Start the next
+      if (onAir === null && (lastEnded === null || now - lastEnded >= GAP_MS)) {
+        while (queue.length > 0 && onAir === null) {
+          const item = queue.shift()
+          if (item === undefined) {
+            break
+          }
+          if (item.kind === 'story') {
+            if (movedOn(snapshot, item.sessionId, item.story)) {
+              continue
+            }
+            onAir = { item, segment: storySegment(item.sessionId, item.story, snapshot, reducedMotion), index: 0, stepStartedAt: now }
+          } else {
+            if (item.hour + REPORT_GRACE_MS < now || snapshot === null) {
+              continue
+            }
+            const from = lastReport !== null && lastReport.hour < item.hour ? lastReport.hour : item.hour - HOUR_MS
+            const report = hourReport(item.hour, from, snapshot, now, reducedMotion)
+            onAir = { item, segment: report.segment, index: 0, stepStartedAt: now }
+            lastReport = { hour: item.hour, stories: report.stories }
+            reportEndedAt = null
+            reported = item.hour
+          }
+          enter(0, now)
+        }
+      }
+    }
+
+    // 7. The scene
+    const board = boardScene(now, snapshot, boardState())
+    const current: OnAir | null = onAir
+    const step = current?.segment.steps[current.index]
+    if (current === null || step === undefined) {
+      return { scene: board, key: 'board', cues, reported }
+    }
+    const scene = step.scene({ now, ticker: board.ticker ?? [], board })
+    return { scene, key: `${current.segment.id}:${current.index}`, cues, reported }
+  }
+
+  return { tick }
+}
