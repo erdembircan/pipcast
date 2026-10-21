@@ -21,7 +21,6 @@ await build({
   target: 'safari16',
   minify: true,
   jsx: 'automatic',
-  legalComments: 'none',
   alias: {
     '@pipcast/contract': join(root, 'plugin/src/contract/index.ts'),
     '@pipcast/director': join(root, 'packages/director/src/index.ts'),
