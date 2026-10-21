@@ -133,7 +133,8 @@ function withHour(record: SessionRecord, now: number, changes: Changes): Session
 
 export function finished(m: SessionModel, now: number, done: { lastWords: string; changes: Changes; background: boolean }): SessionModel {
   if (done.background) {
-    return withRecord(m, withState(m.record, 'working', now), { waitingOn: null })
+    // Work the session started will wake it again: still working, with no story yet, but this turn is over
+    return withRecord(m, withState(m.record, 'working', now), { turn: { ...m.turn, ended: true }, waitingOn: null })
   }
   const { changes } = done
   let story: Omit<Story, 'id' | 'at'>
