@@ -82,7 +82,7 @@ builds the station, the broadcast and the band's artwork into `plugin/`, where t
 scripts/test.sh
 ```
 
-runs every check: lint, types, the unit tests of each part, the station's Swift tests, and the mod's manifest and kit tests on the engine bundled with the Claude desktop app.
+runs every check: lint, types, the unit tests of each part, the station's Swift tests, the mod's manifest and kit tests on the engine bundled with the Claude desktop app, and `scripts/live.sh` in a throwaway copy of the repository.
 
 ```bash
 scripts/verify.sh
@@ -90,11 +90,21 @@ scripts/verify.sh
 
 runs the whole thing for real, with no window of yours involved: a headless Claude Code session tunes in, the station starts and shows its window, the session tunes out, and the station quits. Another session is renamed on air, off air and after the window's close, and its title on air has to follow each time.
 
-To try a change in the desktop app, add your clone as a marketplace:
+### Try a change in the desktop app
+
+The desktop app runs pipcast from the live checkout: a second checkout of this repository in a folder beside your clone, named after it (`~/Developer/JS/pipcast-live` beside `~/Developer/JS/pipcast`). The `pipcast` marketplace points at it, and every session reads the plugin from its `plugin/` folder when it starts or on `/reload-plugins`. Your clone never changes what the app runs, so you can switch branches in it freely.
 
 ```bash
-claude plugin marketplace add ~/Developer/JS/pipcast
+scripts/live.sh setup
 ```
+
+makes the live checkout on master and points the marketplace at it. Run it once.
+
+```bash
+scripts/live.sh pr 12
+```
+
+puts a pull request in the app. `scripts/live.sh <branch or commit>` puts any other commit there, `scripts/live.sh master` puts master back, and `scripts/live.sh` on its own says what the app runs now. Then run `/reload-plugins` in a session, or start a new one. Only committed work reaches the app, so run `scripts/build.sh` and commit what it builds first.
 
 ## License
 

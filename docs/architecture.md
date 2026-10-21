@@ -157,9 +157,10 @@ Between segments, the live board. The rules, from the design system's *Event des
 | Script | What it does |
 | --- | --- |
 | `scripts/build.sh` | Builds the station binary, the web page, the jingles and the band's artwork into `plugin/station` and `plugin/src/core` |
-| `scripts/test.sh` | Lint, types, the unit tests, the station's Swift tests, and the mod's manifest and kit tests on the engine bundled with the desktop app |
+| `scripts/test.sh` | Lint, types, the unit tests, the station's Swift tests, the mod's manifest and kit tests on the engine bundled with the desktop app, and `scripts/live.sh` in a throwaway copy of the repository |
 | `scripts/verify.sh` | A real headless session tunes in and out, and a witness asks the window server where the window is and whether it ever took the keyboard. Another is renamed on air, off air and after the window's close, and its record has to follow each time |
 | `scripts/capture-controls.sh` | Shows the real broadcast with the controls on and saves the station's own picture of its window to `artifacts/station/controls.png`, for checking the glass by eye |
+| `scripts/live.sh` | Shows or changes what the desktop app runs: the live checkout beside the clone, which the `pipcast` marketplace points at. `setup` makes it; `pr <number>`, a branch or a commit puts that in the app; `master` puts master back |
 
 ## Decisions
 
