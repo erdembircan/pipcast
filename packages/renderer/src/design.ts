@@ -5,7 +5,7 @@ import '../../../design/components/bundle.js'
 
 import type { ComponentType, ReactNode } from 'react'
 
-import type { BroadcastProps, Scene } from '@pipcast/design'
+import type { BroadcastProps, CrawlBelt, CrawlInput, CrawlStepResult, Scene, TickerProps } from '@pipcast/design'
 
 export interface StageProps {
   // Width in px; the stage keeps 16:9
@@ -17,6 +17,10 @@ export interface StageProps {
 export interface PipNewsHandle {
   Broadcast: ComponentType<BroadcastProps>
   Stage: ComponentType<StageProps>
+  Ticker: ComponentType<TickerProps>
+  // One step of the crawl without drawing it, and its speed on air in stage px a second
+  crawlStep: (belt: CrawlBelt, input: CrawlInput) => CrawlStepResult
+  crawlSpeed: number
   // The design system's example scenes, by name
   samples: Record<string, Scene>
 }
@@ -27,4 +31,4 @@ if (PipNews === undefined) {
   throw new Error('the design system did not load: window.React was missing when its bundle ran')
 }
 
-export const { Broadcast, Stage, samples } = PipNews
+export const { Broadcast, Stage, Ticker, crawlStep, crawlSpeed, samples } = PipNews

@@ -151,7 +151,7 @@ export function storySegment(
   }
   const id = `story:${story.id}`
   const ticker = (): TickerExtra => ({
-    lead: { lead: LEAD.breaking, text: storyLine(story.kind, title) },
+    lead: { lead: LEAD.breaking, text: storyLine(story.kind, title), key: `on-air:${story.id}` },
     skipWaitingFor: sessionId,
   })
   if (reducedMotion) {

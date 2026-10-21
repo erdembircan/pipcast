@@ -176,6 +176,7 @@ export function hourReport(
   const ticker = (live: Snapshot): TickerExtra => ({
     lead: {
       lead: LEAD.onTheHour,
+      key: `on-air:hour:${hour}`,
       text: hourSoFarLine(
         stories,
         clock(from),

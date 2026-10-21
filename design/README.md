@@ -83,7 +83,7 @@ Motion has no token family, so the values live here.
 | Ident, the outro | Ends the report: the ident's last picture, run out over 1.4 s. A glint crosses the words, the words leave to the right one after the other, the clock drops back and fades, and the ident fades away to the board underneath |
 | Lower third | Slides in from the left over 460 ms; the strap follows 150 ms later; a glint crosses the headline every 5 s |
 | Wall monitor | Powers on like a tube set: a bright line opening to the full screen over 560 ms |
-| Ticker | Crawls right to left, one full pass every 40 s; the clock stays put at its right end |
+| Ticker | Crawls right to left at a steady 53 px a second, whatever it carries. Each item keeps its words until it has gone past the tab, and the crawl carries on across cuts; the clock stays put at its right end |
 | Clawd | Moves in whole poses (see Anchor), with a bob of 6px at most |
 
 With reduced motion, all of it stops; the intro and the ident show their last frame, the outros cut straight to the board, and the picture still reads.

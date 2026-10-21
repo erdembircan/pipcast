@@ -41,7 +41,8 @@ export interface NewsEvent {
   label?: string;
 }
 
-export type TickerItem = string | { lead: string; text: string };
+/** A line of the crawl. `lead` is a caps word in gold; `key` says what the line is about (a story, a session), so the crawl knows the line when its words change. */
+export type TickerItem = string | { lead?: string; text: string; key?: string };
 
 /** One moment of the feed: the contract shared by review boards and the renderer. */
 export interface Scene {
@@ -115,6 +116,18 @@ export interface PipSize { width: number; height: number }
 /** PipNews.pipRange(screenWidth, screenHeight, margin?, minScale?): the full size, which is also the largest, and the smallest. */
 export interface PipRange { full: PipSize; min: PipSize }
 
+/** One unit of the crawl: an item and the diamond after it, `width` stage px wide. */
+export interface CrawlUnit { key: string; item: TickerItem; width: number }
+
+/** The crawl between frames: how far it has moved past the view's left edge, its units, the keys laid in this round, the key laid last, and whether anything was ever laid. */
+export interface CrawlBelt { offset: number; units: CrawlUnit[]; done: Record<string, boolean>; last: string | null; started: boolean }
+
+/** What one step of the crawl goes by: seconds since the last step, stage px a second, the view's width, the list as it is now, and the width a unit for an item takes. */
+export interface CrawlInput { dt: number; speed: number; view: number; items: TickerItem[]; measure: (item: TickerItem) => number }
+
+/** PipNews.crawlStep(belt, input) moves the crawl one step without drawing anything: the belt after the step, how many units left past the tab, and the items laid. PipNews.crawlSpeed is its speed on air, 53 stage px a second. */
+export interface CrawlStepResult { belt: CrawlBelt; dropped: number; laid: TickerItem[] }
+
 export interface PipControlsProps {
   width?: number;
   /** The state the sound button shows; "on" by default. */
@@ -130,7 +143,7 @@ export interface MarkProps { size?: number; text?: string }
 
 export interface TopBandProps { mark?: string; inline?: boolean }
 
-/** The crawl and the clock at its right end; `sample` takes both from a scene. */
+/** The crawl and the clock at its right end; `sample` takes both from a scene. `animate` crawls at `PipNews.crawlSpeed`, and one crawl runs per Stage. */
 export interface TickerProps { items?: TickerItem[]; time?: string; sample?: string; label?: string; animate?: boolean; offset?: number; inline?: boolean }
 
 export interface LowerThirdProps {

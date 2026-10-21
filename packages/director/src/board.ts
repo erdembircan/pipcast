@@ -64,29 +64,29 @@ export function boardTicker(now: number, snapshot: Snapshot, state: BoardState, 
       break
     }
     if (item.kind === 'hour') {
-      leads.push({ lead: LEAD.comingUp, text: reportComingUp(hourLabel(item.hour)) })
+      leads.push({ lead: LEAD.comingUp, text: reportComingUp(hourLabel(item.hour)), key: `coming:hour:${item.hour}` })
       comingUp += 1
     } else if (!movedOn(snapshot, item.sessionId, item.story)) {
       const title = titleOf(snapshot, item.sessionId)
       if (title !== undefined) {
-        leads.push({ lead: LEAD.comingUp, text: storyLine(item.story.kind, title) })
+        leads.push({ lead: LEAD.comingUp, text: storyLine(item.story.kind, title), key: `coming:${item.story.id}` })
         comingUp += 1
       }
     }
   }
 
   // 2. What has just aired
-  const breaking = [...state.carried.values()]
-    .filter((carried) => now - carried.endedAt < BREAKING_MS)
-    .sort((a, b) => b.endedAt - a.endedAt)
+  const breaking = [...state.carried.entries()]
+    .filter(([, carried]) => now - carried.endedAt < BREAKING_MS)
+    .sort(([, a], [, b]) => b.endedAt - a.endedAt)
   let shown = 0
-  for (const carried of breaking) {
+  for (const [storyId, carried] of breaking) {
     if (shown >= MAX_BREAKING) {
       break
     }
     const title = titleOf(snapshot, carried.sessionId)
     if (title !== undefined) {
-      leads.push({ lead: LEAD.breaking, text: storyLine(carried.kind, title) })
+      leads.push({ lead: LEAD.breaking, text: storyLine(carried.kind, title), key: `breaking:${storyId}` })
       shown += 1
     }
   }
@@ -95,10 +95,15 @@ export function boardTicker(now: number, snapshot: Snapshot, state: BoardState, 
   const waiting: { at: number; item: TickerItem }[] = []
   for (const session of snapshot.sessions) {
     if (session.id !== extra.skipWaitingFor && (session.state === 'needs-input' || session.state === 'error')) {
-      const at = newestOfKind(session, session.state)?.at ?? session.stateAt
+      const newest = newestOfKind(session, session.state)
+      const at = newest?.at ?? session.stateAt
       waiting.push({
         at,
-        item: { lead: LEAD.stillWaiting, text: stillWaitingLine(session.state, session.title, wholeMinutes(now - at)) },
+        item: {
+          lead: LEAD.stillWaiting,
+          text: stillWaitingLine(session.state, session.title, wholeMinutes(now - at)),
+          key: `waiting:${newest?.id ?? session.id}`,
+        },
       })
     }
   }
@@ -129,7 +134,7 @@ export function boardTicker(now: number, snapshot: Snapshot, state: BoardState, 
     if (carried !== undefined && now - carried.endedAt < BREAKING_MS) {
       continue
     }
-    leads.push({ lead: LEAD.ready, text: waitingForReviewLine(session.title) })
+    leads.push({ lead: LEAD.ready, text: waitingForReviewLine(session.title), key: `ready:${story.id}` })
   }
 
   // 5. The report that just aired
@@ -138,6 +143,7 @@ export function boardTicker(now: number, snapshot: Snapshot, state: BoardState, 
     leads.push({
       lead: LEAD.onTheHour,
       text: afterReportLine(stories, hourLabel(hour), hourLabel(hour + HOUR_MS)),
+      key: `report:${hour}`,
     })
   }
 
@@ -145,20 +151,27 @@ export function boardTicker(now: number, snapshot: Snapshot, state: BoardState, 
   const onAir = snapshot.sessions.length
   const working = snapshot.sessions.filter((session) => session.state === 'working')
   const items: TickerItem[] = leads.slice(0, MAX_TICKER - 1)
-  items.push({ lead: LEAD.onTheDesk, text: deskLine(working.length, onAir) })
+  items.push({ lead: LEAD.onTheDesk, text: deskLine(working.length, onAir), key: 'desk' })
 
   // 7. What the working sessions are doing, newest first
   const activity = working
     .flatMap((session) => {
       const latest = session.activity[session.activity.length - 1]
-      return latest === undefined ? [] : [{ at: latest.at, text: activityLine(session.project, latest.text) }]
+      return latest === undefined
+        ? []
+        : [
+            {
+              at: latest.at,
+              item: { text: activityLine(session.project, latest.text), key: `activity:${session.id}` },
+            },
+          ]
     })
     .sort((a, b) => b.at - a.at)
   for (const entry of activity) {
     if (items.length >= MAX_TICKER) {
       break
     }
-    items.push(entry.text)
+    items.push(entry.item)
   }
   return items
 }
