@@ -295,6 +295,10 @@ describe('the hour', () => {
       ],
     })
 
+    // The review carries the board's ticker, like the desks
+    expect(lines(review).some((line) => line.startsWith('ON THE DESK'))).toBe(true)
+    expect(lines(review).some((line) => line.startsWith('STILL WAITING Title a'))).toBe(true)
+
     const outro = h.until(at(15, 0, 22) + 500).program
     expect(outro.cues).toEqual(['hour-out'])
     expect(outro.scene).toMatchObject({ mode: 'outro', open: 'hour', hour: '15:00' })

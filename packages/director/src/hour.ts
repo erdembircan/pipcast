@@ -146,11 +146,12 @@ export function hourReport(
   const review: Step = {
     role: 'review',
     length: REVIEW_MS,
-    scene: ({ now: at }): Scene => ({
+    scene: ({ now: at, ticker }): Scene => ({
       mode: 'review',
       clock: clock(at),
       span: reviewSpan(clock(from), label),
       rows,
+      ticker,
     }),
   }
   const outro: Step = {
