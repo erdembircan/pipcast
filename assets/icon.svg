@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <title>Pipcast</title>
+  <defs>
+    <linearGradient id="studio" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1a3f93"/>
+      <stop offset="0.55" stop-color="#0b2260"/>
+      <stop offset="1" stop-color="#061233"/>
+    </linearGradient>
+    <linearGradient id="gloss" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.2"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="chrome" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="0.46" stop-color="#c9d3e3"/>
+      <stop offset="0.52" stop-color="#7f90b3"/>
+      <stop offset="0.74" stop-color="#c9d3e3"/>
+      <stop offset="1" stop-color="#ffffff"/>
+    </linearGradient>
+    <linearGradient id="screen" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#5b8be8"/>
+      <stop offset="0.48" stop-color="#2a57bf"/>
+      <stop offset="0.52" stop-color="#1d449e"/>
+      <stop offset="1" stop-color="#2550b0"/>
+    </linearGradient>
+    <linearGradient id="breaking" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ff5a4f"/>
+      <stop offset="0.55" stop-color="#c4170e"/>
+      <stop offset="1" stop-color="#5c070c"/>
+    </linearGradient>
+    <filter id="lift" x="-20%" y="-20%" width="140%" height="160%">
+      <feDropShadow dx="0" dy="16" stdDeviation="16" flood-color="#061233" flood-opacity="0.75"/>
+    </filter>
+    <clipPath id="tile"><rect width="1024" height="1024" rx="228"/></clipPath>
+  </defs>
+  <g clip-path="url(#tile)">
+    <rect width="1024" height="1024" fill="url(#studio)"/>
+    <rect width="1024" height="520" fill="url(#gloss)"/>
+    <g filter="url(#lift)">
+      <rect x="100" y="256" width="704" height="396" rx="64" fill="url(#chrome)"/>
+      <rect x="132" y="288" width="640" height="332" rx="40" fill="url(#screen)"/>
+    </g>
+    <g filter="url(#lift)" transform="translate(548 568) skewX(-12)">
+      <rect width="360" height="212" rx="20" fill="url(#breaking)"/>
+      <rect width="360" height="16" rx="8" fill="#ffe08a"/>
+      <rect y="196" width="360" height="16" rx="8" fill="#b97d0c"/>
+      <rect y="16" width="360" height="82" fill="#ffffff" opacity="0.14"/>
+    </g>
+    <rect x="1.5" y="1.5" width="1021" height="1021" rx="226.5" fill="none" stroke="#8fb0ff" stroke-opacity="0.35" stroke-width="3"/>
+  </g>
+</svg>

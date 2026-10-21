@@ -1,0 +1,33 @@
+{
+  "v": 3,
+  "layout": "files",
+  "createdOnFiles": {
+    "v": 1,
+    "at": "2026-10-20T13:14:09Z"
+  },
+  "title": "PiP Newsroom",
+  "namespace": "PipNews",
+  "libraries": [
+    {
+      "name": "react",
+      "version": "18"
+    },
+    {
+      "name": "react-dom",
+      "version": "18"
+    }
+  ],
+  "sections": {},
+  "groups": [],
+  "assetGroups": {},
+  "blobs": {},
+  "docs": {
+    "sections": []
+  },
+  "lastChange": {
+    "by": "erdembircan",
+    "at": "2026-10-21T16:55:00Z",
+    "via": "Claude Code",
+    "note": "The band without its status line, and drawn in the container the desktop puts round every mod's band (measured on the dark theme)"
+  }
+}

@@ -1,0 +1,14 @@
+<!-- @dsCard group="Desk" height=470 width=1220 subtitle="Claude asks (a command), the changes, Claude says, the error, and the hour" -->
+<div id="root" class="pn-surface" style="display: flex; flex-wrap: wrap; gap: 24px; align-items: flex-start; padding: 24px;"></div>
+<script>
+  var h = React.createElement;
+  var P = window.PipNews;
+  var ev = function (name) { return P.samples[name].event; };
+  ReactDOM.createRoot(document.getElementById('root')).render(h(React.Fragment, null,
+    h(P.OTSBox, Object.assign({ inline: true }, ev('run-needs-input'))),
+    h(P.OTSBox, Object.assign({ inline: true }, ev('ready-desk'))),
+    h(P.OTSBox, Object.assign({ inline: true }, ev('complete-desk'))),
+    h(P.OTSBox, Object.assign({ inline: true }, ev('error-desk'))),
+    h(P.OTSBox, Object.assign({ inline: true }, ev('hour-desk')))
+  ));
+</script>

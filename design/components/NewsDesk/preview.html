@@ -1,0 +1,10 @@
+<!-- @dsCard group="Desk" height=300 width=900 subtitle="The set for needs your input (playing) and ready for review" -->
+<div id="root" style="display: flex; gap: 24px; padding: 24px; background: var(--desktop-mock, #b9b0a6);"></div>
+<script>
+  var h = React.createElement;
+  var P = window.PipNews;
+  ReactDOM.createRoot(document.getElementById('root')).render(h(React.Fragment, null,
+    h(P.Stage, { width: 400, animate: true }, h(P.NewsDesk, { kind: 'needs-input', animate: true })),
+    h(P.Stage, { width: 400 }, h(P.NewsDesk, { kind: 'ready' }))
+  ));
+</script>

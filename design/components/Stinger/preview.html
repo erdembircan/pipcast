@@ -1,0 +1,11 @@
+<!-- @dsCard group="Broadcast" height=240 width=1080 subtitle="BREAKING NEWS at 34%, 74% and 100% of its run, the same for every story" -->
+<div id="root" style="display: flex; gap: 24px; padding: 24px; background: var(--desktop-mock, #b9b0a6);"></div>
+<script>
+  var h = React.createElement;
+  var P = window.PipNews;
+  ReactDOM.createRoot(document.getElementById('root')).render(h(React.Fragment, null,
+    h(P.Pip, { width: 320, sample: 'brk-stinger-1' }),
+    h(P.Pip, { width: 320, sample: 'brk-stinger-2' }),
+    h(P.Pip, { width: 320, sample: 'run-stinger' })
+  ));
+</script>

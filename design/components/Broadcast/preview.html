@@ -1,0 +1,9 @@
+<!-- @dsCard group="Broadcast" height=360 width=640 subtitle="The full run, playing: board, BREAKING NEWS and a permission ask, the board, BREAKING NEWS and changes ready for review, the board" -->
+<div id="root" style="display: flex; padding: 24px; background: var(--desktop-mock, #b9b0a6);"></div>
+<script>
+  var h = React.createElement;
+  var P = window.PipNews;
+  ReactDOM.createRoot(document.getElementById('root')).render(
+    h(P.Pip, { width: 560, sample: 'loop', animate: true })
+  );
+</script>

@@ -1,0 +1,10 @@
+<!-- @dsCard group="Broadcast" height=170 width=1000 subtitle="Static, then crawling, with the clock at the right end" -->
+<div id="root" class="pn-surface" style="display: flex; flex-direction: column; gap: 24px; padding: 24px 0;"></div>
+<script>
+  var h = React.createElement;
+  var P = window.PipNews;
+  ReactDOM.createRoot(document.getElementById('root')).render(h(React.Fragment, null,
+    h(P.Ticker, { inline: true, sample: 'run-return' }),
+    h('div', { className: 'pn-anim' }, h(P.Ticker, { inline: true, sample: 'run-return', animate: true }))
+  ));
+</script>

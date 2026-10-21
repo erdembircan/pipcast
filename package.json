@@ -1,0 +1,51 @@
+{
+  "name": "pipcast",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "KLWD, a local TV news channel for your Claude Code sessions",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "lint": "eslint .",
+    "typecheck": "tsc -p tsconfig.plugin.json && tsc -p tsconfig.packages.json",
+    "test": "TZ=UTC vitest run",
+    "build:web": "node scripts/build-web.mjs",
+    "build:jingles": "node scripts/render-jingles.mjs",
+    "build:band-art": "node scripts/build-band-art.mjs",
+    "render:fixtures": "node scripts/render-fixtures.mjs",
+    "render:band": "node scripts/render-band.mjs",
+    "render:icon": "bash scripts/render-icon.sh"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^26.6.5",
+    "@types/opentype.js": "^1.3.10",
+    "@types/react": "^18.3.31",
+    "@types/react-dom": "^18.3.7",
+    "esbuild": "^0.28.2",
+    "eslint": "^10.13.0",
+    "eslint-plugin-dotignore": "^1.0.0",
+    "globals": "^17.13.0",
+    "jsdom": "^29.1.1",
+    "license-wizard": "^1.2.0",
+    "opentype.js": "^2.0.0",
+    "subset-font": "^2.9.0",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.72.0",
+    "vitest": "^5.0.5"
+  },
+  "license-wizard": {
+    "licenseId": "MIT",
+    "tokens": {
+      "<year>": "2026",
+      "<copyright holders>": "Erdem Bircan"
+    }
+  }
+}

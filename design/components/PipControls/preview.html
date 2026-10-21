@@ -1,0 +1,10 @@
+<!-- @dsCard group="Frame" height=480 width=1240 subtitle="Close, sound and Back to Claude on hover: full size on a 14-inch MacBook Pro (716 pt), and the smallest window on any screen (420 pt) with the pointer on Back to Claude" -->
+<div id="root" style="display: flex; gap: 32px; align-items: flex-end; padding: 24px; background: var(--desktop-mock, #b9b0a6);"></div>
+<script>
+  var h = React.createElement;
+  var P = window.PipNews;
+  ReactDOM.createRoot(document.getElementById('root')).render(h(React.Fragment, null,
+    h(P.Pip, { width: 716, sample: 'run-return', controls: true }),
+    h(P.Pip, { width: 420, sample: 'run-needs-input', controls: true, hover: 'back' })
+  ));
+</script>

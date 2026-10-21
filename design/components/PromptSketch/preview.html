@@ -1,0 +1,10 @@
+<!-- @dsCard group="Band" height=560 width=840 subtitle="The band in the app, sketched: on air in the light theme, beside usage-band in the dark" -->
+<div id="root" style="display: flex; flex-direction: column; gap: 20px; padding: 20px; background: var(--desktop-mock, #b9b0a6);"></div>
+<script>
+  var h = React.createElement;
+  var P = window.PipNews;
+  ReactDOM.createRoot(document.getElementById('root')).render(h(React.Fragment, null,
+    h(P.PromptSketch, { key: 'light', tuned: true, onAir: 2 }),
+    h(P.PromptSketch, { key: 'dark', theme: 'dark', beside: 'usage', onAir: 3 })
+  ));
+</script>

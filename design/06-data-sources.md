@@ -1,0 +1,21 @@
+# Data sources
+
+Where every word and figure on the stage comes from once the mod is built. Checked against the mod API's types and the current Claude Code docs (21 October); none of it has been run in a live session yet (Open questions, 4).
+
+| On the stage | Where it comes from | Notes |
+| --- | --- | --- |
+| The story: needs your input, finished, stopped on an error | `PermissionRequest`, the `AskUserQuestion` call, `Stop`, `StopFailure` | A `Stop` with background tasks or scheduled wake-ups still pending is still working |
+| Working, the LIVE pill | `turn.start`, until the turn ends | |
+| A session's title | Whatever title the engine gives the session | When it has none, its default name ("web-shop-3f") |
+| The project | The session's repository or folder (`$.session.repo()`, `cwd`) | The repository's name, else the folder's |
+| CLAUDE ASKS, a permission | The tool and its input: a command and Claude's own description of it (`npm install`, "Install dependencies"); for the file tools, the verb and the file ("Edit src/auth/session.ts") | The command in gold, the description under it; never a sentence of ours. A sandboxed network request raises no `PermissionRequest`: it arrives as a notification about 6 s later, with the host it wants |
+| CLAUDE ASKS, a question | The `AskUserQuestion` call: the question as Claude wrote it | Up to four questions with options; the monitor shows the first question |
+| CHANGES: lines and files | Counted by us: `git diff --numstat` at the start and the end of each turn; outside git, Claude's own Edit and Write calls | The engine hands a mod no per-turn count. A session in its own worktree counts cleanly; two sessions in one checkout blur together |
+| CLAUDE SAYS | Claude's final message (`Stop`) | Markdown stripped, cut at a sentence end within three lines; "Finished" when the message is empty |
+| THE ERROR | `StopFailure`'s kind, in plain words, with its details | Not documented: a usage-limit pause, or a context grown too long |
+| "Finished in 9 min" | The turn's duration (`turn.complete`) | |
+| "Waiting 0:12", STILL WAITING · 3 min, "Stopped after 31 min" | Our own clock, from the event | A wait ends when the next event shows it was answered |
+| The ticker's working lines | Each tool call's input: the file being edited, or a command's description | |
+| The board across sessions | Each session's mod writes its state to a store every session on the machine shares | A session that stops checking in leaves the board: a crash isn't documented to send an end |
+| The report on the hour | Our own log of each session's stories and line counts, hour by hour | Nothing in the engine keeps one |
+| The clock | The machine's | |

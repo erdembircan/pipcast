@@ -1,0 +1,9 @@
+<!-- @dsCard group="Board" height=380 width=960 subtitle="Needs input, ready and working, sorted" -->
+<div id="root" class="pn-surface" style="padding: 24px 40px;"></div>
+<script>
+  var h = React.createElement;
+  var P = window.PipNews;
+  ReactDOM.createRoot(document.getElementById('root')).render(
+    h(P.SessionBoard, { inline: true, sample: 'run-return' })
+  );
+</script>

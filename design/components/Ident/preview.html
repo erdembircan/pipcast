@@ -1,0 +1,10 @@
+<!-- @dsCard group="Broadcast" height=240 width=740 subtitle="The countdown three pips in, and the hour struck" -->
+<div id="root" style="display: flex; gap: 24px; padding: 24px; background: var(--desktop-mock, #b9b0a6);"></div>
+<script>
+  var h = React.createElement;
+  var P = window.PipNews;
+  ReactDOM.createRoot(document.getElementById('root')).render(h(React.Fragment, null,
+    h(P.Pip, { width: 320, sample: 'hour-ident-1' }),
+    h(P.Pip, { width: 320, sample: 'hour-ident-2' })
+  ));
+</script>
