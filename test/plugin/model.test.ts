@@ -27,7 +27,7 @@ describe('newModel', () => {
     })
     expect(model.seq).toBe(0)
     expect(model.turn.ended).toBe(true)
-    expect(model.titleFromHook).toBe(false)
+    expect(model.titles).toEqual({ file: null, hook: null, fallback: 'Title' })
   })
 })
 
@@ -240,25 +240,38 @@ describe('aborted', () => {
   })
 })
 
-describe('titled', () => {
-  it('sets the title', () => {
-    const model = m.titled(fresh(), 'From the transcript', false)
-    expect(model.record.title).toBe('From the transcript')
-    expect(model.titleFromHook).toBe(false)
+describe('the title', () => {
+  it('is the default name until something names the session', () => {
+    expect(fresh().record.title).toBe('Title')
   })
 
-  it('lets a hook title win over the transcript afterwards', () => {
-    let model = m.titled(fresh(), 'Hook title', true)
-    expect(model.titleFromHook).toBe(true)
-    model = m.titled(model, 'Transcript title', false)
-    expect(model.record.title).toBe('Hook title')
-    model = m.titled(model, 'Newer hook title', true)
-    expect(model.record.title).toBe('Newer hook title')
+  it('takes a hook title', () => {
+    const model = m.hookTitled(fresh(), 'From a hook')
+    expect(model.record.title).toBe('From a hook')
+    expect(model.titles.hook).toBe('From a hook')
   })
 
-  it('ignores an empty title', () => {
-    const model = fresh()
-    expect(m.titled(model, '', true)).toBe(model)
+  it('puts the title file before a hook title, whichever came last', () => {
+    let model = m.fileTitled(m.hookTitled(fresh(), 'From a hook'), 'From the file')
+    expect(model.record.title).toBe('From the file')
+    model = m.hookTitled(model, 'A later hook title')
+    expect(model.record.title).toBe('From the file')
+    expect(model.titles.hook).toBe('A later hook title')
+  })
+
+  it('falls back to the hook title, then the default name, when the file holds none', () => {
+    const named = m.fileTitled(m.hookTitled(fresh(), 'From a hook'), 'From the file')
+    expect(m.fileTitled(named, null).record.title).toBe('From a hook')
+    expect(m.fileTitled(m.fileTitled(fresh(), 'From the file'), null).record.title).toBe('Title')
+  })
+
+  it('returns the same model when nothing changes, and reads an empty title as none', () => {
+    const plain = fresh()
+    expect(m.fileTitled(plain, null)).toBe(plain)
+    expect(m.fileTitled(plain, '')).toBe(plain)
+    expect(m.hookTitled(plain, '')).toBe(plain)
+    const named = m.fileTitled(plain, 'From the file')
+    expect(m.fileTitled(named, 'From the file')).toBe(named)
   })
 })
 

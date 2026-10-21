@@ -88,6 +88,8 @@ What it listens to:
 
 The mod keeps its record in memory whether or not the session is tuned in, so tuning in mid-turn shows the right state at once. It writes the record only while tuned in: at once for a new state or story, at most every 2 s for activity, and every 10 s as a heartbeat. The heartbeat also reads `control.json`, counts who is on air for the band, and starts the station again if `station.json` has gone quiet for 20 s.
 
+The title on air is the one the engine keeps. The engine writes a session's title to a small file beside its transcript, `<the transcript's folder>/<session id>/custom-title.json`, the moment it changes: a rename in the desktop app or with `/rename`, or a title the app gives the session itself. While the session is tuned in, the mod reads that file once a minute, a read of a few dozen bytes that starts no process, and writes the record at once when the title has changed. Tuning in reads it first, so the record carries the current title from its first write. With no file, or no title in it, the title is the latest one a hook carried, else the default name; a file caught half-written leaves the title as it was. Every classic hook says where the transcript is; after a reload, before one has fired, the mod finds the transcript once with `find`.
+
 ### The band
 
 Desktop only, and never while a survey holds it. The band keeps what another mod drew there and sits beside it. It draws two pictures and no words of its own: the chip, KLWD in chrome with four cells for the four places on air, and a tab, TUNE IN or TUNE OUT. A mod's button shows only text, so each tab is an `Svg` with a blank, plain `Button` laid over it. With four sessions on air, another session's TUNE IN is drawn dim, with no button. The pictures are built from outlines of the station's lettering, since an image loads no fonts.
@@ -156,7 +158,7 @@ Between segments, the live board. The rules, from the design system's *Event des
 | --- | --- |
 | `scripts/build.sh` | Builds the station binary, the web page, the jingles and the band's artwork into `plugin/station` and `plugin/src/core` |
 | `scripts/test.sh` | Lint, types, the unit tests, the station's Swift tests, and the mod's manifest and kit tests on the engine bundled with the desktop app |
-| `scripts/verify.sh` | A real headless session tunes in and out, and a witness asks the window server where the window is and whether it ever took the keyboard |
+| `scripts/verify.sh` | A real headless session tunes in and out, and a witness asks the window server where the window is and whether it ever took the keyboard. Another is renamed on air, off air and after the window's close, and its record has to follow each time |
 | `scripts/capture-controls.sh` | Shows the real broadcast with the controls on and saves the station's own picture of its window to `artifacts/station/controls.png`, for checking the glass by eye |
 
 ## Decisions
@@ -167,3 +169,4 @@ Between segments, the live board. The rules, from the design system's *Event des
 - **Jingles rendered ahead of time.** Native playback needs no click, keeps to the Mac's volume and costs nothing at run time.
 - **Outlines in the band.** The desktop draws a mod's `Svg` as an image, which loads no fonts and cannot read the app's theme. Outlined letters and pieces with their own ground look the same everywhere.
 - **Two private switches in the station.** The window never takes the keyboard, so its app is never active, and macOS treats it that way: AppKit draws Liquid Glass flat in a window without an active appearance, and the window server ignores a pointer set by an app that is not frontmost. The station forces its panel's active appearance (`_setForceMainAppearance:`), which changes how the panel is drawn and never makes it key, and sets its window-server connection's `SetsCursorInBackground` property. Both are looked up at run time: on a macOS without one, the station logs it and carries on with flat glass or the plain pointer.
+- **The title from the engine's own file.** A mod gets no event for a rename and no call for the title, and the hooks carry the title only when a session starts or a prompt is sent, which misses a rename between prompts. The transcript records every rename too, but it runs to megabytes. `custom-title.json` holds the title alone, so reading it once a minute while on air costs next to nothing.

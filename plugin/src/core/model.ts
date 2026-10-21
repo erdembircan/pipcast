@@ -15,14 +15,26 @@ export interface Turn {
   ended: boolean
 }
 
+// The session's titles: the engine's title file's, the latest a hook carried,
+// and the default name. The record's title is the first of them there is.
+export interface Titles {
+  file: string | null
+  hook: string | null
+  fallback: string
+}
+
+function titleOf(titles: Titles): string {
+  return titles.file ?? titles.hook ?? titles.fallback
+}
+
 export interface SessionModel {
   // tunedInAt and checkedInAt are set when it is written
   record: SessionRecord
   // the last story number used
   seq: number
   turn: Turn
-  // a hook gave the title; the transcript no longer overrides it
-  titleFromHook: boolean
+  // Where the title on the record comes from
+  titles: Titles
   // The loop the session waits on: agent is the subagent's id, or null for the main loop; null when it waits on nobody
   waitingOn: { agent: string | null } | null
 }
@@ -45,12 +57,12 @@ function addStory(m: SessionModel, now: number, story: Omit<Story, 'id' | 'at'>)
   return { record: { ...m.record, stories: [...m.record.stories, full] }, seq }
 }
 
-export function newModel(id: string, project: string, title: string, now: number): SessionModel {
+export function newModel(id: string, project: string, fallback: string, now: number): SessionModel {
   return {
     record: trimRecord({
       v: 1,
       id,
-      title,
+      title: fallback,
       project,
       state: 'ready',
       stateAt: now,
@@ -62,7 +74,7 @@ export function newModel(id: string, project: string, title: string, now: number
     }),
     seq: 0,
     turn: emptyTurn(),
-    titleFromHook: false,
+    titles: { file: null, hook: null, fallback },
     waitingOn: null,
   }
 }
@@ -158,11 +170,21 @@ export function aborted(m: SessionModel, now: number): SessionModel {
   return withRecord(m, withState(m.record, 'ready', now), { turn: { ...m.turn, ended: true }, waitingOn: null })
 }
 
-export function titled(m: SessionModel, title: string, fromHook: boolean): SessionModel {
-  if (title === '' || (!fromHook && m.titleFromHook)) {
+function withTitles(m: SessionModel, titles: Titles): SessionModel {
+  if (titles.file === m.titles.file && titles.hook === m.titles.hook) {
     return m
   }
-  return withRecord(m, { ...m.record, title }, { titleFromHook: m.titleFromHook || fromHook })
+  return withRecord(m, { ...m.record, title: titleOf(titles) }, { titles })
+}
+
+// A hook carried the session's title (classic.SessionStart, classic.UserPromptSubmit)
+export function hookTitled(m: SessionModel, title: string): SessionModel {
+  return title === '' ? m : withTitles(m, { ...m.titles, hook: title })
+}
+
+// The engine's title file was read: its title, or null when it holds none
+export function fileTitled(m: SessionModel, title: string | null): SessionModel {
+  return withTitles(m, { ...m.titles, file: title === '' ? null : title })
 }
 
 // The turn's baseline, taken after it started; ignored for a turn that has moved on

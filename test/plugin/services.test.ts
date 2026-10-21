@@ -36,6 +36,7 @@ function fake(): Fake {
   state.io = {
     now: async () => state.now,
     storeHome: async () => HOME,
+    claudeConfigDir: async () => '/cfg',
     read: async (path) => {
       state.git.reads.push(path)
       return state.files.get(path) ?? null
