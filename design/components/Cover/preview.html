@@ -1,0 +1,27 @@
+<!-- @dsCard height=288 -->
+<div style="position: relative; width: 960px; height: 288px; overflow: hidden; background: var(--studio-ink, #0b2260);">
+  <style>
+    .cv-gold { fill: var(--gold, #f2b630); }
+    .cv-breaking { fill: var(--breaking, #c4170e); }
+    .cv-bar { fill: var(--bar, #1d48a8); }
+    .cv-chrome { fill: var(--chrome, #c9d3e3); }
+    .cv-name { position: absolute; left: 40px; bottom: 32px; width: 440px; display: flex; flex-direction: column; gap: 16px; }
+    .cv-title { margin: 0; font: italic 900 64px/0.95 var(--font-display, "Anybody", "Arial Black", sans-serif); color: var(--on-air, #ffffff); }
+    .cv-tag { margin: 0; font: 500 14px/1.4 var(--font-text, "Archivo", Arial, sans-serif); color: var(--on-air-muted, #b9c8ee); }
+  </style>
+  <svg width="960" height="288" viewBox="0 0 960 288" style="position: absolute; left: 0; top: 0;" aria-hidden="true">
+    <!--
+      blocks: gold 360x56 slab, breaking 132x60 tab and bar 304x60 headline bar side by side, chrome 290x28 strip; every block leans by slant (-12deg)
+      arrangement: a lower-third stack leaning forward, tab and headline bar on one line as they air, the bar running to the right edge
+      steps and radii: space-3 (10px) and space-5 (20px) gaps between rows; no rounding, the slant is the shape
+    -->
+    <polygon class="cv-gold" points="520,92 880,92 891.9,36 531.9,36"/>
+    <polygon class="cv-breaking" points="508,172 640,172 652.8,112 520.8,112"/>
+    <polygon class="cv-bar" points="640,172 944,172 956.8,112 652.8,112"/>
+    <polygon class="cv-chrome" points="530,212 820,212 826,184 536,184"/>
+  </svg>
+  <div class="cv-name">
+    <h1 class="cv-title">PiP<br>Newsroom</h1>
+    <p class="cv-tag">A local news channel for your Claude Code sessions, in picture-in-picture.</p>
+  </div>
+</div>

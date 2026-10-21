@@ -1,0 +1,20 @@
+{
+  "compilerOptions": {
+    "target": "es2023",
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "lib": ["es2023", "dom", "dom.iterable"],
+    "types": [],
+    "jsx": "react-jsx",
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "allowImportingTsExtensions": true,
+    "paths": {
+      "@pipcast/contract": ["./plugin/src/contract/index.ts"],
+      "@pipcast/director": ["./packages/director/src/index.ts"]
+    }
+  },
+  "include": ["plugin/src/contract", "packages/*/src", "packages/*/test"]
+}

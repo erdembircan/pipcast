@@ -1,0 +1,9 @@
+<!-- @dsCard group="Sound" height=500 width=720 subtitle="BREAKING NEWS from the board and back, with its jingle: press the button" -->
+<div id="root" style="padding: 24px; background: var(--desktop-mock, #b9b0a6);"></div>
+<script>
+  var h = React.createElement;
+  var P = window.PipNews;
+  ReactDOM.createRoot(document.getElementById('root')).render(
+    h(P.PlayWithSound, { width: 640, sample: 'breaking', jingle: 'breaking', cue: 2, radius: 20, caption: 'Board, open, desk, back: 16.9 s' })
+  );
+</script>

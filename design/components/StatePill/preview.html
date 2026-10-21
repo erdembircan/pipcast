@@ -1,0 +1,11 @@
+<!-- @dsCard group="Board" height=110 width=520 subtitle="Needs input, ready, working" -->
+<div id="root" class="pn-surface" style="display: flex; gap: 16px; align-items: center; padding: 32px 24px;"></div>
+<script>
+  var h = React.createElement;
+  var P = window.PipNews;
+  ReactDOM.createRoot(document.getElementById('root')).render(h(React.Fragment, null,
+    h(P.StatePill, { state: 'needs-input' }),
+    h(P.StatePill, { state: 'ready' }),
+    h(P.StatePill, { state: 'working' })
+  ));
+</script>

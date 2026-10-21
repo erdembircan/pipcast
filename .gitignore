@@ -1,0 +1,9 @@
+.plan/
+.claude/worktrees/
+node_modules/
+artifacts/
+dist/
+.DS_Store
+station/.build/
+station/.swiftpm/
+plugin/.claude-plugin/types/

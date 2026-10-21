@@ -1,0 +1,13 @@
+<!-- @dsCard group="Broadcast" height=700 width=1000 subtitle="Every story, and the hour" -->
+<div id="root" class="pn-surface" style="display: flex; flex-direction: column; gap: 28px; padding: 28px 40px;"></div>
+<script>
+  var h = React.createElement;
+  var P = window.PipNews;
+  ReactDOM.createRoot(document.getElementById('root')).render(h(React.Fragment, null,
+    h(P.LowerThird, { inline: true, kind: 'needs-input', session: 'Fix flaky checkout test', project: 'web-shop' }),
+    h(P.LowerThird, { inline: true, kind: 'ready', session: 'Write release notes for 2.4', project: 'docs-site' }),
+    h(P.LowerThird, { inline: true, kind: 'complete', session: 'Check last night\u2019s crash reports', project: 'mobile-app' }),
+    h(P.LowerThird, { inline: true, kind: 'error', session: 'Migrate settings to SQLite', project: 'desktop-app' }),
+    h(P.LowerThird, { inline: true, kind: 'hourly', headline: '2 STORIES', strap: '1 needs you \u00B7 1 ready for review' })
+  ));
+</script>

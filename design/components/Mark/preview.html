@@ -1,0 +1,10 @@
+<!-- @dsCard group="Brand" height=260 width=900 subtitle="The mark: the chrome alone, large and at the bug's 40px" -->
+<div id="root" style="display: flex; gap: 64px; align-items: center; padding: 48px 64px; background: radial-gradient(ellipse 75% 75% at 50% 48%, var(--studio-top, #1a3f93) 0%, var(--studio-ink, #0b2260) 55%, var(--studio-deep, #061233) 100%);"></div>
+<script>
+  var h = React.createElement;
+  var P = window.PipNews;
+  ReactDOM.createRoot(document.getElementById('root')).render(h(React.Fragment, null,
+    h(P.Mark, { key: 'large', size: 112 }),
+    h(P.Mark, { key: 'bug', size: 40 })
+  ));
+</script>
