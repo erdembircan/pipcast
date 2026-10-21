@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, RenderElement, Timer } from 'claude-code'
 
-import { ACTIVITY_WRITE_MS, HEARTBEAT_MS, TITLE_CHECK_MS } from '../src/contract/constants.ts'
+import { ACTIVITY_WRITE_MS, HEARTBEAT_MS } from '../src/contract/constants.ts'
 import { COMMAND_DESCRIPTION, COMMAND_NAME, REPLY, TOAST_CANNOT_START, fallbackTitle } from '../src/contract/copy.ts'
 import { defaultHome, storePaths } from '../src/contract/paths.ts'
 import { parseSessionRecord } from '../src/contract/validate.ts'
@@ -22,7 +22,7 @@ import {
   writeRecord,
 } from '../src/core/services.ts'
 import type { Io, TuneInResult } from '../src/core/services.ts'
-import { findTranscriptDir, readTitleFile, transcriptDirOf } from '../src/core/title.ts'
+import { TITLE_CHECK_MS, findTranscriptDir, readTitleFile, transcriptDirOf } from '../src/core/title.ts'
 
 const tuned = atom({ plugin: 'pipcast', key: 'tuned' } as const, false)
 const onAir = atom({ plugin: 'pipcast', key: 'onAir' } as const, 0)

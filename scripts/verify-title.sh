@@ -7,7 +7,8 @@
 # engine runs with a throwaway configuration, so it keeps a transcript and the
 # title's file without touching yours. No model call is made and no station is
 # started: PIPCAST_STATION_BIN is a stand-in. Everything lives in a temporary
-# folder that is removed on exit.
+# folder that is removed on exit. It takes about a minute and a half: a rename
+# on air waits for the title check, which runs once a minute.
 set -uo pipefail
 
 root="$(cd "$(dirname "$0")/.." && pwd)"
@@ -32,6 +33,9 @@ chmod +x "$station"
 id="$(uuidgen | tr '[:upper:]' '[:lower:]')"
 # A session with no title goes by its folder and the start of its id
 untitled="work-${id:0:2}"
+
+# The time between two title checks, in whole seconds, from the mod
+check_every="$(node -e "import('$root/plugin/src/core/title.ts').then((m) => process.stdout.write(String(Math.ceil(m.TITLE_CHECK_MS / 1000))))")"
 
 # The title on the session's record, or "none" when there is no record
 title() {
@@ -63,7 +67,7 @@ command='{"type":"user","message":{"role":"user","content":"/pipcast"}}'
   sleep 3
   echo "start $(title)" >>"$notes"
   rename "Renamed on air"
-  sleep 4
+  sleep $((check_every + 4))
   echo "on-air $(title)" >>"$notes"
   echo "$command"
   sleep 2

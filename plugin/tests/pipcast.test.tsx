@@ -3,6 +3,7 @@ import type { Engine } from 'claude-code/testing'
 import { expect, test } from 'claude-code/testing'
 
 import { ERROR_WORDS, REPLY, TAB_ALT, TOAST_CANNOT_START, chipAlt } from '../src/contract/copy.ts'
+import { TITLE_CHECK_MS } from '../src/core/title.ts'
 import { BAND, HOME, ID, PROJECT_DIR, ROOT, RECORD, RUN, STATION, T0, TITLE_FILE, TRANSCRIPT, world } from './world.tsx'
 import type { WorldOptions } from './world.tsx'
 
@@ -403,7 +404,9 @@ scenario('a rename while on air reaches the record at the next check', { transcr
   await tuneIn($)
   expect(w.record()?.title).toBe('proj-82')
   w.titleFile('Renamed on air')
-  await w.clock.advance(2000)
+  await w.clock.advance(TITLE_CHECK_MS - 1000)
+  expect(w.record()?.title).toBe('proj-82')
+  await w.clock.advance(1000)
   expect(w.record()?.title).toBe('Renamed on air')
 })
 
@@ -412,7 +415,7 @@ scenario("the engine's title wins over a hook's, which no longer holds the title
   await tuneIn($)
   expect(w.record()?.title).toBe('Advisor fable')
   w.titleFile('Fix the ticker')
-  await w.clock.advance(2000)
+  await w.clock.advance(TITLE_CHECK_MS)
   expect(w.record()?.title).toBe('Fix the ticker')
   await $.classic.UserPromptSubmit({ prompt: 'go', session_title: 'Advisor fable', ...located } as never)
   expect(w.record()?.title).toBe('Fix the ticker')
@@ -447,23 +450,20 @@ scenario("after the window's close, tuning in again carries the newest title", {
   expect(w.record()?.title).toBe('Two')
 })
 
-scenario('a check reads one small file and starts no process', { transcriptDir: PROJECT_DIR }, async (w, $) => {
+scenario('each check reads the one small file, and find runs only once', { transcriptDir: PROJECT_DIR }, async (w, $) => {
   await tuneIn($)
-  const ran = w.ran.length
   w.reads.length = 0
-  await w.clock.advance(2000)
-  expect(w.reads).toEqual([TITLE_FILE])
-  expect(w.ran.length).toBe(ran)
-})
-
-scenario('the transcript is found once, and no check runs while tuned out', { transcriptDir: PROJECT_DIR }, async (w, $) => {
-  await tuneIn($)
-  await w.clock.advance(6000)
+  await w.clock.advance(3 * TITLE_CHECK_MS)
+  expect(w.reads.filter((path) => path === TITLE_FILE)).toEqual([TITLE_FILE, TITLE_FILE, TITLE_FILE])
   const finds = w.ran.filter((argv) => argv[0] === '/usr/bin/find')
   expect(finds).toEqual([['/usr/bin/find', '/Users/me/.claude/projects', '-maxdepth', '2', '-name', `${ID}.jsonl`, '-print', '-quit']])
+})
+
+scenario('no check runs while tuned out', { transcriptDir: PROJECT_DIR }, async (w, $) => {
+  await tuneIn($)
   await tuneIn($)
   w.reads.length = 0
-  await w.clock.advance(10_000)
+  await w.clock.advance(2 * TITLE_CHECK_MS)
   expect(w.reads).not.toContain(TITLE_FILE)
 })
 
@@ -476,19 +476,19 @@ scenario('a title file with no title gives the hook title back, and a half-writt
   await $.classic.SessionStart({ source: 'startup', session_title: 'Hook name', ...located } as never)
   await tuneIn($)
   w.titleFile('File name')
-  await w.clock.advance(2000)
+  await w.clock.advance(TITLE_CHECK_MS)
   expect(w.record()?.title).toBe('File name')
   w.files.set(TITLE_FILE, '{"customTitle":"Fi')
-  await w.clock.advance(2000)
+  await w.clock.advance(TITLE_CHECK_MS)
   expect(w.record()?.title).toBe('File name')
   w.titleFile('   ')
-  await w.clock.advance(2000)
+  await w.clock.advance(TITLE_CHECK_MS)
   expect(w.record()?.title).toBe('Hook name')
   w.titleFile('File name')
-  await w.clock.advance(2000)
+  await w.clock.advance(TITLE_CHECK_MS)
   expect(w.record()?.title).toBe('File name')
   w.titleFile(null)
-  await w.clock.advance(2000)
+  await w.clock.advance(TITLE_CHECK_MS)
   expect(w.record()?.title).toBe('Hook name')
 })
 
@@ -512,7 +512,7 @@ scenario('a reload reads the title again and keeps checking', { transcriptDir: P
   await $.session.start(START)
   expect(w.record()?.title).toBe('After the reload')
   w.titleFile('Later')
-  await w.clock.advance(2000)
+  await w.clock.advance(TITLE_CHECK_MS)
   expect(w.record()?.title).toBe('Later')
 })
 

@@ -4,6 +4,10 @@
 
 import type { Io } from './services.ts'
 
+// How often a tuned-in session reads the title file. Only the mod uses it, so
+// it lives here and not in the contract, which the broadcast bundles.
+export const TITLE_CHECK_MS = 60_000
+
 // `<the transcript's folder>/<session id>/custom-title.json`
 export function titleFilePath(transcriptDir: string, id: string): string {
   return `${transcriptDir}/${id}/custom-title.json`
