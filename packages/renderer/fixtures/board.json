@@ -1,0 +1,82 @@
+{
+  "snapshot": {
+    "now": 1792593120000,
+    "visible": true,
+    "sessions": [
+      {
+        "v": 1,
+        "id": "auth",
+        "title": "Refactor auth middleware",
+        "project": "api-server",
+        "state": "working",
+        "stateAt": 1792592520000,
+        "tunedInAt": 1792589520000,
+        "checkedInAt": 1792593120000,
+        "stories": [],
+        "activity": [
+          {
+            "at": 1792593118000,
+            "text": "editing src/auth/session.ts"
+          }
+        ],
+        "hours": []
+      },
+      {
+        "v": 1,
+        "id": "checkout",
+        "title": "Fix flaky checkout test",
+        "project": "web-shop",
+        "state": "working",
+        "stateAt": 1792592520000,
+        "tunedInAt": 1792589521000,
+        "checkedInAt": 1792593120000,
+        "stories": [],
+        "activity": [
+          {
+            "at": 1792593116000,
+            "text": "running the test suite"
+          }
+        ],
+        "hours": []
+      },
+      {
+        "v": 1,
+        "id": "notes",
+        "title": "Write release notes for 2.4",
+        "project": "docs-site",
+        "state": "working",
+        "stateAt": 1792592520000,
+        "tunedInAt": 1792589522000,
+        "checkedInAt": 1792593120000,
+        "stories": [],
+        "activity": [
+          {
+            "at": 1792593114000,
+            "text": "drafting CHANGELOG.md"
+          }
+        ],
+        "hours": []
+      },
+      {
+        "v": 1,
+        "id": "sqlite",
+        "title": "Migrate settings to SQLite",
+        "project": "desktop-app",
+        "state": "working",
+        "stateAt": 1792592520000,
+        "tunedInAt": 1792589523000,
+        "checkedInAt": 1792593120000,
+        "stories": [],
+        "activity": [
+          {
+            "at": 1792593112000,
+            "text": "writing migration 004"
+          }
+        ],
+        "hours": []
+      }
+    ],
+    "lastReportAt": null
+  },
+  "at": 1792593120000
+}
