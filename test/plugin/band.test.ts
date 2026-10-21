@@ -125,11 +125,12 @@ describe('band', () => {
 })
 
 describe('blankLabel', () => {
-  it('is en spaces, enough to reach across the tab', () => {
+  it('is en spaces, short of the tab', () => {
     for (const width of [tab('in').width, tab('out').width]) {
       const label = blankLabel(width)
-      expect(label.replaceAll('\u2002', '')).toBe('')
-      expect(label.length).toBe(Math.ceil(width / 7) + 1)
+      expect(label.replaceAll(' ', '')).toBe('')
+      expect(label.length).toBe(Math.max(1, Math.floor(width / 8)))
+      expect(label.length * 7).toBeLessThan(width)
     }
   })
 

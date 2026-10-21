@@ -161,6 +161,14 @@ scenario('the band draws alone when nothing else is in the band', { hasOtherBand
 
 scenario('pressing the tab tunes in: the record, the station, then TUNE OUT', { env: { PIPCAST_TARGET_BUNDLE_ID: 'com.example.never' } }, async (w, $) => {
   const ui = await mounted($)
+  const holder = flat(await ui.drawn()).find((drawn) => drawn.props?.position === 'absolute')
+  expect(holder?.props?.left).toBe(-2)
+  expect(holder?.props?.right).toBe(-2)
+  const label = String((await ui.find({ type: 'Button' }))?.props.label)
+  const tabWidth = Number((await ui.findAll({ type: 'Svg' })).at(-1)?.props.width)
+  expect(label).toBe('\u2002'.repeat(Math.floor(tabWidth / 8)))
+  expect(JSON.stringify(await ui.drawn())).not.toContain('\u2026')
+
   await ui.press({ key: 'tune-in' })
   await ui.redraw()
 

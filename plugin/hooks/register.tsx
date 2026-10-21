@@ -5,7 +5,7 @@ import { ACTIVITY_WRITE_MS, HEARTBEAT_MS } from '../src/contract/constants.ts'
 import { COMMAND_DESCRIPTION, COMMAND_NAME, REPLY, TOAST_CANNOT_START, fallbackTitle } from '../src/contract/copy.ts'
 import { defaultHome, storePaths } from '../src/contract/paths.ts'
 import { parseSessionRecord } from '../src/contract/validate.ts'
-import { BAND_HEIGHT, band, besideItems, blankLabel, hasContent } from '../src/core/band.ts'
+import { BAND_HEIGHT, REACH, band, besideItems, blankLabel, hasContent } from '../src/core/band.ts'
 import { activity, lastWords, permission, question } from '../src/core/describe.ts'
 import type { ToolInput } from '../src/core/describe.ts'
 import { editCounts } from '../src/core/diffstat.ts'
@@ -664,7 +664,7 @@ export const register: Register = (on) => {
         <Box>
           <Svg source={view.tab.svg} alt={view.tab.alt} width={view.tab.width} height={BAND_HEIGHT} />
           {view.kind !== 'off' && (
-            <Box position="absolute" top={0} bottom={0} left={0} right={0} alignItems="center" justifyContent="center">
+            <Box position="absolute" top={0} bottom={0} left={-REACH} right={-REACH} alignItems="center" justifyContent="center">
               <Button
                 key={view.kind === 'in' ? 'tune-in' : 'tune-out'}
                 label={blankLabel(view.tab.width)}
