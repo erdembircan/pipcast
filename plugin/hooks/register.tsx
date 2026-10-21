@@ -11,6 +11,7 @@ import type { ToolInput } from '../src/core/describe.ts'
 import { editCounts } from '../src/core/diffstat.ts'
 import * as record from '../src/core/model.ts'
 import type { SessionModel } from '../src/core/model.ts'
+import { willWake } from '../src/core/wake.ts'
 import {
   changesSince,
   checkIn,
@@ -480,7 +481,7 @@ async function onStop($: EngineInterface, e: { last_assistant_message?: string; 
   if (model === null) {
     return
   }
-  const background = (e.background_tasks?.length ?? 0) > 0 || (e.session_crons?.length ?? 0) > 0
+  const background = willWake(e)
   let changes = { added: 0, removed: 0, files: 0 }
   if (!background) {
     await baselineTask
@@ -512,17 +513,14 @@ async function onFailure($: EngineInterface, kind: string): Promise<void> {
 }
 
 async function onComplete($: EngineInterface, isAborted: boolean, reason: string): Promise<void> {
-  if (model === null) {
+  if (model === null || model.turn.ended) {
     return
   }
+  // No Stop or StopFailure ended this turn for the mod. An API error is an
+  // error story; an interrupt, or a Stop that never reached the mod, leaves the
+  // session ready with no story: either way it is not working any more.
   const now = await $.clock.now()
-  if (isAborted) {
-    model = record.aborted(model, now)
-  } else if (reason === 'error' && !model.turn.ended) {
-    model = record.failed(model, now, 'unknown')
-  } else {
-    return
-  }
+  model = reason === 'error' && !isAborted ? record.failed(model, now, 'unknown') : record.aborted(model, now)
   await save($)
 }
 

@@ -80,9 +80,9 @@ What it listens to:
 | `turn.start` | The session is working. The diff counter takes its baseline with `git diff --numstat HEAD` |
 | `tool.call` | One activity line. `AskUserQuestion` is a needs-input story with the question; when the call returns, the session is working again |
 | `classic.PermissionRequest` | A needs-input story with the command and Claude's description of it |
-| `classic.Stop` | With background work or scheduled wake-ups pending, still working. Otherwise a ready story when files changed, with the diff, or a complete story with Claude's last words |
+| `classic.Stop` | While work the session started will wake it again, still working, with no story yet: a command running in the background, a subagent, a workflow, an MCP task or an MCP server's monitor, or a scheduled wake-up. Otherwise a ready story when files changed, with the diff, or a complete story with Claude's last words |
 | `classic.StopFailure` | An error story, its kind in plain words |
-| `turn.complete` | An interrupted turn leaves the session ready, with no story |
+| `turn.complete` | For a turn no `Stop` or `StopFailure` ended: an API error is an error story; an interrupt, or any other end, leaves the session ready, with no story |
 | `classic.SessionStart`, `classic.UserPromptSubmit` | The session's title, when they carry one |
 | `session.end` | The record is removed: the row leaves the board |
 
@@ -164,6 +164,7 @@ Between segments, the live board. The rules, from the design system's *Event des
 ## Decisions
 
 - **Files, not sockets.** A mod cannot keep writing to a child's input, and every session is its own process. Files need no server, survive any one of them crashing, and are easy to look at.
+- **Only work that wakes a session keeps it working.** A `Stop` lists every task the engine has in flight as `background_tasks`, not only work the session waits on: memory consolidation, auto-mode scans and memory imports, teammates and cloud sessions that may sit idle, and a live connection to every artifact the session watches, which lasts as long as the session does. Taking the whole list as work kept a session that watches artifacts on LIVE after every turn, and its finished turns never aired. A task counts only when running means work that will end and wake the session: a `shell`, a `subagent`, a `workflow`, an `MCP task`, or a `monitor` that names its MCP server (an artifact's connection is a monitor with none). These are the engine's own labels, the `type` of each task. A scheduled wake-up in `session_crons` always counts.
 - **One detached station.** A child of one session dies with that session; the station has to outlive whichever session started it, and decide for itself when to quit.
 - **A web view for the picture.** The design system's components are the broadcast. Drawing them in the station's own web view makes the review boards and the window the same picture.
 - **Jingles rendered ahead of time.** Native playback needs no click, keeps to the Mac's volume and costs nothing at run time.

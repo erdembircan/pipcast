@@ -158,13 +158,13 @@ describe('resumed', () => {
 })
 
 describe('finished', () => {
-  it('with background work is working and nothing else', () => {
+  it('with work that will wake the session, stays working with no story, and the turn is over', () => {
     const before = working()
     const model = m.finished(before, T + 8000, { lastWords: 'Waiting.', changes: { added: 5, removed: 1, files: 2 }, background: true })
     expect(model.record.state).toBe('working')
     expect(model.record.stories).toEqual([])
     expect(model.record.hours).toEqual([])
-    expect(model.turn.ended).toBe(false)
+    expect(model.turn.ended).toBe(true)
     expect(model.seq).toBe(0)
   })
 

@@ -266,16 +266,53 @@ scenario('with no repository the edit tools are counted', { hasRepo: false }, as
   expect(w.record()?.stories[0]).toMatchObject({ kind: 'ready', added: 3, removed: 2, files: 2 })
 })
 
-scenario('Stop with background work pending stays working and tells no story', {}, async (w, $) => {
+scenario('Stop while work the session started will wake it stays working and tells no story', {}, async (w, $) => {
+  await tuneIn($)
+  const waits: { background_tasks?: unknown[]; session_crons?: unknown[] }[] = [
+    { background_tasks: [{ id: 'b8d2k1q9z', type: 'shell', status: 'running', description: 'Thirty-minute check-in timer', command: 'sleep 1800' }] },
+    { background_tasks: [{ id: 'a3f9c2m7x', type: 'subagent', status: 'running', description: 'Implement the fix', agent_type: 'implementer' }] },
+    { background_tasks: [{ id: 'w5h1n8r2c', type: 'workflow', status: 'running', description: 'Review the change', name: 'review-changes' }] },
+    { background_tasks: [{ id: 'k7t4e6p1b', type: 'MCP task', status: 'pending', description: 'Render the deck', server: 'slides', tool: 'render' }] },
+    { background_tasks: [{ id: 'm2v9s4d6f', type: 'monitor', status: 'running', description: 'Watch the deploy', server: 'ci', tool: 'watch' }] },
+    { session_crons: [{ id: 'cron-1', schedule: '*/5 * * * *', recurring: true, prompt: 'Check the build' }] },
+  ]
+  for (const [index, wait] of waits.entries()) {
+    const id = `t${index + 1}`
+    await turn($, id)
+    await stop($, { last_assistant_message: 'Waiting.', ...wait })
+    // The turn is over, and its end changes nothing
+    await $.turn.complete({ answer: 'Waiting.', durationMs: 5, isAborted: false, turnId: id, reason: 'answer' } as never)
+    expect(w.record()?.state).toBe('working')
+    expect(w.record()?.stories.length).toBe(0)
+  }
+})
+
+scenario('Stop with only artifact watches, housekeeping and idle helpers in flight is finished', {}, async (w, $) => {
   await tuneIn($)
   await turn($)
-  await stop($, { last_assistant_message: 'Waiting.', background_tasks: [{ id: 'bg' }] })
-  expect(w.record()?.state).toBe('working')
-  expect(w.record()?.stories.length).toBe(0)
+  await stop($, {
+    last_assistant_message: 'Published the board.',
+    background_tasks: [
+      { id: 's4j8w2n6q', type: 'monitor', status: 'running', description: 'PiP Newsroom · Station' },
+      { id: 'd9x3b7k1m', type: 'dream', status: 'running', description: 'Consolidating memory' },
+      { id: 'e6c2v8h4t', type: 'auto-mode scan', status: 'running', description: 'Auto-mode scan' },
+      { id: 'n1p5z9r3y', type: 'memory import', status: 'pending', description: 'Importing memory' },
+      { id: 't8f2l6q0w', type: 'teammate', status: 'running', description: 'scout@team' },
+      { id: 'r3m7c1k5j', type: 'cloud session', status: 'running', description: 'Long-running session' },
+      { id: 'x0y1z2a3b', type: 'something-new', status: 'running', description: 'A task of a kind added later' },
+    ],
+  })
+  expect(w.record()?.state).toBe('ready')
+  expect(w.record()?.stories).toHaveLength(1)
+  expect(w.record()?.stories[0]).toMatchObject({ kind: 'complete', quote: 'Published the board.' })
+})
 
-  await turn($, 't2')
-  await stop($, { last_assistant_message: 'Waiting.', session_crons: [{ id: 'cron' }] })
+scenario('a turn that ends with no Stop the mod saw leaves the session ready, with no story', {}, async (w, $) => {
+  await tuneIn($)
+  await turn($)
   expect(w.record()?.state).toBe('working')
+  await $.turn.complete({ answer: 'Done.', durationMs: 5, isAborted: false, turnId: 't1', reason: 'answer' } as never)
+  expect(w.record()?.state).toBe('ready')
   expect(w.record()?.stories.length).toBe(0)
 })
 
