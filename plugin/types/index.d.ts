@@ -4,6 +4,6 @@ export type BandState = { tuned: boolean; onAir: number }
 
 declare module 'claude-code' {
   interface PluginState {
-    pipcast: BandState
+    pipcast: { tuned: boolean; onAir: number }
   }
 }
