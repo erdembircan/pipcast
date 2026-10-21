@@ -12,8 +12,17 @@ export type Listener = (message: HostMessage) => void
 
 const listeners = new Set<Listener>()
 
+// A still that arrives before anything listens: the station answers `ready`
+// as soon as it can, which can be before the page's effects have subscribed
+let waitingStill: HostMessage | null = null
+
 export function subscribe(listener: Listener): () => void {
   listeners.add(listener)
+  if (waitingStill !== null) {
+    const waiting = waitingStill
+    waitingStill = null
+    listener(waiting)
+  }
   return () => {
     listeners.delete(listener)
   }
@@ -38,6 +47,10 @@ export function receive(raw: unknown): void {
     return
   }
   if (message.type !== 'snapshot' && message.type !== 'still') {
+    return
+  }
+  if (listeners.size === 0 && message.type === 'still') {
+    waitingStill = message as unknown as HostMessage
     return
   }
   for (const listener of [...listeners]) {

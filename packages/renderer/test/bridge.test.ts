@@ -56,6 +56,19 @@ describe('receive', () => {
     expect(listener).not.toHaveBeenCalled()
   })
 
+  it('holds a still that arrives before anything listens, for the first listener', () => {
+    const still = { type: 'still', input: { scene: { mode: 'board' } } }
+    receive({ type: 'snapshot', now: 1, visible: true, sessions: [], lastReportAt: null })
+    receive(still)
+    const first = vi.fn()
+    const stopFirst = subscribe(first)
+    expect(first.mock.calls).toEqual([[still]])
+    stopFirst()
+    const second = vi.fn()
+    subscribe(second)()
+    expect(second).not.toHaveBeenCalled()
+  })
+
   it('is what the station calls on window.pipcast', () => {
     installBridge()
     const listener = vi.fn()
