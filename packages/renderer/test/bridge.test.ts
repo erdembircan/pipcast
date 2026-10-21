@@ -56,17 +56,30 @@ describe('receive', () => {
     expect(listener).not.toHaveBeenCalled()
   })
 
-  it('holds a still that arrives before anything listens, for the first listener', () => {
-    const still = { type: 'still', input: { scene: { mode: 'board' } } }
-    receive({ type: 'snapshot', now: 1, visible: true, sessions: [], lastReportAt: null })
-    receive(still)
+  it('says ready once, when the first listener subscribes, and not before', async () => {
+    vi.resetModules()
+    const bridge = await import('../src/bridge.ts')
+    const postMessage = vi.fn()
+    host.webkit = { messageHandlers: { pipcast: { postMessage } } }
+
+    bridge.installBridge()
+    bridge.receive({ type: 'snapshot', now: 1, visible: true, sessions: [], lastReportAt: null })
+    expect(postMessage).not.toHaveBeenCalled()
+
     const first = vi.fn()
-    const stopFirst = subscribe(first)
+    const stopFirst = bridge.subscribe(first)
+    expect(postMessage.mock.calls).toEqual([[{ type: 'ready' }]])
+
+    // The station's answer reaches the listener
+    const still = { type: 'still', input: { scene: { mode: 'board' } } }
+    host.pipcast?.receive(still)
     expect(first.mock.calls).toEqual([[still]])
+
+    // A second listener, or a listener again after the first has gone, says nothing more
+    bridge.subscribe(vi.fn())
     stopFirst()
-    const second = vi.fn()
-    subscribe(second)()
-    expect(second).not.toHaveBeenCalled()
+    bridge.subscribe(vi.fn())()
+    expect(postMessage).toHaveBeenCalledTimes(1)
   })
 
   it('is what the station calls on window.pipcast', () => {
