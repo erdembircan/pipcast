@@ -21,6 +21,7 @@ await build({
   target: 'safari16',
   minify: true,
   jsx: 'automatic',
+  tsconfig: join(root, 'tsconfig.packages.json'),
   alias: {
     '@pipcast/contract': join(root, 'plugin/src/contract/index.ts'),
     '@pipcast/director': join(root, 'packages/director/src/index.ts'),
