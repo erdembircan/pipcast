@@ -193,6 +193,28 @@ scenario('a permission is answered when the tool call returns', {}, async (w, $)
   expect(w.record()?.stories.length).toBe(1)
 })
 
+scenario('a subagent permission is answered when that subagent call returns', {}, async (w, $) => {
+  await tuneIn($)
+  await turn($)
+  await $.classic.PermissionRequest({ agent_id: 'a1', tool_name: 'Bash', tool_input: { command: 'ls' } } as never)
+  expect(w.record()?.state).toBe('needs-input')
+  await $.tool.call({ tool: 'Bash', command: 'ls', agentId: 'a1' } as never)
+  expect(w.record()?.state).toBe('working')
+  expect(w.record()?.stories.length).toBe(1)
+  // the subagent's call made no activity line
+  expect(w.record()?.activity.length).toBe(0)
+})
+
+scenario('a main-loop permission is not answered by a subagent call returning', {}, async (w, $) => {
+  await tuneIn($)
+  await turn($)
+  await $.classic.PermissionRequest({ tool_name: 'Bash', tool_input: { command: 'ls' } } as never)
+  await $.tool.call({ tool: 'Bash', command: 'ls', agentId: 'a1' } as never)
+  expect(w.record()?.state).toBe('needs-input')
+  await $.tool.call({ tool: 'Bash', command: 'ls' } as never)
+  expect(w.record()?.state).toBe('working')
+})
+
 scenario('AskUserQuestion is a story with the question, and the answer ends it', {}, async (w, $) => {
   await tuneIn($)
   await turn($)

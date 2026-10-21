@@ -80,7 +80,7 @@ describe('askedQuestion', () => {
 
 describe('askedPermission', () => {
   it('lands a needs-input story with the command and the quote', () => {
-    const model = m.askedPermission(working(), T + 2000, 'rm -rf build', 'Remove the build')
+    const model = m.askedPermission(working(), T + 2000, 'rm -rf build', 'Remove the build', null)
     expect(model.record.state).toBe('needs-input')
     expect(model.record.stories[0]).toEqual({
       id: 'abc:1',
@@ -92,7 +92,7 @@ describe('askedPermission', () => {
   })
 
   it('leaves out what it was not given', () => {
-    const model = m.askedPermission(working(), T + 2000, 'ls', undefined)
+    const model = m.askedPermission(working(), T + 2000, 'ls', undefined, null)
     expect(model.record.stories[0]).toEqual({ id: 'abc:1', kind: 'needs-input', at: T + 2000, command: 'ls' })
     expect('quote' in (model.record.stories[0] ?? {})).toBe(false)
   })
@@ -100,8 +100,8 @@ describe('askedPermission', () => {
 
 describe('resumed', () => {
   it('takes needs-input back to working and changes nothing else', () => {
-    const asked = m.askedPermission(working(), T + 2000, 'ls', undefined)
-    const model = m.resumed(asked, T + 5000)
+    const asked = m.askedPermission(working(), T + 2000, 'ls', undefined, null)
+    const model = m.resumed(asked, T + 5000, null)
     expect(model.record.state).toBe('working')
     expect(model.record.stateAt).toBe(T + 5000)
     expect(model.record.stories).toEqual(asked.record.stories)
@@ -110,7 +110,50 @@ describe('resumed', () => {
 
   it('does nothing in any other state', () => {
     const model = working()
-    expect(m.resumed(model, T + 5000)).toBe(model)
+    expect(m.resumed(model, T + 5000, null)).toBe(model)
+  })
+
+  it('ends a main-loop permission when the main loop moves on, not a subagent', () => {
+    const asked = m.askedPermission(working(), T + 2000, 'ls', undefined, null)
+    expect(asked.waitingOn).toEqual({ agent: null })
+    expect(m.resumed(asked, T + 5000, 'a1')).toBe(asked)
+    const model = m.resumed(asked, T + 5000, null)
+    expect(model.record.state).toBe('working')
+    expect(model.waitingOn).toBeNull()
+  })
+
+  it('ends a subagent permission when that subagent moves on, and nobody else', () => {
+    const asked = m.askedPermission(working(), T + 2000, 'ls', undefined, 'a1')
+    expect(asked.waitingOn).toEqual({ agent: 'a1' })
+    expect(asked.record.state).toBe('needs-input')
+    expect(m.resumed(asked, T + 5000, null)).toBe(asked)
+    expect(m.resumed(asked, T + 5000, 'a2')).toBe(asked)
+    const model = m.resumed(asked, T + 5000, 'a1')
+    expect(model.record.state).toBe('working')
+    expect(model.record.stateAt).toBe(T + 5000)
+    expect(model.waitingOn).toBeNull()
+  })
+
+  it('ends a question with the main loop', () => {
+    const asked = m.askedQuestion(working(), T + 2000, 'Which?')
+    expect(asked.waitingOn).toEqual({ agent: null })
+    expect(m.resumed(asked, T + 3000, 'a1')).toBe(asked)
+    expect(m.resumed(asked, T + 3000, null).record.state).toBe('working')
+  })
+
+  it('waits on nobody until something is asked', () => {
+    expect(fresh().waitingOn).toBeNull()
+    expect(working().waitingOn).toBeNull()
+  })
+
+  it('is cleared when a turn starts, finishes, fails or is interrupted', () => {
+    const asked = () => m.askedPermission(working(), T + 2000, 'ls', undefined, 'a1')
+    expect(m.turnStarted(asked(), T + 3000, 't2').waitingOn).toBeNull()
+    expect(m.finished(asked(), T + 3000, { lastWords: 'x', changes: none, background: false }).waitingOn).toBeNull()
+    expect(m.finished(asked(), T + 3000, { lastWords: 'x', changes: none, background: true }).waitingOn).toBeNull()
+    expect(m.finished(asked(), T + 3000, { lastWords: '', changes: { added: 1, removed: 0, files: 1 }, background: false }).waitingOn).toBeNull()
+    expect(m.failed(asked(), T + 3000, 'unknown').waitingOn).toBeNull()
+    expect(m.aborted(asked(), T + 3000).waitingOn).toBeNull()
   })
 })
 
@@ -222,8 +265,8 @@ describe('titled', () => {
 describe('story ids, stateAt and the lists', () => {
   it('counts stories up through the turns', () => {
     let model = working()
-    model = m.askedPermission(model, T + 2000, 'a', undefined)
-    model = m.resumed(model, T + 3000)
+    model = m.askedPermission(model, T + 2000, 'a', undefined, null)
+    model = m.resumed(model, T + 3000, null)
     model = m.finished(model, T + 4000, { lastWords: 'x', changes: none, background: false })
     model = m.turnStarted(model, T + 5000, 't2')
     model = m.failed(model, T + 6000, 'unknown')
@@ -239,7 +282,7 @@ describe('story ids, stateAt and the lists', () => {
     model = m.askedQuestion(model, T + 3000, 'q')
     model = m.askedQuestion(model, T + 4000, 'q again')
     expect(model.record.stateAt).toBe(T + 3000)
-    model = m.resumed(model, T + 5000)
+    model = m.resumed(model, T + 5000, null)
     expect(model.record.stateAt).toBe(T + 5000)
   })
 

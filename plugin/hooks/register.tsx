@@ -413,19 +413,24 @@ async function onToolBefore($: EngineInterface, tool: string, input: ToolInput):
   }
 }
 
-async function onToolAfter($: EngineInterface): Promise<void> {
-  if (model !== null && model.record.state === 'needs-input') {
-    model = record.resumed(model, await $.clock.now())
+// A tool call returned: the loop that made it has moved on, so if the session was waiting on it, it works again
+async function onToolAfter($: EngineInterface, agent: string | null): Promise<void> {
+  if (model === null) {
+    return
+  }
+  const next = record.resumed(model, await $.clock.now(), agent)
+  if (next !== model) {
+    model = next
     await save($)
   }
 }
 
-async function onPermission($: EngineInterface, tool: string, input: unknown): Promise<void> {
+async function onPermission($: EngineInterface, tool: string, input: unknown, agent: string | null): Promise<void> {
   if (model === null) {
     return
   }
   const described = permission(tool, typeof input === 'object' && input !== null ? (input as ToolInput) : {}, sessionRoot)
-  model = record.askedPermission(model, await $.clock.now(), described.command, described.quote)
+  model = record.askedPermission(model, await $.clock.now(), described.command, described.quote, agent)
   await save($)
 }
 
@@ -524,17 +529,19 @@ export const register: Register = (on) => {
   })
 
   on('tool.call', async ($, e, next) => {
-    if (e.agentId !== undefined) {
-      return next(e)
-    }
-    try {
-      await onToolBefore($, e.tool, toolInput(e))
-    } catch (error) {
-      failure($, 'tool.call', error)
+    // A subagent's calls make no activity, edits or questions here; its permission
+    // is answered when its own call returns
+    const agent = typeof e.agentId === 'string' && e.agentId !== '' ? e.agentId : null
+    if (agent === null) {
+      try {
+        await onToolBefore($, e.tool, toolInput(e))
+      } catch (error) {
+        failure($, 'tool.call', error)
+      }
     }
     const result = await next(e)
     try {
-      await onToolAfter($)
+      await onToolAfter($, agent)
     } catch (error) {
       failure($, 'tool.call', error)
     }
@@ -543,7 +550,8 @@ export const register: Register = (on) => {
 
   on('classic.PermissionRequest', async ($, e, next) => {
     try {
-      await onPermission($, e.tool_name, e.tool_input)
+      const agent: unknown = (e as { agent_id?: unknown }).agent_id
+      await onPermission($, e.tool_name, e.tool_input, typeof agent === 'string' && agent !== '' ? agent : null)
     } catch (error) {
       failure($, 'PermissionRequest', error)
     }

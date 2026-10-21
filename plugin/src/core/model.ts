@@ -23,6 +23,8 @@ export interface SessionModel {
   turn: Turn
   // a hook gave the title; the transcript no longer overrides it
   titleFromHook: boolean
+  // The loop the session waits on: agent is the subagent's id, or null for the main loop; null when it waits on nobody
+  waitingOn: { agent: string | null } | null
 }
 
 function emptyTurn(): Turn {
@@ -61,12 +63,13 @@ export function newModel(id: string, project: string, title: string, now: number
     seq: 0,
     turn: emptyTurn(),
     titleFromHook: false,
+    waitingOn: null,
   }
 }
 
 export function turnStarted(m: SessionModel, now: number, turnId: string): SessionModel {
   const turn: Turn = { id: turnId, startedAt: now, baseline: null, edits: { added: 0, removed: 0, files: new Set() }, ended: false }
-  return withRecord(m, withState(m.record, 'working', now), { turn })
+  return withRecord(m, withState(m.record, 'working', now), { turn, waitingOn: null })
 }
 
 export function activity(m: SessionModel, now: number, text: string): SessionModel {
@@ -75,10 +78,16 @@ export function activity(m: SessionModel, now: number, text: string): SessionMod
 
 export function askedQuestion(m: SessionModel, now: number, quote: string): SessionModel {
   const { record, seq } = addStory(m, now, { kind: 'needs-input', quote })
-  return withRecord(m, withState(record, 'needs-input', now), { seq })
+  return withRecord(m, withState(record, 'needs-input', now), { seq, waitingOn: { agent: null } })
 }
 
-export function askedPermission(m: SessionModel, now: number, command: string | undefined, quote: string | undefined): SessionModel {
+export function askedPermission(
+  m: SessionModel,
+  now: number,
+  command: string | undefined,
+  quote: string | undefined,
+  agent: string | null,
+): SessionModel {
   const story: Omit<Story, 'id' | 'at'> = { kind: 'needs-input' }
   if (command !== undefined) {
     story.command = command
@@ -87,11 +96,15 @@ export function askedPermission(m: SessionModel, now: number, command: string | 
     story.quote = quote
   }
   const { record, seq } = addStory(m, now, story)
-  return withRecord(m, withState(record, 'needs-input', now), { seq })
+  return withRecord(m, withState(record, 'needs-input', now), { seq, waitingOn: { agent } })
 }
 
-export function resumed(m: SessionModel, now: number): SessionModel {
-  return m.record.state === 'needs-input' ? withRecord(m, withState(m.record, 'working', now)) : m
+// The loop that asked has moved on: `agent` is the subagent's id, or null for the main loop
+export function resumed(m: SessionModel, now: number, agent: string | null): SessionModel {
+  if (m.record.state !== 'needs-input' || m.waitingOn === null || m.waitingOn.agent !== agent) {
+    return m
+  }
+  return withRecord(m, withState(m.record, 'working', now), { waitingOn: null })
 }
 
 function duration(m: SessionModel, now: number): { durationMs?: number } {
@@ -120,7 +133,7 @@ function withHour(record: SessionRecord, now: number, changes: Changes): Session
 
 export function finished(m: SessionModel, now: number, done: { lastWords: string; changes: Changes; background: boolean }): SessionModel {
   if (done.background) {
-    return withRecord(m, withState(m.record, 'working', now))
+    return withRecord(m, withState(m.record, 'working', now), { waitingOn: null })
   }
   const { changes } = done
   let story: Omit<Story, 'id' | 'at'>
@@ -130,19 +143,19 @@ export function finished(m: SessionModel, now: number, done: { lastWords: string
     story = { kind: 'complete', ...(done.lastWords === '' ? {} : { quote: done.lastWords }), ...duration(m, now) }
   }
   const { record, seq } = addStory(m, now, story)
-  return withRecord(m, withHour(withState(record, 'ready', now), now, changes), { seq, turn: { ...m.turn, ended: true } })
+  return withRecord(m, withHour(withState(record, 'ready', now), now, changes), { seq, turn: { ...m.turn, ended: true }, waitingOn: null })
 }
 
 export function failed(m: SessionModel, now: number, kind: string): SessionModel {
   const { record, seq } = addStory(m, now, { kind: 'error', quote: errorWords(kind), ...duration(m, now) })
-  return withRecord(m, withState(record, 'error', now), { seq, turn: { ...m.turn, ended: true } })
+  return withRecord(m, withState(record, 'error', now), { seq, turn: { ...m.turn, ended: true }, waitingOn: null })
 }
 
 export function aborted(m: SessionModel, now: number): SessionModel {
   if (m.turn.ended) {
     return m
   }
-  return withRecord(m, withState(m.record, 'ready', now), { turn: { ...m.turn, ended: true } })
+  return withRecord(m, withState(m.record, 'ready', now), { turn: { ...m.turn, ended: true }, waitingOn: null })
 }
 
 export function titled(m: SessionModel, title: string, fromHook: boolean): SessionModel {

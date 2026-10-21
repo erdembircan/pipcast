@@ -2,6 +2,7 @@ import { fileURLToPath } from 'node:url'
 import { defineConfig } from 'vitest/config'
 
 export default defineConfig({
+  tsconfig: 'tsconfig.json',
   resolve: {
     alias: {
       '@pipcast/contract': fileURLToPath(new URL('./plugin/src/contract/index.ts', import.meta.url)),
