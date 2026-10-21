@@ -1,6 +1,7 @@
 #!/bin/bash
-# Renders the four jingles into plugin/station/sounds, only when one is
-# missing or the design system's bundle is newer than the newest of them.
+# Renders the four jingles into plugin/station/sounds, only when one of them
+# or SOURCE is missing, or SOURCE (the SHA-256 of the design system's bundle
+# they were rendered from) differs from the bundle's hash now.
 set -euo pipefail
 
 root="$(cd "$(dirname "$0")/../.." && pwd)"
@@ -10,17 +11,15 @@ sounds="plugin/station/sounds"
 names=(breaking breaking-out hour hour-out)
 
 stale=0
-newest=""
 for name in "${names[@]}"; do
-  file="$sounds/$name.m4a"
-  if [ ! -f "$file" ]; then
+  if [ ! -f "$sounds/$name.m4a" ]; then
     stale=1
-  elif [ -z "$newest" ] || [ "$file" -nt "$newest" ]; then
-    newest="$file"
   fi
 done
 
-if [ "$stale" = 0 ] && [ -n "$(find design/components/bundle.js -newer "$newest")" ]; then
+if [ ! -f "$sounds/SOURCE" ]; then
+  stale=1
+elif [ "$(cat "$sounds/SOURCE")" != "$(shasum -a 256 design/components/bundle.js | cut -d ' ' -f 1)" ]; then
   stale=1
 fi
 

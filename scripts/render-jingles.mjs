@@ -4,6 +4,7 @@
 // afconvert turns each WAV into AAC. (--dump-dom does not wait for an offline
 // audio render, so the page reports back instead.)
 import { execFileSync, spawn } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { createServer } from 'node:http'
 import { tmpdir } from 'node:os'
@@ -143,6 +144,10 @@ try {
     execFileSync('afconvert', ['-f', 'm4af', '-d', 'aac', '-b', '160000', wavPath, join(out, `${name}.m4a`)])
     console.log(`${name}.m4a`)
   }
+  // The hash of the scores these files were rendered from: build.d/30-jingles.sh
+  // renders again only when it changes
+  const hash = createHash('sha256').update(readFileSync(join(root, 'design/components/bundle.js'))).digest('hex')
+  writeFileSync(join(out, 'SOURCE'), `${hash}\n`)
 } finally {
   stop()
   await new Promise((done) => (browser?.pid !== undefined && browser.exitCode === null && browser.signalCode === null ? browser.once('exit', done) : done()))
