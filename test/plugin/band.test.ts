@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { TAB_ALT, chipAlt } from '@pipcast/contract'
-import { BAND_HEIGHT, band, blankLabel, chip, tab } from '../../plugin/src/core/band.ts'
+import { BAND_HEIGHT, band, besideItems, blankLabel, chip, hasContent, tab } from '../../plugin/src/core/band.ts'
 
 const count = (text: string, part: string): number => text.split(part).length - 1
 
@@ -135,5 +135,48 @@ describe('blankLabel', () => {
 
   it('grows with the width', () => {
     expect(blankLabel(100).length).toBeGreaterThan(blankLabel(50).length)
+  })
+})
+
+describe('besideItems', () => {
+  const text = (value: string) => ({ type: 'Text', props: {}, children: [value] })
+
+  it("lifts a plain row's items", () => {
+    const [a, b, c] = [text('a'), text('b'), text('c')]
+    const row = { type: 'Box', props: { alignItems: 'center', columnGap: 3, flexWrap: 'wrap' }, children: [a, b, c] }
+    const lifted = besideItems(row)
+    expect(lifted).toEqual([a, b, c])
+    lifted.forEach((item, index) => expect(item).toBe([a, b, c][index]))
+
+    const bare = { type: 'Box', children: [a] }
+    expect(besideItems(bare)).toEqual([a])
+    expect(besideItems(bare)[0]).toBe(a)
+
+    const explicit = { type: 'Box', props: { flexDirection: 'row' }, children: [a, b] }
+    expect(besideItems(explicit)).toEqual([a, b])
+  })
+
+  it('keeps anything else whole', () => {
+    const child = text('x')
+    for (const beneath of [
+      text('x'),
+      { type: 'Box', props: { padding: 1 }, children: [child] },
+      { type: 'Box', props: { flexDirection: 'column' }, children: [child] },
+      { type: 'Box', props: { borderStyle: 'round' }, children: [child] },
+      { type: 'Box', props: { key: 'x' }, children: [child] },
+    ]) {
+      const kept = besideItems(beneath)
+      expect(kept.length).toBe(1)
+      expect(kept[0]).toBe(beneath)
+    }
+  })
+})
+
+describe('hasContent', () => {
+  it("the engine's empty band has no content", () => {
+    expect(hasContent({ type: 'Box' })).toBe(false)
+    expect(hasContent({ type: 'Box', children: [] })).toBe(false)
+    expect(hasContent({ type: 'Box', children: ['x'] })).toBe(true)
+    expect(hasContent({ type: 'Text', props: {}, children: ['x'] })).toBe(true)
   })
 })

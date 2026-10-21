@@ -51,7 +51,7 @@ Our chip and tab sit on that box, so it is their ground in both themes.
 
 1. **Desktop only.** The band draws on the desktop surface; on any other it passes on what is beneath unchanged. The slash command works everywhere.
 2. **A survey comes first.** While a survey holds the band (`hasSurvey`), ours steps aside and draws nothing.
-3. **Beside, never over.** Another mod may draw the band too. Ours keeps what it drew and sits beside it, three columns apart, as the proof of concept does.
+3. **Beside, never over.** Another mod may draw the band too. Ours keeps what it drew and sits beside it on the same line, three columns apart, as the proof of concept does. Its row's items join ours one by one rather than as a row inside a row, which the desktop draws as a line of its own; alone, ours is the group with no row around it, so a mod above sets it beside its own.
 4. **Every picture is 22 px tall** (`band-height`), as usage-band's marks are, about a regular macOS button's height.
 5. **A picture loads no fonts and cannot read the theme.** So the words in the chip and the tabs are outlines (or a subset of Anybody embedded in the `Svg`), and each piece carries its own ground, the studio plate or the tab, so it reads the same on the container's light and dark colours.
 6. **A tab is a picture with a blank button over it.** A mod's `Button` shows only text, so each tab gets a `plain` Button with a blank label (an en space) laid over it in a `Box` as wide as the tab, since the desktop draws a Button no wider than its Box. This is usage-band's padlock. The press is the Button's; under the pointer the app inverts it, as it does every plain Button. There is no hover of our own, and nothing pops up: no tooltip, no `<title>`, no card.

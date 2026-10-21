@@ -1,11 +1,11 @@
 import { atom, read, update } from 'claude-code'
-import type { EngineInterface, Register, RenderElement, Timer } from 'claude-code'
+import type { EngineInterface, Register, RenderElement, RenderNode, Timer } from 'claude-code'
 
 import { ACTIVITY_WRITE_MS, HEARTBEAT_MS } from '../src/contract/constants.ts'
 import { COMMAND_DESCRIPTION, COMMAND_NAME, REPLY, TOAST_CANNOT_START, fallbackTitle } from '../src/contract/copy.ts'
 import { defaultHome, storePaths } from '../src/contract/paths.ts'
 import { parseSessionRecord } from '../src/contract/validate.ts'
-import { BAND_HEIGHT, band, blankLabel } from '../src/core/band.ts'
+import { BAND_HEIGHT, band, besideItems, blankLabel, hasContent } from '../src/core/band.ts'
 import { activity, lastWords, permission, question } from '../src/core/describe.ts'
 import type { ToolInput } from '../src/core/describe.ts'
 import { editCounts } from '../src/core/diffstat.ts'
@@ -48,9 +48,6 @@ let hookTitle: string | null = null
 let baselineTask: Promise<void> = Promise.resolve()
 // Writes run one after another, so an older state never lands after a newer one
 let queue: Promise<void> = Promise.resolve()
-
-// The engine's own band is an empty Box; another mod's band has content.
-const hasContent = (drawn: RenderElement) => drawn.type !== 'Box' || (drawn.children?.length ?? 0) > 0
 
 function enqueue(task: () => Promise<void>): Promise<void> {
   queue = queue.then(task, task)
@@ -652,32 +649,40 @@ export const register: Register = (on) => {
   })
 
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
-    // Another mod may draw the band too: what it drew is kept beside this.
+    // Another mod may draw the band too: what it drew stays, on the same line
+    // as ours. Alone, the band is our group and no row around it, so a mod
+    // above can put it beside its own.
     const beneath = await next(e)
     if (e.surface !== 'desktop' || e.props.hasSurvey) {
       return beneath
     }
     const { Box, Button, Svg } = $.ui.resolve(e)
     const view = band({ tuned: (await read($, tuned)) === true, onAir: (await read($, onAir)) ?? 0 })
+    const group = (
+      <Box alignItems="center" columnGap={1}>
+        <Svg source={view.chip.svg} alt={view.chip.alt} width={view.chip.width} height={BAND_HEIGHT} />
+        <Box>
+          <Svg source={view.tab.svg} alt={view.tab.alt} width={view.tab.width} height={BAND_HEIGHT} />
+          {view.kind !== 'off' && (
+            <Box position="absolute" top={0} bottom={0} left={0} right={0} alignItems="center" justifyContent="center">
+              <Button
+                key={view.kind === 'in' ? 'tune-in' : 'tune-out'}
+                label={blankLabel(view.tab.width)}
+                plain
+                onPress={() => pressed($)}
+              />
+            </Box>
+          )}
+        </Box>
+      </Box>
+    )
+    if (!hasContent(beneath)) {
+      return group
+    }
     return (
       <Box alignItems="center" columnGap={3} flexWrap="wrap">
-        {hasContent(beneath) && beneath}
-        <Box alignItems="center" columnGap={1}>
-          <Svg source={view.chip.svg} alt={view.chip.alt} width={view.chip.width} height={BAND_HEIGHT} />
-          <Box>
-            <Svg source={view.tab.svg} alt={view.tab.alt} width={view.tab.width} height={BAND_HEIGHT} />
-            {view.kind !== 'off' && (
-              <Box position="absolute" top={0} bottom={0} left={0} right={0} alignItems="center" justifyContent="center">
-                <Button
-                  key={view.kind === 'in' ? 'tune-in' : 'tune-out'}
-                  label={blankLabel(view.tab.width)}
-                  plain
-                  onPress={() => pressed($)}
-                />
-              </Box>
-            )}
-          </Box>
-        </Box>
+        {besideItems<RenderElement, RenderNode>(beneath)}
+        {group}
       </Box>
     )
   })

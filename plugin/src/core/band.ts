@@ -142,3 +142,27 @@ export function band(state: { tuned: boolean; onAir: number }): { chip: Picture;
 export function blankLabel(width: number): string {
   return ' '.repeat(Math.ceil(width / 7) + 1)
 }
+
+// What a mod drew, as far as the band needs to know: an element with a type,
+// props and children
+export type Drawn<Child = unknown> = { type: string; props?: Record<string, unknown>; children?: readonly Child[] }
+
+// The engine's own band is an empty Box; another mod's band has content.
+export const hasContent = (drawn: Drawn): boolean => drawn.type !== 'Box' || (drawn.children?.length ?? 0) > 0
+
+// The props of a plain row: the row's own layout and nothing else
+const ROW_PROPS = new Set(['alignItems', 'columnGap', 'gap', 'rowGap', 'flexWrap', 'flexDirection'])
+
+// What another mod drew, as items for our row. Its own row is lifted in item
+// by item: a wrapping row nested in a wrapping row takes a whole line on the
+// desktop, and would push the chip and the tab under it. Anything else it drew
+// stays whole, styling and all.
+export function besideItems<Whole extends Drawn<Child>, Child>(beneath: Whole): readonly (Whole | Child)[] {
+  const props = beneath.props ?? {}
+  const plain =
+    beneath.type === 'Box' &&
+    (beneath.children?.length ?? 0) > 0 &&
+    Object.keys(props).every((key) => ROW_PROPS.has(key)) &&
+    (props.flexDirection === undefined || props.flexDirection === 'row')
+  return plain && beneath.children !== undefined ? beneath.children : [beneath]
+}

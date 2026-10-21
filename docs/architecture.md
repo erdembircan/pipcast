@@ -92,7 +92,7 @@ The title on air is the one the engine keeps. The engine writes a session's titl
 
 ### The band
 
-Desktop only, and never while a survey holds it. The band keeps what another mod drew there and sits beside it. It draws two pictures and no words of its own: the chip, KLWD in chrome with four cells for the four places on air, and a tab, TUNE IN or TUNE OUT. A mod's button shows only text, so each tab is an `Svg` with a blank, plain `Button` laid over it. With four sessions on air, another session's TUNE IN is drawn dim, with no button. The pictures are built from outlines of the station's lettering, since an image loads no fonts.
+Desktop only, and never while a survey holds it. The band keeps what another mod drew there and sits beside it on the same line: that mod's row joins ours item by item, never as a row inside a row. It draws two pictures and no words of its own: the chip, KLWD in chrome with four cells for the four places on air, and a tab, TUNE IN or TUNE OUT. A mod's button shows only text, so each tab is an `Svg` with a blank, plain `Button` laid over it. With four sessions on air, another session's TUNE IN is drawn dim, with no button. The pictures are built from outlines of the station's lettering, since an image loads no fonts.
 
 ## The station
 

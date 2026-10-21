@@ -18,7 +18,30 @@ function scenario(name: string, options: WorldOptions, body: (w: ReturnType<type
     const w = world(on, options)
     on('ui.render', { component: 'AbovePrompt' }, ($ui, e) => {
       const { Box, Text } = $ui.ui.resolve(e)
-      return <Box>{options.hasOtherBand !== false && <Text>another band</Text>}</Box>
+      if (options.hasOtherBand === false) {
+        return <Box />
+      }
+      switch (options.otherBand) {
+        case 'row':
+          return (
+            <Box alignItems="center" columnGap={3} flexWrap="wrap">
+              <Text>dial one</Text>
+              <Text>dial two</Text>
+            </Box>
+          )
+        case 'styled':
+          return (
+            <Box padding={1}>
+              <Text>another band</Text>
+            </Box>
+          )
+        default:
+          return (
+            <Box>
+              <Text>another band</Text>
+            </Box>
+          )
+      }
     })
     await $.session.start(START)
     try {
@@ -40,6 +63,12 @@ const stop = (
   $: Engine,
   fields: { last_assistant_message?: string; background_tasks?: unknown[]; session_crons?: unknown[] } = {},
 ) => $.classic.Stop({ stop_hook_active: false, ...fields } as never)
+
+// The drawn tree as plain nodes, to look at its shape
+type Drawn = { type?: string; props?: Record<string, unknown>; children?: readonly (Drawn | string)[] }
+const node = (value: unknown): Drawn => value as Drawn
+const kids = (value: unknown): (Drawn | string)[] => [...(node(value).children ?? [])]
+const flat = (value: unknown): Drawn[] => [node(value), ...kids(value).flatMap((child) => (typeof child === 'string' ? [] : flat(child)))]
 
 const mounted = ($: Engine, surface: 'desktop' | 'terminal' = 'desktop', props: Record<string, unknown> = {}) =>
   $.ui.mount({ ...BAND, props: { ...BAND.props, ...props }, surface } as never)
@@ -64,6 +93,44 @@ scenario('the band on the desktop: the chip, the tab and a plain button, beside 
   expect(await ui.find({ type: 'Text', text: 'another band' })).toBeDefined()
   const drawn = JSON.stringify(await ui.drawn())
   expect(drawn.indexOf('another band')).toBeLessThan(drawn.indexOf('KLWD'))
+
+  const root = node(await ui.drawn())
+  expect(root.type).toBe('Box')
+  expect(root.props?.flexWrap).toBe('wrap')
+  const [first, group] = kids(root)
+  expect(kids(root).length).toBe(2)
+  // The other mod's plain row is lifted: its Text is a direct child of the root
+  expect(node(first).type).toBe('Text')
+  expect(kids(first)).toEqual(['another band'])
+  expect(node(group).type).toBe('Box')
+  expect(kids(group).map((child) => node(child).type)).toEqual(['Svg', 'Box'])
+  await ui.unmount()
+})
+
+scenario('the band shares one line with another mod\'s row', { otherBand: 'row' }, async (_w, $) => {
+  const ui = await mounted($)
+  const root = node(await ui.drawn())
+  expect(root.type).toBe('Box')
+  const children = kids(root)
+  expect(children.length).toBe(3)
+  expect(children.map((child) => node(child).type)).toEqual(['Text', 'Text', 'Box'])
+  expect(kids(children[0])).toEqual(['dial one'])
+  expect(kids(children[1])).toEqual(['dial two'])
+  expect(kids(children[2]).map((child) => node(child).type)).toEqual(['Svg', 'Box'])
+  // no wrapping row inside the row
+  expect(flat(root).filter((drawn) => drawn !== root && drawn.props?.flexWrap !== undefined)).toEqual([])
+  await ui.unmount()
+})
+
+scenario('the band keeps another mod\'s styled band whole', { otherBand: 'styled' }, async (_w, $) => {
+  const ui = await mounted($)
+  const root = node(await ui.drawn())
+  const children = kids(root)
+  expect(children.length).toBe(2)
+  expect(node(children[0]).type).toBe('Box')
+  expect(node(children[0]).props?.padding).toBe(1)
+  expect(kids(children[0]).map((child) => node(child).type)).toEqual(['Text'])
+  expect(kids(children[1]).map((child) => node(child).type)).toEqual(['Svg', 'Box'])
   await ui.unmount()
 })
 
@@ -83,9 +150,12 @@ scenario('the band leaves the terminal and a survey to what was beneath', {}, as
 
 scenario('the band draws alone when nothing else is in the band', { hasOtherBand: false }, async (_w, $) => {
   const ui = await mounted($)
-  const drawn = await ui.drawn()
-  expect(drawn.type).toBe('Box')
-  expect('children' in drawn ? drawn.children?.length : 0).toBe(1)
+  const root = node(await ui.drawn())
+  // our group itself, no row around it
+  expect(root.type).toBe('Box')
+  expect(root.props?.flexWrap).toBeUndefined()
+  expect(root.props?.columnGap).toBe(1)
+  expect(kids(root).map((child) => node(child).type)).toEqual(['Svg', 'Box'])
   await ui.unmount()
 })
 
