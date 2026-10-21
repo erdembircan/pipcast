@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, RenderElement, Timer } from 'claude-code'
 
-import { ACTIVITY_WRITE_MS, HEARTBEAT_MS } from '../src/contract/constants.ts'
+import { ACTIVITY_WRITE_MS, HEARTBEAT_MS, TITLE_CHECK_MS } from '../src/contract/constants.ts'
 import { COMMAND_DESCRIPTION, COMMAND_NAME, REPLY, TOAST_CANNOT_START, fallbackTitle } from '../src/contract/copy.ts'
 import { defaultHome, storePaths } from '../src/contract/paths.ts'
 import { parseSessionRecord } from '../src/contract/validate.ts'
@@ -22,15 +22,10 @@ import {
   writeRecord,
 } from '../src/core/services.ts'
 import type { Io, TuneInResult } from '../src/core/services.ts'
+import { findTranscriptDir, readTitleFile, transcriptDirOf } from '../src/core/title.ts'
 
 const tuned = atom({ plugin: 'pipcast', key: 'tuned' } as const, false)
 const onAir = atom({ plugin: 'pipcast', key: 'onAir' } as const, 0)
-
-// The API has the session's id and no call for its title. The engine writes
-// the title into the transcript as custom-title rows: this prints the last one.
-const LAST_TITLE =
-  'f=$(/usr/bin/find "$1" -maxdepth 2 -name "$2.jsonl" -print -quit) && [ -n "$f" ] && ' +
-  `/usr/bin/awk '/"type":"custom-title"/ { last = $0 } END { print last }' "$f"`
 
 // What the hooks share. A reload starts the module over, and session.start
 // builds all of this again from $.state and the session's own record.
@@ -40,6 +35,11 @@ let sessionRoot = ''
 let tunedInAt: number | null = null
 let heartbeat: Timer | undefined
 let activityTimer: Timer | undefined
+// Reads the engine's title file while tuned in
+let titleTimer: Timer | undefined
+let checkingTitle = false
+// The folder of the session's transcript, for the session it was found for; dir is null when it is not known
+let transcriptDir: { id: string; dir: string | null } | null = null
 let lastWriteAt = 0
 // classic.SessionStart arrives before session.start: its title waits here
 let hookTitle: string | null = null
@@ -82,6 +82,10 @@ function ioFor($: EngineInterface): Io {
     async storeHome() {
       const home = await $.env.get('PIPCAST_HOME')
       return home !== undefined && home !== '' ? home : defaultHome((await $.env.get('HOME')) ?? '')
+    },
+    async claudeConfigDir() {
+      const dir = await $.env.get('CLAUDE_CONFIG_DIR')
+      return dir !== undefined && dir !== '' ? dir : `${(await $.env.get('HOME')) ?? ''}/.claude`
     },
     async read(path) {
       try {
@@ -126,18 +130,6 @@ function ioFor($: EngineInterface): Io {
       const id = await $.env.get('PIPCAST_TARGET_BUNDLE_ID')
       return id !== undefined && id !== '' ? id : null
     },
-  }
-}
-
-// The session's title from its transcript, else null
-async function transcriptTitle($: EngineInterface, id: string): Promise<string | null> {
-  const config = (await $.env.get('CLAUDE_CONFIG_DIR')) ?? `${await $.env.get('HOME')}/.claude`
-  const found = await $.process.run(['/bin/sh', '-c', LAST_TITLE, 'sh', `${config}/projects`, id])
-  try {
-    const title: unknown = JSON.parse(found.stdout).customTitle
-    return typeof title === 'string' && title.trim() !== '' ? title.trim() : null
-  } catch {
-    return null
   }
 }
 
@@ -196,6 +188,64 @@ async function refreshOnAir($: EngineInterface): Promise<void> {
 function stopTimers(): void {
   activityTimer?.cancel()
   activityTimer = undefined
+  titleTimer?.cancel()
+  titleTimer = undefined
+}
+
+// Where the engine keeps the session's files, from a classic hook's input
+function noteTranscript(e: object): void {
+  const { session_id: id, transcript_path: path } = e as { session_id?: unknown; transcript_path?: unknown }
+  if (typeof id !== 'string' || typeof path !== 'string') {
+    return
+  }
+  const dir = transcriptDirOf(path, id)
+  if (dir !== null) {
+    transcriptDir = { id, dir }
+  }
+}
+
+// The folder of the session's transcript: from a hook, else found once
+async function transcriptDirFor(io: Io, id: string): Promise<string | null> {
+  if (transcriptDir === null || transcriptDir.id !== id) {
+    transcriptDir = { id, dir: await findTranscriptDir(io, id) }
+  }
+  return transcriptDir.dir
+}
+
+// Puts the engine's title file's title on the model, and writes the record at
+// once when the title changed
+async function checkTitle($: EngineInterface): Promise<void> {
+  const m = model
+  if (m === null || checkingTitle) {
+    return
+  }
+  checkingTitle = true
+  try {
+    const io = ioFor($)
+    const id = m.record.id
+    const dir = await transcriptDirFor(io, id)
+    const found = dir === null ? undefined : await readTitleFile(io, dir, id)
+    if (found === undefined || model === null || model.record.id !== id) {
+      return
+    }
+    const next = record.fileTitled(model, found)
+    const changed = next.record.title !== model.record.title
+    model = next
+    if (changed) {
+      await save($)
+    }
+  } catch (error) {
+    failure($, 'title', error)
+  } finally {
+    checkingTitle = false
+  }
+}
+
+function startTitleChecks($: EngineInterface): void {
+  titleTimer?.cancel()
+  titleTimer = $.clock.every(TITLE_CHECK_MS, () => {
+    void checkTitle($)
+  })
 }
 
 // The heartbeat: a tuned-in session checks in; every session counts who is on air
@@ -237,14 +287,14 @@ async function ensureSession($: EngineInterface): Promise<SessionModel> {
   const repo = await $.session.repo()
   const project = baseName(repo?.root ?? root) || baseName(root)
   const now = await $.clock.now()
-  const found = hookTitle ?? (await transcriptTitle($, id).catch(() => null))
-  let built = record.newModel(id, project, found ?? fallbackTitle(project, id), now)
+  let built = record.newModel(id, project, fallbackTitle(project, id), now)
   if (hookTitle !== null) {
-    built = record.titled(built, hookTitle, true)
+    built = record.hookTitled(built, hookTitle)
   }
   model = built
   sessionRoot = root
   tunedInAt = null
+  stopTimers()
   heartbeat?.cancel()
   heartbeat = $.clock.every(HEARTBEAT_MS, () => {
     void beat($)
@@ -264,9 +314,11 @@ async function startSession($: EngineInterface): Promise<void> {
     if (own === null) {
       await update($, tuned, () => false)
     } else {
+      await checkTitle($)
       tunedInAt = own.tunedInAt
       await save($)
       await ensureStation(io, home)
+      startTitleChecks($)
     }
   }
   await refreshOnAir($)
@@ -281,6 +333,7 @@ async function endSession($: EngineInterface): Promise<void> {
   model = null
   tunedInAt = null
   hookTitle = null
+  transcriptDir = null
   if (m !== null) {
     const io = ioFor($)
     const home = await io.storeHome()
@@ -292,7 +345,10 @@ async function endSession($: EngineInterface): Promise<void> {
 }
 
 async function tuneInNow($: EngineInterface): Promise<TuneInResult['status']> {
-  const m = await ensureSession($)
+  const built = await ensureSession($)
+  // The record's first write carries the title the engine has now
+  await checkTitle($)
+  const m = model ?? built
   const io = ioFor($)
   let result = { status: 'cannot-start' } as TuneInResult
   await enqueue(async () => {
@@ -301,6 +357,7 @@ async function tuneInNow($: EngineInterface): Promise<TuneInResult['status']> {
   if (result.status === 'on') {
     tunedInAt = result.tunedInAt
     lastWriteAt = result.tunedInAt
+    startTitleChecks($)
     await setState($, true, await countOnAir(io, await io.storeHome(), await $.clock.now()))
     // The model may have moved on while the station started
     await save($)
@@ -347,23 +404,9 @@ async function onTitle($: EngineInterface, title: unknown): Promise<void> {
   }
   hookTitle = title.trim()
   if (model !== null) {
-    const next = record.titled(model, hookTitle, true)
+    const next = record.hookTitled(model, hookTitle)
     const changed = next.record.title !== model.record.title
     model = next
-    if (changed) {
-      await save($)
-    }
-  }
-}
-
-async function refreshTitle($: EngineInterface): Promise<void> {
-  if (model === null || model.titleFromHook) {
-    return
-  }
-  const found = await transcriptTitle($, model.record.id)
-  if (found !== null && model !== null) {
-    const changed = found !== model.record.title
-    model = record.titled(model, found, false)
     if (changed) {
       await save($)
     }
@@ -388,7 +431,6 @@ async function onTurnStart($: EngineInterface, turnId: string): Promise<void> {
       failure($, 'baseline', error)
     }
   })()
-  void refreshTitle($).catch((error: unknown) => failure($, 'title', error))
 }
 
 async function onToolBefore($: EngineInterface, tool: string, input: ToolInput): Promise<void> {
@@ -550,6 +592,7 @@ export const register: Register = (on) => {
 
   on('classic.PermissionRequest', async ($, e, next) => {
     try {
+      noteTranscript(e)
       const agent: unknown = (e as { agent_id?: unknown }).agent_id
       await onPermission($, e.tool_name, e.tool_input, typeof agent === 'string' && agent !== '' ? agent : null)
     } catch (error) {
@@ -560,6 +603,7 @@ export const register: Register = (on) => {
 
   on('classic.Stop', async ($, e, next) => {
     try {
+      noteTranscript(e)
       await onStop($, e)
     } catch (error) {
       failure($, 'Stop', error)
@@ -569,6 +613,7 @@ export const register: Register = (on) => {
 
   on('classic.StopFailure', async ($, e, next) => {
     try {
+      noteTranscript(e)
       await onFailure($, String(e.error))
     } catch (error) {
       failure($, 'StopFailure', error)
@@ -590,6 +635,7 @@ export const register: Register = (on) => {
 
   on('classic.SessionStart', async ($, e, next) => {
     try {
+      noteTranscript(e)
       await onTitle($, e.session_title)
     } catch (error) {
       failure($, 'SessionStart', error)
@@ -599,6 +645,7 @@ export const register: Register = (on) => {
 
   on('classic.UserPromptSubmit', async ($, e, next) => {
     try {
+      noteTranscript(e)
       await onTitle($, e.session_title)
     } catch (error) {
       failure($, 'UserPromptSubmit', error)

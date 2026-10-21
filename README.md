@@ -88,7 +88,7 @@ runs every check: lint, types, the unit tests of each part, the station's Swift 
 scripts/verify.sh
 ```
 
-runs the whole thing for real, with no window of yours involved: a headless Claude Code session tunes in, the station starts and shows its window, the session tunes out, and the station quits.
+runs the whole thing for real, with no window of yours involved: a headless Claude Code session tunes in, the station starts and shows its window, the session tunes out, and the station quits. Another session is renamed on air, off air and after the window's close, and its title on air has to follow each time.
 
 To try a change in the desktop app, add your clone as a marketplace:
 

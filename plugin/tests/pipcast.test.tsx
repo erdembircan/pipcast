@@ -3,7 +3,7 @@ import type { Engine } from 'claude-code/testing'
 import { expect, test } from 'claude-code/testing'
 
 import { ERROR_WORDS, REPLY, TAB_ALT, TOAST_CANNOT_START, chipAlt } from '../src/contract/copy.ts'
-import { BAND, HOME, ID, ROOT, RECORD, RUN, STATION, T0, world } from './world.tsx'
+import { BAND, HOME, ID, PROJECT_DIR, ROOT, RECORD, RUN, STATION, T0, TITLE_FILE, TRANSCRIPT, world } from './world.tsx'
 import type { WorldOptions } from './world.tsx'
 
 const START = { cwd: ROOT, surface: 'desktop', isInteractive: true } as const
@@ -42,6 +42,9 @@ const stop = (
 
 const mounted = ($: Engine, surface: 'desktop' | 'terminal' = 'desktop', props: Record<string, unknown> = {}) =>
   $.ui.mount({ ...BAND, props: { ...BAND.props, ...props }, surface } as never)
+
+// What a classic hook says about the session: its id and where its transcript is
+const located = { session_id: ID, transcript_path: TRANSCRIPT } as const
 
 scenario('the band on the desktop: the chip, the tab and a plain button, beside another mod', {}, async (w, $) => {
   w.other('aaaa', T0 - 2000)
@@ -390,18 +393,127 @@ scenario('a title that arrives before the session starts is kept', {}, async (w,
   expect(w.record()?.title).toBe('Early title')
 })
 
-scenario('the transcript names a session that no hook has named', {
-  transcript: `{"type":"custom-title","customTitle":"From the transcript","sessionId":"${ID}"}\n`,
-}, async (w, $) => {
-  await $.session.end({ reason: 'other', sessionId: ID, resume: { id: ID } })
-  await $.session.start(START)
+scenario("the engine's title file names a session that no hook has named", { transcriptDir: PROJECT_DIR }, async (w, $) => {
+  w.titleFile('From the title file')
   await tuneIn($)
-  expect(w.record()?.title).toBe('From the transcript')
-  await $.classic.UserPromptSubmit({ prompt: 'go', session_title: 'The hook wins' } as never)
-  expect(w.record()?.title).toBe('The hook wins')
-  await turn($)
-  await w.clock.settle()
-  expect(w.record()?.title).toBe('The hook wins')
+  expect(w.record()?.title).toBe('From the title file')
+})
+
+scenario('a rename while on air reaches the record at the next check', { transcriptDir: PROJECT_DIR }, async (w, $) => {
+  await tuneIn($)
+  expect(w.record()?.title).toBe('proj-82')
+  w.titleFile('Renamed on air')
+  await w.clock.advance(2000)
+  expect(w.record()?.title).toBe('Renamed on air')
+})
+
+scenario("the engine's title wins over a hook's, which no longer holds the title", {}, async (w, $) => {
+  await $.classic.SessionStart({ source: 'startup', session_title: 'Advisor fable', ...located } as never)
+  await tuneIn($)
+  expect(w.record()?.title).toBe('Advisor fable')
+  w.titleFile('Fix the ticker')
+  await w.clock.advance(2000)
+  expect(w.record()?.title).toBe('Fix the ticker')
+  await $.classic.UserPromptSubmit({ prompt: 'go', session_title: 'Advisor fable', ...located } as never)
+  expect(w.record()?.title).toBe('Fix the ticker')
+  expect(w.ran.some((argv) => argv[0] === '/usr/bin/find')).toBe(false)
+})
+
+scenario('tuning in reads the title before the first write', { transcriptDir: PROJECT_DIR }, async (w, $) => {
+  w.titleFile('Named off air')
+  await tuneIn($)
+  expect(w.written.length).toBeGreaterThan(0)
+  expect(w.written.every((title) => title === 'Named off air')).toBe(true)
+})
+
+scenario('a rename while tuned out is on the record when it tunes in again', { transcriptDir: PROJECT_DIR }, async (w, $) => {
+  w.titleFile('One')
+  await tuneIn($)
+  await tuneIn($)
+  expect(w.record()).toBeNull()
+  w.titleFile('Two')
+  await tuneIn($)
+  expect(w.record()?.title).toBe('Two')
+})
+
+scenario("after the window's close, tuning in again carries the newest title", { transcriptDir: PROJECT_DIR }, async (w, $) => {
+  w.titleFile('One')
+  await tuneIn($)
+  w.files.set(`${HOME}/control.json`, JSON.stringify({ v: 1, closedAt: T0 + 1 }))
+  await w.clock.advance(10_000)
+  expect(w.record()).toBeNull()
+  w.titleFile('Two')
+  await tuneIn($)
+  expect(w.record()?.title).toBe('Two')
+})
+
+scenario('a check reads one small file and starts no process', { transcriptDir: PROJECT_DIR }, async (w, $) => {
+  await tuneIn($)
+  const ran = w.ran.length
+  w.reads.length = 0
+  await w.clock.advance(2000)
+  expect(w.reads).toEqual([TITLE_FILE])
+  expect(w.ran.length).toBe(ran)
+})
+
+scenario('the transcript is found once, and no check runs while tuned out', { transcriptDir: PROJECT_DIR }, async (w, $) => {
+  await tuneIn($)
+  await w.clock.advance(6000)
+  const finds = w.ran.filter((argv) => argv[0] === '/usr/bin/find')
+  expect(finds).toEqual([['/usr/bin/find', '/Users/me/.claude/projects', '-maxdepth', '2', '-name', `${ID}.jsonl`, '-print', '-quit']])
+  await tuneIn($)
+  w.reads.length = 0
+  await w.clock.advance(10_000)
+  expect(w.reads).not.toContain(TITLE_FILE)
+})
+
+scenario('CLAUDE_CONFIG_DIR moves where the transcript is looked for', { env: { CLAUDE_CONFIG_DIR: '/cfg' } }, async (w, $) => {
+  await tuneIn($)
+  expect(w.ran.find((argv) => argv[0] === '/usr/bin/find')?.[1]).toBe('/cfg/projects')
+})
+
+scenario('a title file with no title gives the hook title back, and a half-written one changes nothing', {}, async (w, $) => {
+  await $.classic.SessionStart({ source: 'startup', session_title: 'Hook name', ...located } as never)
+  await tuneIn($)
+  w.titleFile('File name')
+  await w.clock.advance(2000)
+  expect(w.record()?.title).toBe('File name')
+  w.files.set(TITLE_FILE, '{"customTitle":"Fi')
+  await w.clock.advance(2000)
+  expect(w.record()?.title).toBe('File name')
+  w.titleFile('   ')
+  await w.clock.advance(2000)
+  expect(w.record()?.title).toBe('Hook name')
+  w.titleFile('File name')
+  await w.clock.advance(2000)
+  expect(w.record()?.title).toBe('File name')
+  w.titleFile(null)
+  await w.clock.advance(2000)
+  expect(w.record()?.title).toBe('Hook name')
+})
+
+scenario("a subagent's transcript is not taken for the session's", {}, async (w, $) => {
+  await $.classic.PermissionRequest({
+    tool_name: 'Bash',
+    tool_input: { command: 'ls' },
+    agent_id: 'sub',
+    session_id: ID,
+    transcript_path: `${PROJECT_DIR}/${ID}/subagents/agent-sub.jsonl`,
+  } as never)
+  await tuneIn($)
+  expect(w.ran.some((argv) => argv[0] === '/usr/bin/find')).toBe(true)
+})
+
+scenario('a reload reads the title again and keeps checking', { transcriptDir: PROJECT_DIR }, async (w, $) => {
+  w.titleFile('Before the reload')
+  await tuneIn($)
+  w.titleFile('After the reload')
+  // The module starts over; $.state says tuned in
+  await $.session.start(START)
+  expect(w.record()?.title).toBe('After the reload')
+  w.titleFile('Later')
+  await w.clock.advance(2000)
+  expect(w.record()?.title).toBe('Later')
 })
 
 scenario('a session with no title goes by its project and id', {}, async (w, $) => {

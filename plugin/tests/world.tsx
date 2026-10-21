@@ -11,6 +11,10 @@ export const STATION = '/pip/stand-in-station'
 export const T0 = 1_792_600_000_000
 export const SESSIONS = `${HOME}/sessions`
 export const RECORD = `${SESSIONS}/${ID}.json`
+// Where the engine keeps the session's transcript and its title file
+export const PROJECT_DIR = '/Users/me/.claude/projects/-work-proj'
+export const TRANSCRIPT = `${PROJECT_DIR}/${ID}.jsonl`
+export const TITLE_FILE = `${PROJECT_DIR}/${ID}/custom-title.json`
 
 export const BAND = {
   plugin: 'pipcast',
@@ -34,7 +38,8 @@ export const RUN = {
 
 export interface WorldOptions {
   env?: Record<string, string>
-  transcript?: string
+  // Where `find` finds the session's transcript; unset, it finds nothing
+  transcriptDir?: string
   launchExit?: number
   launchOut?: string
   hasRepo?: boolean
@@ -50,6 +55,9 @@ export function world(on: On, options: WorldOptions = {}) {
   const files = new Map<string, string>()
   const ran: (readonly string[])[] = []
   const writes: string[] = []
+  // Every path read, and the title of every record written, in order
+  const reads: string[] = []
+  const written: string[] = []
   const launched: (readonly string[])[] = []
   const toasts: string[] = []
   const git = { numstat: '', untracked: [] as string[], fails: false }
@@ -88,12 +96,16 @@ export function world(on: On, options: WorldOptions = {}) {
   })
 
   on('fs.read', (_, e) => {
+    reads.push(e.path)
     const text = files.get(e.path)
     return text === undefined ? { deny: 'ENOENT' } : { value: text }
   })
   on('fs.write', (_, e) => {
     writes.push(e.path)
     files.set(e.path, e.text)
+    if (e.path === `${RECORD}.tmp`) {
+      written.push((JSON.parse(e.text) as SessionRecord).title)
+    }
     return { value: undefined }
   })
   on('fs.exists', (_, e) => ({
@@ -129,8 +141,8 @@ export function world(on: On, options: WorldOptions = {}) {
       case STATION:
         launched.push(args)
         return done(launch.exit, launch.out)
-      case '/bin/sh':
-        return options.transcript === undefined ? done(1) : done(0, options.transcript)
+      case '/usr/bin/find':
+        return done(0, options.transcriptDir === undefined ? '' : `${options.transcriptDir}/${ID}.jsonl\n`)
       case '/usr/bin/git':
         if (git.fails) {
           return done(128, '', 'not a git repository')
@@ -150,11 +162,21 @@ export function world(on: On, options: WorldOptions = {}) {
     launch,
     toasts,
     atTool,
+    reads,
+    written,
     git,
     // The session's own record, as the store has it
     record(): SessionRecord | null {
       const text = files.get(RECORD)
       return text === undefined ? null : parseSessionRecord(JSON.parse(text) as unknown)
+    },
+    // The engine's title file for the session: a title, or null to remove the file
+    titleFile(title: string | null): void {
+      if (title === null) {
+        files.delete(TITLE_FILE)
+      } else {
+        files.set(TITLE_FILE, JSON.stringify({ customTitle: title }))
+      }
     },
     // Another session's record, checked in at the clock's now
     other(id: string, tunedInAt: number, checkedInAt = clock.now()): void {

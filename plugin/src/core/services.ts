@@ -27,6 +27,8 @@ export interface Io {
   now(): Promise<number>
   // PIPCAST_HOME, else defaultHome(HOME)
   storeHome(): Promise<string>
+  // CLAUDE_CONFIG_DIR, else `${HOME}/.claude`: where the engine keeps its projects
+  claudeConfigDir(): Promise<string>
   // null when missing
   read(path: string): Promise<string | null>
   // `${path}.tmp`, then renamed into place

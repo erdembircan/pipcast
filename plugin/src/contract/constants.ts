@@ -7,6 +7,7 @@ export const MAX_ON_AIR = 4
 export const HEARTBEAT_MS = 10_000
 export const STALE_MS = 45_000
 export const ACTIVITY_WRITE_MS = 2_000
+export const TITLE_CHECK_MS = 2_000
 
 // What a record keeps
 export const MAX_STORIES = 10
