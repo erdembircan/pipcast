@@ -107,10 +107,10 @@ The station quits by itself: 5 s after nothing is on air, or 20 s after it start
 The proof of concept's recipe: a borderless, non-activating `NSPanel` at the status-bar level (25), on every Space and beside full-screen apps, in an app with the accessory activation policy. It is shown only from `applicationDidFinishLaunching` on, so it never takes the keyboard from the app that started it.
 
 - **When it shows.** While any app but Claude is frontmost. It hides while the Claude desktop app is.
-- **Its size.** Its quarter of the screen's visible area, less 20 pt on every side, at 16:9. You can make it smaller, down to 70%, by dragging an edge; its outer corner stays put. The size is kept as a share of the quarter, so it carries to another screen.
+- **Its size.** Its quarter of the screen's visible area, less 20 pt on every side, at 16:9. You can make it smaller, down to 70%, by dragging one of the two edges that face the middle of the screen, or the corner between them; the outer corner stays put. Over those edges the pointer becomes macOS's window-resize pointer, with a single arrow when the window is as big or as small as it gets. The size is kept as a share of the quarter, so it carries to another screen.
 - **Moving it.** Drag it anywhere. On release it goes to the quarter that holds its centre, in 0.2 s.
 - **Its look.** Corners of 20 pt, a hairline edge, macOS's own shadow.
-- **Its controls.** On hover the picture dims a little and three 44 pt glass buttons appear, 8 pt in from the top corners: close at the top left, sound and Back to Claude at the top right. They use macOS's Liquid Glass where there is one. Nothing pops up over them.
+- **Its controls.** On hover the picture dims a little and three 44 pt glass buttons appear, 8 pt in from the top corners: close at the top left, sound and Back to Claude at the top right. They use macOS's clear Liquid Glass where there is one, and brighten under the pointer. Nothing pops up over them.
 
 ### The web view and its bridge
 
@@ -119,7 +119,7 @@ The broadcast is a web page in a `WKWebView` that never receives a mouse event: 
 | From | Message | When |
 | --- | --- | --- |
 | Station | `{ type: 'snapshot', now, visible, sessions, lastReportAt }` | When the store changes, when the window shows or hides, and every second |
-| Page | `{ type: 'ready' }` | Once it has loaded |
+| Page | `{ type: 'ready' }` | Once it is listening for the station's messages |
 | Page | `{ type: 'cue', jingle }` | A segment starts that has a jingle; the station plays it unless sound is off |
 | Page | `{ type: 'reported', at }` | The report on the hour starts; the station keeps `at` as `lastReportAt` |
 | Station | `{ type: 'still', input }` | Snapshot mode: draw this one picture, without motion |
@@ -157,6 +157,7 @@ Between segments, the live board. The rules, from the design system's *Event des
 | `scripts/build.sh` | Builds the station binary, the web page, the jingles and the band's artwork into `plugin/station` and `plugin/src/core` |
 | `scripts/test.sh` | Lint, types, the unit tests, the station's Swift tests, and the mod's manifest and kit tests on the engine bundled with the desktop app |
 | `scripts/verify.sh` | A real headless session tunes in and out, and a witness asks the window server where the window is and whether it ever took the keyboard |
+| `scripts/capture-controls.sh` | Shows the real broadcast with the controls on and saves the station's own picture of its window to `artifacts/station/controls.png`, for checking the glass by eye |
 
 ## Decisions
 
@@ -165,3 +166,4 @@ Between segments, the live board. The rules, from the design system's *Event des
 - **A web view for the picture.** The design system's components are the broadcast. Drawing them in the station's own web view makes the review boards and the window the same picture.
 - **Jingles rendered ahead of time.** Native playback needs no click, keeps to the Mac's volume and costs nothing at run time.
 - **Outlines in the band.** The desktop draws a mod's `Svg` as an image, which loads no fonts and cannot read the app's theme. Outlined letters and pieces with their own ground look the same everywhere.
+- **Two private switches in the station.** The window never takes the keyboard, so its app is never active, and macOS treats it that way: AppKit draws Liquid Glass flat in a window without an active appearance, and the window server ignores a pointer set by an app that is not frontmost. The station forces its panel's active appearance (`_setForceMainAppearance:`), which changes how the panel is drawn and never makes it key, and sets its window-server connection's `SetsCursorInBackground` property. Both are looked up at run time: on a macOS without one, the station logs it and carries on with flat glass or the plain pointer.

@@ -145,16 +145,58 @@ import Testing
         #expect(result.maxY == start.maxY)
     }
 
-    @Test func edgeGripIsEightPointsAndCornersWin() {
+    /// A point `side` in from the inner side and `end` in from the inner end of a window in `quadrant`.
+    private static func inner(_ quadrant: Quadrant, side: CGFloat, end: CGFloat, in size: CGSize) -> CGPoint {
+        CGPoint(x: quadrant.isRight ? side : size.width - side,
+                y: quadrant.isTop ? end : size.height - end)
+    }
+
+    /// A point `side` in from the outer side and `end` in from the outer end.
+    private static func outer(_ quadrant: Quadrant, side: CGFloat, end: CGFloat, in size: CGSize) -> CGPoint {
+        CGPoint(x: quadrant.isRight ? size.width - side : side,
+                y: quadrant.isTop ? size.height - end : end)
+    }
+
+    @Test(arguments: Quadrant.allCases)
+    func onlyTheInnerEdgesAndTheInnerCornerGrip(quadrant: Quadrant) {
         let size = CGSize(width: 600, height: 338)
-        #expect(Geometry.edge(at: CGPoint(x: 300, y: 169), in: size) == nil)
-        #expect(Geometry.edge(at: CGPoint(x: 7, y: 169), in: size) == .left)
-        #expect(Geometry.edge(at: CGPoint(x: 593.5, y: 169), in: size) == .right)
-        #expect(Geometry.edge(at: CGPoint(x: 300, y: 3), in: size) == .bottom)
-        #expect(Geometry.edge(at: CGPoint(x: 300, y: 335), in: size) == .top)
-        #expect(Geometry.edge(at: CGPoint(x: 2, y: 335), in: size) == .topLeft)
-        #expect(Geometry.edge(at: CGPoint(x: 598, y: 2), in: size) == .bottomRight)
-        #expect(Geometry.edge(at: CGPoint(x: 8, y: 169), in: size) == nil)
+        let side: ResizeEdge = quadrant.isRight ? .left : .right
+        let end: ResizeEdge = quadrant.isTop ? .bottom : .top
+        let corner: ResizeEdge
+        switch (quadrant.isRight, quadrant.isTop) {
+        case (true, true): corner = .bottomLeft
+        case (true, false): corner = .topLeft
+        case (false, true): corner = .bottomRight
+        case (false, false): corner = .topRight
+        }
+        func grip(_ point: CGPoint) -> ResizeEdge? { Geometry.grip(at: point, in: size, quadrant: quadrant) }
+
+        #expect(grip(Self.inner(quadrant, side: 7, end: 169, in: size)) == side)
+        #expect(grip(Self.inner(quadrant, side: 8, end: 169, in: size)) == nil)
+        #expect(grip(Self.inner(quadrant, side: 300, end: 7, in: size)) == end)
+        #expect(grip(Self.inner(quadrant, side: 300, end: 8, in: size)) == nil)
+        #expect(grip(Self.inner(quadrant, side: 19, end: 19, in: size)) == corner)
+        #expect(grip(Self.inner(quadrant, side: 20, end: 19, in: size)) == nil)
+        #expect(grip(Self.outer(quadrant, side: 2, end: 169, in: size)) == nil)
+        #expect(grip(Self.outer(quadrant, side: 300, end: 2, in: size)) == nil)
+        #expect(grip(CGPoint(x: 300, y: 169)) == nil)
+        #expect(grip(Self.inner(quadrant, side: 3, end: 30, in: size)) == side)
+        #expect(grip(Self.inner(quadrant, side: 30, end: 3, in: size)) == end)
+        #expect(grip(CGPoint(x: -1, y: 169)) == nil)
+        #expect(grip(CGPoint(x: 601, y: 169)) == nil)
+        #expect(grip(CGPoint(x: 300, y: -1)) == nil)
+        #expect(grip(CGPoint(x: 300, y: 339)) == nil)
+    }
+
+    @Test func roomIsShrinkOnlyAtFullGrowOnlyAtSmallestAndBothBetween() {
+        let full = CGSize(width: 600, height: 338)
+        #expect(Geometry.room(width: 600, full: full) == .shrinkOnly)
+        #expect(Geometry.room(width: 599.5, full: full) == .shrinkOnly)
+        #expect(Geometry.room(width: 599, full: full) == .both)
+        #expect(Geometry.room(width: 420, full: full) == .growOnly)
+        #expect(Geometry.room(width: 420.5, full: full) == .growOnly)
+        #expect(Geometry.room(width: 421, full: full) == .both)
+        #expect(Geometry.room(width: 500, full: full) == .both)
     }
 
     @Test func scaleForAWidthRoundTrips() {

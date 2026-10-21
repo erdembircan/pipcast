@@ -1,4 +1,5 @@
 import AppKit
+import ObjectiveC
 import StationCore
 
 /// The status-bar window level.
@@ -7,6 +8,9 @@ let stationLevel = Int(CGWindowLevelForKey(.statusWindow))
 /// The window recipe: borderless and non-activating, at level 25, on every
 /// Space and beside full-screen apps. It can never become key or main.
 final class StationPanel: NSPanel {
+    /// Whether `init` managed to force the active appearance (see `forceActiveAppearance`).
+    private(set) var hasForcedActiveAppearance = false
+
     init() {
         super.init(contentRect: NSRect(x: 0, y: 0, width: 320, height: 180),
                    styleMask: [.borderless, .nonactivatingPanel],
@@ -20,6 +24,19 @@ final class StationPanel: NSPanel {
         backgroundColor = .clear
         hasShadow = true
         isReleasedWhenClosed = false
+        hasForcedActiveAppearance = forceActiveAppearance()
+    }
+
+    /// Draws the panel with an active appearance, as a key window would be, without ever making it key or main.
+    /// AppKit draws Liquid Glass flat in a window without one, and this panel can never become key. A private
+    /// interface, looked up at run time; false when this macOS lacks it.
+    @discardableResult
+    func forceActiveAppearance() -> Bool {
+        let selector = NSSelectorFromString("_setForceMainAppearance:")
+        guard responds(to: selector), let method = class_getInstanceMethod(NSWindow.self, selector) else { return false }
+        typealias Set = @convention(c) (AnyObject, Selector, Bool) -> Void
+        unsafeBitCast(method_getImplementation(method), to: Set.self)(self, selector, true)
+        return true
     }
 
     override var canBecomeKey: Bool { false }
@@ -57,7 +74,7 @@ final class InteractionView: NSView {
         super.init(frame: frame)
         autoresizingMask = [.width, .height]
         addTrackingArea(NSTrackingArea(rect: .zero,
-                                       options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
+                                       options: [.mouseEnteredAndExited, .mouseMoved, .activeAlways, .inVisibleRect],
                                        owner: self, userInfo: nil))
     }
 
@@ -70,9 +87,30 @@ final class InteractionView: NSView {
     // The panel can never become key, so every click is a first-mouse click.
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
-    override func mouseEntered(with event: NSEvent) { onHover?(true) }
+    /// The resize pointer over a grip, the arrow elsewhere. `point` is in this view's coordinates.
+    private func updatePointer(at point: NSPoint) {
+        if let window, let delegate,
+           let edge = Geometry.grip(at: point, in: bounds.size, quadrant: delegate.quadrant) {
+            resizePointer(for: edge, room: Geometry.room(width: window.frame.width, full: delegate.fullSize())).set()
+        } else {
+            NSCursor.arrow.set()
+        }
+    }
 
-    override func mouseExited(with event: NSEvent) { onHover?(false) }
+    override func mouseMoved(with event: NSEvent) {
+        updatePointer(at: convert(event.locationInWindow, from: nil))
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        onHover?(true)
+        updatePointer(at: convert(event.locationInWindow, from: nil))
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        onHover?(false)
+        // During a drag the pointer may leave the window and keeps the edge's arrows.
+        if drag == nil { NSCursor.arrow.set() }
+    }
 
     override func mouseDown(with event: NSEvent) {
         guard let window else { return }
@@ -81,7 +119,7 @@ final class InteractionView: NSView {
         startFrame = window.frame
         didDrag = false
         let point = convert(event.locationInWindow, from: nil)
-        if let edge = Geometry.edge(at: point, in: bounds.size) {
+        if let delegate, let edge = Geometry.grip(at: point, in: bounds.size, quadrant: delegate.quadrant) {
             drag = .resize(edge)
         } else {
             drag = .move
@@ -101,16 +139,22 @@ final class InteractionView: NSView {
                                         delta: delta, full: delegate.fullSize())
             window.setFrame(frame, display: true)
             window.invalidateShadow()
+            // The edge's arrows for the whole drag, even when the pointer leaves the grip.
+            resizePointer(for: edge, room: Geometry.room(width: frame.width, full: delegate.fullSize())).set()
         }
     }
 
     override func mouseUp(with event: NSEvent) {
-        defer { drag = nil }
-        guard didDrag, let drag else { return }
-        switch drag {
-        case .move: delegate?.dragDidMove()
-        case .resize: delegate?.dragDidResize()
+        let finished = drag
+        drag = nil
+        if didDrag, let finished {
+            switch finished {
+            case .move: delegate?.dragDidMove()
+            case .resize: delegate?.dragDidResize()
+            }
         }
+        let point = convert(event.locationInWindow, from: nil)
+        if bounds.contains(point) { updatePointer(at: point) } else { NSCursor.arrow.set() }
     }
 }
 
