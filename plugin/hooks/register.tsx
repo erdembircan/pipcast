@@ -1,0 +1,639 @@
+import { atom, read, update } from 'claude-code'
+import type { EngineInterface, Register, RenderElement, Timer } from 'claude-code'
+
+import { ACTIVITY_WRITE_MS, HEARTBEAT_MS } from '../src/contract/constants.ts'
+import { COMMAND_DESCRIPTION, COMMAND_NAME, REPLY, TOAST_CANNOT_START, fallbackTitle } from '../src/contract/copy.ts'
+import { defaultHome, storePaths } from '../src/contract/paths.ts'
+import { parseSessionRecord } from '../src/contract/validate.ts'
+import { BAND_HEIGHT, band, blankLabel } from '../src/core/band.ts'
+import { activity, lastWords, permission, question } from '../src/core/describe.ts'
+import type { ToolInput } from '../src/core/describe.ts'
+import { editCounts } from '../src/core/diffstat.ts'
+import * as record from '../src/core/model.ts'
+import type { SessionModel } from '../src/core/model.ts'
+import {
+  changesSince,
+  checkIn,
+  countOnAir,
+  ensureStation,
+  takeBaseline,
+  tuneIn,
+  tuneOut,
+  writeRecord,
+} from '../src/core/services.ts'
+import type { Io, TuneInResult } from '../src/core/services.ts'
+
+const tuned = atom({ plugin: 'pipcast', key: 'tuned' } as const, false)
+const onAir = atom({ plugin: 'pipcast', key: 'onAir' } as const, 0)
+
+// The API has the session's id and no call for its title. The engine writes
+// the title into the transcript as custom-title rows: this prints the last one.
+const LAST_TITLE =
+  'f=$(/usr/bin/find "$1" -maxdepth 2 -name "$2.jsonl" -print -quit) && [ -n "$f" ] && ' +
+  `/usr/bin/awk '/"type":"custom-title"/ { last = $0 } END { print last }' "$f"`
+
+// What the hooks share. A reload starts the module over, and session.start
+// builds all of this again from $.state and the session's own record.
+let model: SessionModel | null = null
+let sessionRoot = ''
+// When this session tuned in; null while it is not tuned in
+let tunedInAt: number | null = null
+let heartbeat: Timer | undefined
+let activityTimer: Timer | undefined
+let lastWriteAt = 0
+// classic.SessionStart arrives before session.start: its title waits here
+let hookTitle: string | null = null
+// The turn's baseline being taken, so that classic.Stop can wait for it
+let baselineTask: Promise<void> = Promise.resolve()
+// Writes run one after another, so an older state never lands after a newer one
+let queue: Promise<void> = Promise.resolve()
+
+// The engine's own band is an empty Box; another mod's band has content.
+const hasContent = (drawn: RenderElement) => drawn.type !== 'Box' || (drawn.children?.length ?? 0) > 0
+
+function enqueue(task: () => Promise<void>): Promise<void> {
+  queue = queue.then(task, task)
+  return queue
+}
+
+// A tool call's arguments: the event, less the envelope around them
+function toolInput(e: object): ToolInput {
+  const input: ToolInput = {}
+  for (const [key, value] of Object.entries(e)) {
+    if (key !== 'tool' && key !== 'tool_use_id' && key !== 'agentId') {
+      input[key] = value
+    }
+  }
+  return input
+}
+
+function baseName(path: string): string {
+  return path.replace(/\/+$/, '').split('/').pop() ?? ''
+}
+
+function failure($: EngineInterface, where: string, error: unknown): void {
+  const text = error instanceof Error ? error.message : String(error)
+  $.ui.log(`pipcast: ${where}: ${text}`, { to: 'debug' })
+}
+
+function ioFor($: EngineInterface): Io {
+  return {
+    now: () => $.clock.now(),
+    async storeHome() {
+      const home = await $.env.get('PIPCAST_HOME')
+      return home !== undefined && home !== '' ? home : defaultHome((await $.env.get('HOME')) ?? '')
+    },
+    async read(path) {
+      try {
+        return (await $.fs.read(path)) as string
+      } catch {
+        return null
+      }
+    },
+    async write(path, text) {
+      const dir = path.slice(0, path.lastIndexOf('/'))
+      if (!(await $.fs.exists(dir))) {
+        // The store is private to the user
+        await $.process.run(['/bin/mkdir', '-p', '-m', '700', dir.slice(0, dir.lastIndexOf('/'))])
+        await $.process.run(['/bin/mkdir', '-m', '700', dir])
+      }
+      await $.fs.write(`${path}.tmp`, text)
+      const moved = await $.process.run(['/bin/mv', '-f', `${path}.tmp`, path])
+      if (moved.exitCode !== 0) {
+        throw new Error(moved.stderr)
+      }
+    },
+    async remove(path) {
+      await $.process.run(['/bin/rm', '-f', path, `${path}.tmp`])
+    },
+    async list(dir) {
+      try {
+        return (await $.fs.list(dir)).map((entry) => entry.name)
+      } catch {
+        return []
+      }
+    },
+    async run(argv, cwd) {
+      const done = await $.process.run(argv, cwd === undefined ? undefined : { cwd })
+      return { exitCode: done.exitCode, stdout: done.stdout, stderr: done.stderr }
+    },
+    async stationBinary() {
+      const bin = await $.env.get('PIPCAST_STATION_BIN')
+      return bin !== undefined && bin !== '' ? bin : `${$.plugin.root}/station/pipcast-station`
+    },
+    stationAssets: () => `${$.plugin.root}/station`,
+    async targetBundleId() {
+      const id = await $.env.get('PIPCAST_TARGET_BUNDLE_ID')
+      return id !== undefined && id !== '' ? id : null
+    },
+  }
+}
+
+// The session's title from its transcript, else null
+async function transcriptTitle($: EngineInterface, id: string): Promise<string | null> {
+  const config = (await $.env.get('CLAUDE_CONFIG_DIR')) ?? `${await $.env.get('HOME')}/.claude`
+  const found = await $.process.run(['/bin/sh', '-c', LAST_TITLE, 'sh', `${config}/projects`, id])
+  try {
+    const title: unknown = JSON.parse(found.stdout).customTitle
+    return typeof title === 'string' && title.trim() !== '' ? title.trim() : null
+  } catch {
+    return null
+  }
+}
+
+// Saves the record, when tuned in
+async function save($: EngineInterface): Promise<void> {
+  await enqueue(async () => {
+    const m = model
+    const at = tunedInAt
+    if (m === null || at === null) {
+      return
+    }
+    try {
+      const io = ioFor($)
+      const now = await $.clock.now()
+      await writeRecord(io, await io.storeHome(), m, at, now)
+      lastWriteAt = now
+    } catch (error) {
+      failure($, 'writing the record', error)
+    }
+  })
+}
+
+// An activity line writes at most every ACTIVITY_WRITE_MS; a timer catches the last
+async function saveActivity($: EngineInterface): Promise<void> {
+  if (tunedInAt === null || activityTimer !== undefined) {
+    return
+  }
+  const wait = lastWriteAt + ACTIVITY_WRITE_MS - (await $.clock.now())
+  if (wait <= 0) {
+    await save($)
+    return
+  }
+  activityTimer = $.clock.after(wait, () => {
+    activityTimer = undefined
+    void save($)
+  })
+}
+
+async function setState($: EngineInterface, hasTuned: boolean, count: number): Promise<void> {
+  if ((await read($, tuned)) !== hasTuned) {
+    await update($, tuned, () => hasTuned)
+  }
+  if ((await read($, onAir)) !== count) {
+    await update($, onAir, () => count)
+  }
+}
+
+async function refreshOnAir($: EngineInterface): Promise<void> {
+  const io = ioFor($)
+  const count = await countOnAir(io, await io.storeHome(), await $.clock.now())
+  if ((await read($, onAir)) !== count) {
+    await update($, onAir, () => count)
+  }
+}
+
+function stopTimers(): void {
+  activityTimer?.cancel()
+  activityTimer = undefined
+}
+
+// The heartbeat: a tuned-in session checks in; every session counts who is on air
+async function beat($: EngineInterface): Promise<void> {
+  try {
+    const io = ioFor($)
+    let outcome: { closed: boolean; onAir: number } | null = null
+    await enqueue(async () => {
+      if (model === null || tunedInAt === null) {
+        return
+      }
+      outcome = await checkIn(io, model, tunedInAt)
+      lastWriteAt = await $.clock.now()
+    })
+    if (outcome === null) {
+      await refreshOnAir($)
+      return
+    }
+    const done: { closed: boolean; onAir: number } = outcome
+    if (done.closed) {
+      tunedInAt = null
+      stopTimers()
+      await setState($, false, done.onAir)
+    } else {
+      await setState($, true, done.onAir)
+    }
+  } catch (error) {
+    failure($, 'heartbeat', error)
+  }
+}
+
+// The model for this session, built on the first need and again for a new session id
+async function ensureSession($: EngineInterface): Promise<SessionModel> {
+  const id = await $.session.id()
+  if (model !== null && model.record.id === id) {
+    return model
+  }
+  const root = await $.session.root()
+  const repo = await $.session.repo()
+  const project = baseName(repo?.root ?? root) || baseName(root)
+  const now = await $.clock.now()
+  const found = hookTitle ?? (await transcriptTitle($, id).catch(() => null))
+  let built = record.newModel(id, project, found ?? fallbackTitle(project, id), now)
+  if (hookTitle !== null) {
+    built = record.titled(built, hookTitle, true)
+  }
+  model = built
+  sessionRoot = root
+  tunedInAt = null
+  heartbeat?.cancel()
+  heartbeat = $.clock.every(HEARTBEAT_MS, () => {
+    void beat($)
+  })
+  return built
+}
+
+async function startSession($: EngineInterface): Promise<void> {
+  const built = await ensureSession($)
+  const io = ioFor($)
+  const home = await io.storeHome()
+  if ((await read($, tuned)) === true) {
+    // A reload: carry on from the session's own record
+    const own = parseSessionRecord(
+      await io.read(storePaths(home).session(built.record.id)).then((text) => (text === null ? null : (JSON.parse(text) as unknown))),
+    )
+    if (own === null) {
+      await update($, tuned, () => false)
+    } else {
+      tunedInAt = own.tunedInAt
+      await save($)
+      await ensureStation(io, home)
+    }
+  }
+  await refreshOnAir($)
+}
+
+async function endSession($: EngineInterface): Promise<void> {
+  heartbeat?.cancel()
+  heartbeat = undefined
+  stopTimers()
+  const m = model
+  const wasTuned = tunedInAt !== null
+  model = null
+  tunedInAt = null
+  hookTitle = null
+  if (m !== null) {
+    const io = ioFor($)
+    const home = await io.storeHome()
+    await enqueue(() => tuneOut(io, home, m.record.id).catch(() => undefined))
+  }
+  if (wasTuned) {
+    await update($, tuned, () => false).catch(() => undefined)
+  }
+}
+
+async function tuneInNow($: EngineInterface): Promise<TuneInResult['status']> {
+  const m = await ensureSession($)
+  const io = ioFor($)
+  let result = { status: 'cannot-start' } as TuneInResult
+  await enqueue(async () => {
+    result = await tuneIn(io, m)
+  })
+  if (result.status === 'on') {
+    tunedInAt = result.tunedInAt
+    lastWriteAt = result.tunedInAt
+    await setState($, true, await countOnAir(io, await io.storeHome(), await $.clock.now()))
+    // The model may have moved on while the station started
+    await save($)
+  } else if (result.status === 'full') {
+    await refreshOnAir($)
+  }
+  return result.status
+}
+
+async function tuneOutNow($: EngineInterface): Promise<void> {
+  const m = await ensureSession($)
+  const io = ioFor($)
+  tunedInAt = null
+  stopTimers()
+  const home = await io.storeHome()
+  await enqueue(() => tuneOut(io, home, m.record.id))
+  await setState($, false, await countOnAir(io, home, await $.clock.now()))
+}
+
+// The band's tab and /pipcast do the same: tune in, or tune out
+async function toggle($: EngineInterface): Promise<'in' | 'out' | 'full' | 'cannot-start'> {
+  try {
+    if ((await read($, tuned)) === true) {
+      await tuneOutNow($)
+      return 'out'
+    }
+    const status = await tuneInNow($)
+    return status === 'on' ? 'in' : status
+  } catch (error) {
+    failure($, 'tuning', error)
+    return 'cannot-start'
+  }
+}
+
+async function pressed($: EngineInterface): Promise<void> {
+  if ((await toggle($)) === 'cannot-start') {
+    $.ui.toast(TOAST_CANNOT_START)
+  }
+}
+
+async function onTitle($: EngineInterface, title: unknown): Promise<void> {
+  if (typeof title !== 'string' || title.trim() === '') {
+    return
+  }
+  hookTitle = title.trim()
+  if (model !== null) {
+    const next = record.titled(model, hookTitle, true)
+    const changed = next.record.title !== model.record.title
+    model = next
+    if (changed) {
+      await save($)
+    }
+  }
+}
+
+async function refreshTitle($: EngineInterface): Promise<void> {
+  if (model === null || model.titleFromHook) {
+    return
+  }
+  const found = await transcriptTitle($, model.record.id)
+  if (found !== null && model !== null) {
+    const changed = found !== model.record.title
+    model = record.titled(model, found, false)
+    if (changed) {
+      await save($)
+    }
+  }
+}
+
+async function onTurnStart($: EngineInterface, turnId: string): Promise<void> {
+  await ensureSession($)
+  if (model === null) {
+    return
+  }
+  model = record.turnStarted(model, await $.clock.now(), turnId)
+  await save($)
+  const io = ioFor($)
+  baselineTask = (async () => {
+    try {
+      const baseline = await takeBaseline(io, sessionRoot)
+      if (baseline !== null && model !== null) {
+        model = record.baselineTaken(model, turnId, baseline)
+      }
+    } catch (error) {
+      failure($, 'baseline', error)
+    }
+  })()
+  void refreshTitle($).catch((error: unknown) => failure($, 'title', error))
+}
+
+async function onToolBefore($: EngineInterface, tool: string, input: ToolInput): Promise<void> {
+  if (model === null) {
+    return
+  }
+  const now = await $.clock.now()
+  const text = activity(tool, input, sessionRoot)
+  if (text !== null) {
+    model = record.activity(model, now, text)
+  }
+  const counts = editCounts(tool, input)
+  if (counts !== null) {
+    model = record.edited(model, counts.file, counts.added, counts.removed)
+  }
+  const asked = tool === 'AskUserQuestion' ? question(input) : null
+  if (asked !== null) {
+    model = record.askedQuestion(model, now, asked)
+    await save($)
+  } else if (text !== null) {
+    await saveActivity($)
+  }
+}
+
+// A tool call returned: the loop that made it has moved on, so if the session was waiting on it, it works again
+async function onToolAfter($: EngineInterface, agent: string | null): Promise<void> {
+  if (model === null) {
+    return
+  }
+  const next = record.resumed(model, await $.clock.now(), agent)
+  if (next !== model) {
+    model = next
+    await save($)
+  }
+}
+
+async function onPermission($: EngineInterface, tool: string, input: unknown, agent: string | null): Promise<void> {
+  if (model === null) {
+    return
+  }
+  const described = permission(tool, typeof input === 'object' && input !== null ? (input as ToolInput) : {}, sessionRoot)
+  model = record.askedPermission(model, await $.clock.now(), described.command, described.quote, agent)
+  await save($)
+}
+
+async function onStop($: EngineInterface, e: { last_assistant_message?: string; background_tasks?: unknown[]; session_crons?: unknown[] }): Promise<void> {
+  if (model === null) {
+    return
+  }
+  const background = (e.background_tasks?.length ?? 0) > 0 || (e.session_crons?.length ?? 0) > 0
+  let changes = { added: 0, removed: 0, files: 0 }
+  if (!background) {
+    await baselineTask
+    const baseline = model.turn.baseline
+    if (baseline !== null) {
+      changes = await changesSince(ioFor($), sessionRoot, baseline)
+    } else {
+      const edits = model.turn.edits
+      changes = { added: edits.added, removed: edits.removed, files: edits.files.size }
+    }
+  }
+  if (model === null) {
+    return
+  }
+  model = record.finished(model, await $.clock.now(), {
+    lastWords: lastWords(e.last_assistant_message ?? ''),
+    changes,
+    background,
+  })
+  await save($)
+}
+
+async function onFailure($: EngineInterface, kind: string): Promise<void> {
+  if (model === null) {
+    return
+  }
+  model = record.failed(model, await $.clock.now(), kind)
+  await save($)
+}
+
+async function onComplete($: EngineInterface, isAborted: boolean, reason: string): Promise<void> {
+  if (model === null) {
+    return
+  }
+  const now = await $.clock.now()
+  if (isAborted) {
+    model = record.aborted(model, now)
+  } else if (reason === 'error' && !model.turn.ended) {
+    model = record.failed(model, now, 'unknown')
+  } else {
+    return
+  }
+  await save($)
+}
+
+export const register: Register = (on) => {
+  on('session.start', async ($, e, next) => {
+    try {
+      await $.command.register({ name: COMMAND_NAME, description: COMMAND_DESCRIPTION })
+      await startSession($)
+    } catch (error) {
+      failure($, 'session.start', error)
+    }
+    return next(e)
+  })
+
+  // /clear and /resume end the session too, and reset $.state
+  on('session.end', async ($, e, next) => {
+    try {
+      await endSession($)
+    } catch (error) {
+      failure($, 'session.end', error)
+    }
+    return next(e)
+  })
+
+  on('command.run', { command: COMMAND_NAME }, async ($) => {
+    const done = await toggle($)
+    switch (done) {
+      case 'in':
+        return { text: REPLY.tunedIn }
+      case 'out':
+        return { text: REPLY.tunedOut }
+      case 'full':
+        return { text: REPLY.full }
+      default:
+        return { text: REPLY.cannotStart }
+    }
+  })
+
+  on('turn.start', async ($, e, next) => {
+    try {
+      await onTurnStart($, e.turnId)
+    } catch (error) {
+      failure($, 'turn.start', error)
+    }
+    return next(e)
+  })
+
+  on('tool.call', async ($, e, next) => {
+    // A subagent's calls make no activity, edits or questions here; its permission
+    // is answered when its own call returns
+    const agent = typeof e.agentId === 'string' && e.agentId !== '' ? e.agentId : null
+    if (agent === null) {
+      try {
+        await onToolBefore($, e.tool, toolInput(e))
+      } catch (error) {
+        failure($, 'tool.call', error)
+      }
+    }
+    const result = await next(e)
+    try {
+      await onToolAfter($, agent)
+    } catch (error) {
+      failure($, 'tool.call', error)
+    }
+    return result
+  })
+
+  on('classic.PermissionRequest', async ($, e, next) => {
+    try {
+      const agent: unknown = (e as { agent_id?: unknown }).agent_id
+      await onPermission($, e.tool_name, e.tool_input, typeof agent === 'string' && agent !== '' ? agent : null)
+    } catch (error) {
+      failure($, 'PermissionRequest', error)
+    }
+    return next(e)
+  })
+
+  on('classic.Stop', async ($, e, next) => {
+    try {
+      await onStop($, e)
+    } catch (error) {
+      failure($, 'Stop', error)
+    }
+    return next(e)
+  })
+
+  on('classic.StopFailure', async ($, e, next) => {
+    try {
+      await onFailure($, String(e.error))
+    } catch (error) {
+      failure($, 'StopFailure', error)
+    }
+    return next(e)
+  })
+
+  on('turn.complete', async ($, e, next) => {
+    if (e.agentId !== undefined) {
+      return next(e)
+    }
+    try {
+      await onComplete($, e.isAborted, e.reason)
+    } catch (error) {
+      failure($, 'turn.complete', error)
+    }
+    return next(e)
+  })
+
+  on('classic.SessionStart', async ($, e, next) => {
+    try {
+      await onTitle($, e.session_title)
+    } catch (error) {
+      failure($, 'SessionStart', error)
+    }
+    return next(e)
+  })
+
+  on('classic.UserPromptSubmit', async ($, e, next) => {
+    try {
+      await onTitle($, e.session_title)
+    } catch (error) {
+      failure($, 'UserPromptSubmit', error)
+    }
+    return next(e)
+  })
+
+  on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
+    // Another mod may draw the band too: what it drew is kept beside this.
+    const beneath = await next(e)
+    if (e.surface !== 'desktop' || e.props.hasSurvey) {
+      return beneath
+    }
+    const { Box, Button, Svg } = $.ui.resolve(e)
+    const view = band({ tuned: (await read($, tuned)) === true, onAir: (await read($, onAir)) ?? 0 })
+    return (
+      <Box alignItems="center" columnGap={3} flexWrap="wrap">
+        {hasContent(beneath) && beneath}
+        <Box alignItems="center" columnGap={1}>
+          <Svg source={view.chip.svg} alt={view.chip.alt} width={view.chip.width} height={BAND_HEIGHT} />
+          <Box>
+            <Svg source={view.tab.svg} alt={view.tab.alt} width={view.tab.width} height={BAND_HEIGHT} />
+            {view.kind !== 'off' && (
+              <Box position="absolute" top={0} bottom={0} left={0} right={0} alignItems="center" justifyContent="center">
+                <Button
+                  key={view.kind === 'in' ? 'tune-in' : 'tune-out'}
+                  label={blankLabel(view.tab.width)}
+                  plain
+                  onPress={() => pressed($)}
+                />
+              </Box>
+            )}
+          </Box>
+        </Box>
+      </Box>
+    )
+  })
+}

@@ -1,0 +1,421 @@
+import type { On } from 'claude-code'
+import type { Engine } from 'claude-code/testing'
+import { expect, test } from 'claude-code/testing'
+
+import { ERROR_WORDS, REPLY, TAB_ALT, TOAST_CANNOT_START, chipAlt } from '../src/contract/copy.ts'
+import { BAND, HOME, ID, ROOT, RECORD, RUN, STATION, T0, world } from './world.tsx'
+import type { WorldOptions } from './world.tsx'
+
+const START = { cwd: ROOT, surface: 'desktop', isInteractive: true } as const
+
+type Run = ($: Engine, on: On) => Promise<void>
+
+// A test in the world above: the session starts first and ends last, so one
+// test's module state never reaches the next
+function scenario(name: string, options: WorldOptions, body: (w: ReturnType<typeof world>, $: Engine) => Promise<void>) {
+  const run: Run = async ($, on) => {
+    const w = world(on, options)
+    on('ui.render', { component: 'AbovePrompt' }, ($ui, e) => {
+      const { Box, Text } = $ui.ui.resolve(e)
+      return <Box>{options.hasOtherBand !== false && <Text>another band</Text>}</Box>
+    })
+    await $.session.start(START)
+    try {
+      await body(w, $)
+    } finally {
+      await $.session.end({ reason: 'other', sessionId: ID, resume: { id: ID } })
+    }
+  }
+  test(name, run)
+}
+
+const tuneIn = ($: Engine) => $.command.run(RUN)
+
+const turn = async ($: Engine, id = 't1') => {
+  await $.turn.start({ text: 'go', turnId: id })
+}
+
+const stop = (
+  $: Engine,
+  fields: { last_assistant_message?: string; background_tasks?: unknown[]; session_crons?: unknown[] } = {},
+) => $.classic.Stop({ stop_hook_active: false, ...fields } as never)
+
+const mounted = ($: Engine, surface: 'desktop' | 'terminal' = 'desktop', props: Record<string, unknown> = {}) =>
+  $.ui.mount({ ...BAND, props: { ...BAND.props, ...props }, surface } as never)
+
+scenario('the band on the desktop: the chip, the tab and a plain button, beside another mod', {}, async (w, $) => {
+  w.other('aaaa', T0 - 2000)
+  w.other('bbbb', T0 - 1000)
+  w.other('stale', T0 - 100_000, T0 - 60_000)
+  // The count is taken at session.start and by the heartbeat
+  await $.session.end({ reason: 'other', sessionId: ID, resume: { id: ID } })
+  await $.session.start(START)
+
+  const ui = await mounted($)
+  const svgs = await ui.findAll({ type: 'Svg' })
+  expect(svgs.map((svg) => svg.props.alt)).toEqual([chipAlt(2), TAB_ALT.in])
+  const button = await ui.find({ type: 'Button' })
+  expect(button?.key).toBe('tune-in')
+  expect(button?.props.plain).toBe(true)
+  expect(await ui.find({ type: 'Text', text: 'another band' })).toBeDefined()
+  const drawn = JSON.stringify(await ui.drawn())
+  expect(drawn.indexOf('another band')).toBeLessThan(drawn.indexOf('KLWD'))
+  await ui.unmount()
+})
+
+scenario('the band leaves the terminal and a survey to what was beneath', {}, async (_w, $) => {
+  const terminal = await mounted($, 'terminal')
+  expect(await terminal.find({ type: 'Svg' })).toBeUndefined()
+  expect(await terminal.find({ type: 'Button' })).toBeUndefined()
+  expect(await terminal.find({ type: 'Text', text: 'another band' })).toBeDefined()
+  await terminal.unmount()
+
+  const survey = await mounted($, 'desktop', { hasSurvey: true })
+  expect(await survey.find({ type: 'Svg' })).toBeUndefined()
+  expect(await survey.find({ type: 'Button' })).toBeUndefined()
+  expect(await survey.find({ type: 'Text', text: 'another band' })).toBeDefined()
+  await survey.unmount()
+})
+
+scenario('the band draws alone when nothing else is in the band', { hasOtherBand: false }, async (_w, $) => {
+  const ui = await mounted($)
+  const drawn = await ui.drawn()
+  expect(drawn.type).toBe('Box')
+  expect('children' in drawn ? drawn.children?.length : 0).toBe(1)
+  await ui.unmount()
+})
+
+scenario('pressing the tab tunes in: the record, the station, then TUNE OUT', { env: { PIPCAST_TARGET_BUNDLE_ID: 'com.example.never' } }, async (w, $) => {
+  const ui = await mounted($)
+  await ui.press({ key: 'tune-in' })
+  await ui.redraw()
+
+  const record = w.record()
+  expect(record?.id).toBe(ID)
+  expect(record?.tunedInAt).toBe(T0)
+  expect(record?.checkedInAt).toBe(T0)
+  // written whole to .tmp, then renamed into place
+  expect(w.writes).toContain(`${RECORD}.tmp`)
+  expect(w.ran).toContainEqual(['/bin/mv', '-f', `${RECORD}.tmp`, RECORD])
+  expect(w.files.has(`${RECORD}.tmp`)).toBe(false)
+
+  expect(w.launched.length).toBe(1)
+  const launch = w.launched[0] ?? []
+  expect(launch.slice(0, 3)).toEqual(['launch', '--home', HOME])
+  expect(launch[3]).toBe('--assets')
+  expect(launch[4]?.endsWith('/station')).toBe(true)
+  expect(launch.slice(5)).toEqual(['--target-bundle-id', 'com.example.never'])
+  expect(w.ran).toContainEqual(['/bin/chmod', '+x', STATION])
+
+  expect((await ui.findAll({ type: 'Svg' })).map((svg) => svg.props.alt)).toEqual([chipAlt(1), TAB_ALT.out])
+  expect((await ui.find({ type: 'Button' }))?.key).toBe('tune-out')
+
+  await ui.press({ key: 'tune-out' })
+  await ui.redraw()
+  expect(w.record()).toBeNull()
+  expect((await ui.find({ type: 'Button' }))?.key).toBe('tune-in')
+  await ui.unmount()
+})
+
+scenario('the station is launched without a target when the variable is not set', {}, async (w, $) => {
+  await tuneIn($)
+  expect(w.launched[0]?.includes('--target-bundle-id')).toBe(false)
+})
+
+scenario('with four others on air the tab is dim, has no button, and /pipcast says so', {}, async (w, $) => {
+  for (const [index, id] of ['a', 'b', 'c', 'd'].entries()) {
+    w.other(id, T0 - 10_000 + index)
+  }
+  await $.session.end({ reason: 'other', sessionId: ID, resume: { id: ID } })
+  await $.session.start(START)
+
+  const ui = await mounted($)
+  expect((await ui.findAll({ type: 'Svg' })).map((svg) => svg.props.alt)).toEqual([chipAlt(4), TAB_ALT.off])
+  expect(await ui.find({ type: 'Button' })).toBeUndefined()
+  await ui.unmount()
+
+  expect((await tuneIn($)).text).toBe(REPLY.full)
+  expect(w.record()).toBeNull()
+  expect(w.launched.length).toBe(0)
+})
+
+scenario('/pipcast tunes in, then out', {}, async (w, $) => {
+  expect((await tuneIn($)).text).toBe(REPLY.tunedIn)
+  expect(w.record()).not.toBeNull()
+  expect((await tuneIn($)).text).toBe(REPLY.tunedOut)
+  expect(w.record()).toBeNull()
+})
+
+scenario('a station that will not start leaves a toast and no record', { launchExit: 1, launchOut: '' }, async (w, $) => {
+  const ui = await mounted($)
+  await ui.press({ key: 'tune-in' })
+  await ui.redraw()
+  expect(w.toasts).toEqual([TOAST_CANNOT_START])
+  expect(w.record()).toBeNull()
+  expect((await ui.find({ type: 'Button' }))?.key).toBe('tune-in')
+  await ui.unmount()
+
+  expect((await tuneIn($)).text).toBe(REPLY.cannotStart)
+})
+
+scenario('turn.start writes working', {}, async (w, $) => {
+  await tuneIn($)
+  expect(w.record()?.state).toBe('ready')
+  await turn($)
+  expect(w.record()?.state).toBe('working')
+})
+
+scenario('a Bash permission is a needs-input story with its command and description', {}, async (w, $) => {
+  await tuneIn($)
+  await turn($)
+  await $.classic.PermissionRequest({
+    tool_name: 'Bash',
+    tool_input: { command: 'rm -rf build\necho done', description: 'Remove the build folder' },
+  } as never)
+  const record = w.record()
+  expect(record?.state).toBe('needs-input')
+  expect(record?.stories.length).toBe(1)
+  expect(record?.stories[0]).toMatchObject({
+    id: `${ID}:1`,
+    kind: 'needs-input',
+    command: 'rm -rf build',
+    quote: 'Remove the build folder',
+  })
+})
+
+scenario('a permission is answered when the tool call returns', {}, async (w, $) => {
+  await tuneIn($)
+  await turn($)
+  await $.classic.PermissionRequest({ tool_name: 'Edit', tool_input: { file_path: `${ROOT}/src/a.ts` } } as never)
+  expect(w.record()?.stories[0]?.command).toBe('Edit src/a.ts')
+  await $.tool.call({ tool: 'Edit', file_path: `${ROOT}/src/a.ts`, old_string: 'a', new_string: 'b' } as never)
+  expect(w.record()?.state).toBe('working')
+  expect(w.record()?.stories.length).toBe(1)
+})
+
+scenario('a subagent permission is answered when that subagent call returns', {}, async (w, $) => {
+  await tuneIn($)
+  await turn($)
+  await $.classic.PermissionRequest({ agent_id: 'a1', tool_name: 'Bash', tool_input: { command: 'ls' } } as never)
+  expect(w.record()?.state).toBe('needs-input')
+  await $.tool.call({ tool: 'Bash', command: 'ls', agentId: 'a1' } as never)
+  expect(w.record()?.state).toBe('working')
+  expect(w.record()?.stories.length).toBe(1)
+  // the subagent's call made no activity line
+  expect(w.record()?.activity.length).toBe(0)
+})
+
+scenario('a main-loop permission is not answered by a subagent call returning', {}, async (w, $) => {
+  await tuneIn($)
+  await turn($)
+  await $.classic.PermissionRequest({ tool_name: 'Bash', tool_input: { command: 'ls' } } as never)
+  await $.tool.call({ tool: 'Bash', command: 'ls', agentId: 'a1' } as never)
+  expect(w.record()?.state).toBe('needs-input')
+  await $.tool.call({ tool: 'Bash', command: 'ls' } as never)
+  expect(w.record()?.state).toBe('working')
+})
+
+scenario('AskUserQuestion is a story with the question, and the answer ends it', {}, async (w, $) => {
+  await tuneIn($)
+  await turn($)
+  await $.tool.call({
+    tool: 'AskUserQuestion',
+    questions: [{ question: ' Which database should it use? ', header: 'Database', options: [], multiSelect: false }],
+  } as never)
+  expect(w.atTool).toEqual(['needs-input'])
+  expect(w.record()?.stories[0]).toMatchObject({ kind: 'needs-input', quote: 'Which database should it use?' })
+  expect(w.record()?.state).toBe('working')
+})
+
+scenario('Stop with a last message and no changes is a complete story', {}, async (w, $) => {
+  await tuneIn($)
+  await turn($)
+  await w.clock.advance(5000)
+  await stop($, { last_assistant_message: 'All **done**. See `notes.md` for more.' })
+  const record = w.record()
+  expect(record?.state).toBe('ready')
+  expect(record?.stories[0]).toMatchObject({ kind: 'complete', quote: 'All done. See notes.md for more.', durationMs: 5000 })
+})
+
+scenario('Stop with changes in git is a ready story with the diff', {}, async (w, $) => {
+  w.git.numstat = '3\t1\tsrc/a.ts\n'
+  w.git.untracked = ['old.txt']
+  await tuneIn($)
+  await turn($)
+  await w.clock.settle()
+  w.git.numstat = '10\t4\tsrc/a.ts\n2\t0\tsrc/b.ts\n'
+  w.git.untracked = ['old.txt', 'new.txt']
+  w.files.set(`${ROOT}/new.txt`, 'one\ntwo\nthree\n')
+  await stop($, { last_assistant_message: 'Done.' })
+  expect(w.record()?.stories[0]).toMatchObject({ kind: 'ready', added: 7 + 2 + 3, removed: 3, files: 3 })
+  expect(w.record()?.hours.at(-1)).toMatchObject({ added: 12, removed: 3, files: 3 })
+})
+
+scenario('with no repository the edit tools are counted', { hasRepo: false }, async (w, $) => {
+  w.git.fails = true
+  await tuneIn($)
+  await turn($)
+  await w.clock.settle()
+  await $.tool.call({ tool: 'Write', file_path: `${ROOT}/a.txt`, content: 'x\ny\n' } as never)
+  await $.tool.call({ tool: 'Edit', file_path: `${ROOT}/b.txt`, old_string: 'a\nb', new_string: 'c' } as never)
+  await stop($, { last_assistant_message: 'Done.' })
+  expect(w.record()?.stories[0]).toMatchObject({ kind: 'ready', added: 3, removed: 2, files: 2 })
+})
+
+scenario('Stop with background work pending stays working and tells no story', {}, async (w, $) => {
+  await tuneIn($)
+  await turn($)
+  await stop($, { last_assistant_message: 'Waiting.', background_tasks: [{ id: 'bg' }] })
+  expect(w.record()?.state).toBe('working')
+  expect(w.record()?.stories.length).toBe(0)
+
+  await turn($, 't2')
+  await stop($, { last_assistant_message: 'Waiting.', session_crons: [{ id: 'cron' }] })
+  expect(w.record()?.state).toBe('working')
+  expect(w.record()?.stories.length).toBe(0)
+})
+
+scenario('StopFailure is an error story in words', {}, async (w, $) => {
+  await tuneIn($)
+  await turn($)
+  await $.classic.StopFailure({ error: 'overloaded' } as never)
+  expect(w.record()?.state).toBe('error')
+  expect(w.record()?.stories[0]).toMatchObject({ kind: 'error', quote: ERROR_WORDS.overloaded })
+  // the turn that follows ends with reason "error": no second story
+  await $.turn.complete({ answer: '', durationMs: 5, isAborted: false, turnId: 't1', reason: 'error' } as never)
+  expect(w.record()?.stories.length).toBe(1)
+})
+
+scenario('a turn that dies on an error with no StopFailure is an unknown error', {}, async (w, $) => {
+  await tuneIn($)
+  await turn($)
+  await $.turn.complete({ answer: '', durationMs: 5, isAborted: false, turnId: 't1', reason: 'error' } as never)
+  expect(w.record()?.stories[0]).toMatchObject({ kind: 'error', quote: ERROR_WORDS.unknown })
+})
+
+scenario('an interrupted turn leaves the session ready, with no story', {}, async (w, $) => {
+  await tuneIn($)
+  await turn($)
+  expect(w.record()?.state).toBe('working')
+  await $.turn.complete({ answer: '', durationMs: 5, isAborted: true, turnId: 't1', reason: 'aborted' } as never)
+  expect(w.record()?.state).toBe('ready')
+  expect(w.record()?.stories.length).toBe(0)
+})
+
+scenario('a subagent changes nothing', {}, async (w, $) => {
+  await tuneIn($)
+  await turn($)
+  await $.tool.call({ tool: 'Bash', command: 'ls', description: 'List files', agentId: 'sub' } as never)
+  await $.turn.complete({ answer: '', durationMs: 5, isAborted: true, turnId: 'x', reason: 'aborted', agentId: 'sub' } as never)
+  expect(w.record()?.activity.length).toBe(0)
+  expect(w.record()?.state).toBe('working')
+})
+
+scenario('activity lines are written at most every two seconds, the last one by a timer', {}, async (w, $) => {
+  await tuneIn($)
+  await turn($)
+  await w.clock.advance(2000)
+  await $.tool.call({ tool: 'Bash', command: 'npm test', description: 'Run the test suite' } as never)
+  expect(w.record()?.activity.map((line) => line.text)).toEqual(['running the test suite'])
+  await $.tool.call({ tool: 'Read', file_path: `${ROOT}/src/a.ts` } as never)
+  expect(w.record()?.activity.length).toBe(1)
+  await w.clock.advance(2000)
+  expect(w.record()?.activity.map((line) => line.text)).toEqual(['running the test suite', 'reading src/a.ts'])
+})
+
+scenario('the heartbeat writes the record again', {}, async (w, $) => {
+  await tuneIn($)
+  expect(w.record()?.checkedInAt).toBe(T0)
+  await w.clock.advance(10_000)
+  expect(w.record()?.checkedInAt).toBe(T0 + 10_000)
+  expect(w.record()?.tunedInAt).toBe(T0)
+})
+
+scenario('a window close after tuning in removes the record and turns the band off', {}, async (w, $) => {
+  await tuneIn($)
+  w.files.set(`${HOME}/control.json`, JSON.stringify({ v: 1, closedAt: T0 + 1 }))
+  await w.clock.advance(10_000)
+  expect(w.record()).toBeNull()
+  const ui = await mounted($)
+  expect((await ui.find({ type: 'Button' }))?.key).toBe('tune-in')
+  await ui.unmount()
+})
+
+scenario('a close before tuning in changes nothing', {}, async (w, $) => {
+  w.files.set(`${HOME}/control.json`, JSON.stringify({ v: 1, closedAt: T0 - 1 }))
+  await tuneIn($)
+  await w.clock.advance(10_000)
+  expect(w.record()?.checkedInAt).toBe(T0 + 10_000)
+})
+
+scenario('the heartbeat starts the station again when it has gone quiet', {}, async (w, $) => {
+  await tuneIn($)
+  expect(w.launched.length).toBe(1)
+  w.files.set(`${HOME}/station.json`, JSON.stringify({ v: 1, pid: 1, startedAt: T0, heartbeatAt: T0, version: '1' }))
+  await w.clock.advance(10_000)
+  expect(w.launched.length).toBe(1)
+  await w.clock.advance(20_000)
+  expect(w.launched.length).toBeGreaterThan(1)
+})
+
+scenario('an untuned session counts who is on air at each heartbeat', {}, async (w, $) => {
+  w.other('aaaa', T0 - 1000)
+  await w.clock.advance(10_000)
+  w.other('aaaa', T0 - 1000, T0 + 10_000)
+  const ui = await mounted($)
+  expect((await ui.findAll({ type: 'Svg' })).map((svg) => svg.props.alt)[0]).toBe(chipAlt(1))
+  await ui.unmount()
+})
+
+scenario('session.end removes the record', {}, async (w, $) => {
+  await tuneIn($)
+  expect(w.files.has(RECORD)).toBe(true)
+  await $.session.end({ reason: 'clear', sessionId: ID, resume: { id: ID } })
+  expect(w.files.has(RECORD)).toBe(false)
+})
+
+scenario('a title from classic.SessionStart becomes the record title', {}, async (w, $) => {
+  await tuneIn($)
+  await $.classic.SessionStart({ source: 'startup', session_title: 'Refactor the importer' } as never)
+  expect(w.record()?.title).toBe('Refactor the importer')
+  await $.classic.UserPromptSubmit({ prompt: 'go', session_title: 'Fix the importer' } as never)
+  expect(w.record()?.title).toBe('Fix the importer')
+})
+
+scenario('a title that arrives before the session starts is kept', {}, async (w, $) => {
+  await $.session.end({ reason: 'other', sessionId: ID, resume: { id: ID } })
+  await $.classic.SessionStart({ source: 'startup', session_title: 'Early title' } as never)
+  await $.session.start(START)
+  await tuneIn($)
+  expect(w.record()?.title).toBe('Early title')
+})
+
+scenario('the transcript names a session that no hook has named', {
+  transcript: `{"type":"custom-title","customTitle":"From the transcript","sessionId":"${ID}"}\n`,
+}, async (w, $) => {
+  await $.session.end({ reason: 'other', sessionId: ID, resume: { id: ID } })
+  await $.session.start(START)
+  await tuneIn($)
+  expect(w.record()?.title).toBe('From the transcript')
+  await $.classic.UserPromptSubmit({ prompt: 'go', session_title: 'The hook wins' } as never)
+  expect(w.record()?.title).toBe('The hook wins')
+  await turn($)
+  await w.clock.settle()
+  expect(w.record()?.title).toBe('The hook wins')
+})
+
+scenario('a session with no title goes by its project and id', {}, async (w, $) => {
+  await tuneIn($)
+  expect(w.record()?.title).toBe('proj-82')
+  expect(w.record()?.project).toBe('proj')
+})
+
+scenario('a reload carries on from the session own record', {}, async (w, $) => {
+  await tuneIn($)
+  await w.clock.advance(3000)
+  const before = w.record()
+  // The module starts over; $.state says tuned in
+  await $.session.start(START)
+  expect(w.record()?.tunedInAt).toBe(before?.tunedInAt)
+})
+
