@@ -102,6 +102,11 @@ func runStop(home: String) -> Never {
     let deadline = Date().addingTimeInterval(3)
     while Date() < deadline {
         if let lock = SingletonLock.tryAcquire(paths.lock) {
+            // A killed station leaves its station.json behind. Remove it unless a
+            // new station has already written its own.
+            if StationStatus.read(from: paths.station)?.pid == status.pid {
+                try? FileManager.default.removeItem(atPath: paths.station)
+            }
             lock.close()
             break
         }

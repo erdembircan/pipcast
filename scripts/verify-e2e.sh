@@ -83,10 +83,6 @@ wait_for() { # <seconds> <command...>: polls every 0.1 s
   return 1
 }
 
-status_pid() { # the pid station.json names, live or not
-  node -e 'process.stdout.write(String(JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8")).pid))' "$home/station.json"
-}
-
 have_record() { [[ "$(record_count)" == "1" ]]; }
 no_record() { [[ "$(record_count)" == "0" ]]; }
 station_gone() { # the process is gone and station.json has gone with it
@@ -141,11 +137,11 @@ feed() {
   printf '{"v":1,"closedAt":%s}\n' "$(node -e 'process.stdout.write(String(Date.now()))')" >"$home/control.json.tmp"
   mv "$home/control.json.tmp" "$home/control.json"
   "$station" stop --home "$home" >>"$notes" 2>&1
+  if station_gone "$pid"; then note "ok   stop ended the station and removed station.json"; else note "FAIL the station is still running or station.json is still there after stop"; fi
   if wait_for 15 no_record; then note "ok   the mod tuned itself out after the window was closed"; else note "FAIL the record is still there 15 s after the window was closed"; fi
-  # A stopped station leaves its station.json behind, stale: what shows a new
-  # station is a new pid. Give the mod time to start one if it wrongly meant to.
+  # Give the mod time to start a station again if it wrongly meant to
   sleep 2
-  if ! kill -0 "$pid" 2>/dev/null && [[ ! -e "$home/station.json" || "$(status_pid)" == "$pid" ]]; then note "ok   the station is stopped and none was started again"; else note "FAIL the station is running again"; fi
+  if station_gone "$pid" && [[ ! -e "$home/station.json" ]]; then note "ok   no station was started again"; else note "FAIL a station is running again"; fi
 }
 
 # 6. the session ends when the feeder does
