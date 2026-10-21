@@ -1,0 +1,110 @@
+{
+  "snapshot": {
+    "now": 1792580395000,
+    "visible": true,
+    "sessions": [
+      {
+        "v": 1,
+        "id": "auth",
+        "title": "Refactor auth middleware",
+        "project": "api-server",
+        "state": "working",
+        "stateAt": 1792579795000,
+        "tunedInAt": 1792576795000,
+        "checkedInAt": 1792580395000,
+        "stories": [],
+        "activity": [
+          {
+            "at": 1792580393000,
+            "text": "editing src/auth/session.ts"
+          }
+        ],
+        "hours": [
+          {
+            "hour": "2026-10-21T10",
+            "added": 120,
+            "removed": 10,
+            "files": 3
+          }
+        ]
+      },
+      {
+        "v": 1,
+        "id": "checkout",
+        "title": "Fix flaky checkout test",
+        "project": "web-shop",
+        "state": "working",
+        "stateAt": 1792579795000,
+        "tunedInAt": 1792576796000,
+        "checkedInAt": 1792580395000,
+        "stories": [],
+        "activity": [
+          {
+            "at": 1792580391000,
+            "text": "running the test suite"
+          }
+        ],
+        "hours": [
+          {
+            "hour": "2026-10-21T10",
+            "added": 30,
+            "removed": 5,
+            "files": 1
+          }
+        ]
+      },
+      {
+        "v": 1,
+        "id": "notes",
+        "title": "Write release notes for 2.4",
+        "project": "docs-site",
+        "state": "working",
+        "stateAt": 1792579795000,
+        "tunedInAt": 1792576797000,
+        "checkedInAt": 1792580395000,
+        "stories": [],
+        "activity": [
+          {
+            "at": 1792580389000,
+            "text": "drafting CHANGELOG.md"
+          }
+        ],
+        "hours": [
+          {
+            "hour": "2026-10-21T10",
+            "added": 0,
+            "removed": 0,
+            "files": 0
+          }
+        ]
+      },
+      {
+        "v": 1,
+        "id": "sqlite",
+        "title": "Migrate settings to SQLite",
+        "project": "desktop-app",
+        "state": "working",
+        "stateAt": 1792579795000,
+        "tunedInAt": 1792576798000,
+        "checkedInAt": 1792580395000,
+        "stories": [],
+        "activity": [
+          {
+            "at": 1792580387000,
+            "text": "writing migration 004"
+          }
+        ],
+        "hours": [
+          {
+            "hour": "2026-10-21T10",
+            "added": 54,
+            "removed": 3,
+            "files": 2
+          }
+        ]
+      }
+    ],
+    "lastReportAt": null
+  },
+  "at": 1792580403000
+}

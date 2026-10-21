@@ -1,0 +1,15 @@
+{
+  "scene": {
+    "mode": "stinger",
+    "clock": "14:33",
+    "progress": 0.74,
+    "event": {
+      "kind": "needs-input",
+      "session": "Fix flaky checkout test",
+      "project": "web-shop",
+      "command": "npm install",
+      "quote": "Install dependencies",
+      "foot": "Waiting 0:12"
+    }
+  }
+}

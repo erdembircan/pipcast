@@ -1,0 +1,136 @@
+{
+  "snapshot": {
+    "now": 1792594795000,
+    "visible": true,
+    "sessions": [
+      {
+        "v": 1,
+        "id": "auth",
+        "title": "Refactor auth middleware",
+        "project": "api-server",
+        "state": "working",
+        "stateAt": 1792594195000,
+        "tunedInAt": 1792591195000,
+        "checkedInAt": 1792594795000,
+        "stories": [],
+        "activity": [
+          {
+            "at": 1792594793000,
+            "text": "editing src/auth/session.ts"
+          }
+        ],
+        "hours": [
+          {
+            "hour": "2026-10-21T14",
+            "added": 700,
+            "removed": 150,
+            "files": 9
+          }
+        ]
+      },
+      {
+        "v": 1,
+        "id": "checkout",
+        "title": "Fix flaky checkout test",
+        "project": "web-shop",
+        "state": "needs-input",
+        "stateAt": 1792592460000,
+        "tunedInAt": 1792591196000,
+        "checkedInAt": 1792594795000,
+        "stories": [
+          {
+            "id": "checkout:1",
+            "kind": "needs-input",
+            "at": 1792592460000,
+            "command": "npm install",
+            "quote": "Install dependencies"
+          }
+        ],
+        "activity": [
+          {
+            "at": 1792594791000,
+            "text": "running the test suite"
+          }
+        ],
+        "hours": [
+          {
+            "hour": "2026-10-21T14",
+            "added": 300,
+            "removed": 100,
+            "files": 3
+          }
+        ]
+      },
+      {
+        "v": 1,
+        "id": "notes",
+        "title": "Write release notes for 2.4",
+        "project": "docs-site",
+        "state": "ready",
+        "stateAt": 1792593420000,
+        "tunedInAt": 1792591197000,
+        "checkedInAt": 1792594795000,
+        "stories": [
+          {
+            "id": "notes:1",
+            "kind": "ready",
+            "at": 1792593420000,
+            "added": 182,
+            "removed": 40,
+            "files": 4,
+            "durationMs": 540000
+          }
+        ],
+        "activity": [
+          {
+            "at": 1792594789000,
+            "text": "drafting CHANGELOG.md"
+          }
+        ],
+        "hours": [
+          {
+            "hour": "2026-10-21T14",
+            "added": 182,
+            "removed": 40,
+            "files": 4
+          }
+        ]
+      },
+      {
+        "v": 1,
+        "id": "sqlite",
+        "title": "Migrate settings to SQLite",
+        "project": "desktop-app",
+        "state": "error",
+        "stateAt": 1792594080000,
+        "tunedInAt": 1792591198000,
+        "checkedInAt": 1792594795000,
+        "stories": [
+          {
+            "id": "sqlite:1",
+            "kind": "error",
+            "at": 1792594080000,
+            "quote": "Claude is overloaded right now. Try again in a moment.",
+            "durationMs": 1860000
+          }
+        ],
+        "activity": [
+          {
+            "at": 1792594787000,
+            "text": "writing migration 004"
+          }
+        ],
+        "hours": [
+          {
+            "hour": "2026-10-21T14",
+            "added": 364,
+            "removed": 78,
+            "files": 6
+          }
+        ]
+      }
+    ],
+    "lastReportAt": null
+  },
+  "at": 1792594813000
+}
