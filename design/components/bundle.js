@@ -763,6 +763,24 @@
     return { scene: run[i % n].scene, index: i % n, step: i };
   }
 
+  /* The board's ring sends out its signal: three waves 3 s apart, each
+     leaving the ring and spreading to two and a half times its size as it
+     fades, 9 s from the ring to gone. A wave's delay is read from the clock
+     when it is drawn, so the board and an outro's board underneath send the
+     same waves, and they never restart when the board comes back after a
+     story. Drawn only while the picture animates: a still shows the ring
+     alone, as reduced motion does. */
+  var SIGNAL = { period: 9000, waves: 3 };
+  function Signal() {
+    var at = useState(function () { return Date.now(); })[0];
+    var waves = [];
+    for (var i = 0; i < SIGNAL.waves; i++) {
+      var lead = (at + i * SIGNAL.period / SIGNAL.waves) % SIGNAL.period;
+      waves.push(h('i', { key: i, style: { animationDelay: -lead + 'ms' } }));
+    }
+    return h('div', { className: 'pn-signal', 'aria-hidden': 'true' }, waves);
+  }
+
   function Broadcast(props) {
     var animate = bool(props.animate, false);
     var run = props.run || (props.sample && RUNS[props.sample]) || null;
@@ -786,10 +804,12 @@
     } else if (mode === 'stinger') {
       parts.push(h(Stinger, { key: 'st', kind: kind, progress: scene.progress, animate: animate }));
     } else if (mode === 'outro') {
-      /* the board it hands back to waits underneath, ticker and all, in a
-         layer of its own so the ticker's tab and clock stay under the open */
+      /* the board it hands back to waits underneath, ring, signal, ticker
+         and all, in a layer of its own so the ticker's tab and clock stay
+         under the open */
       var back = scene.board || {};
-      parts.push(h('div', { key: 'under', style: { position: 'absolute', left: 0, top: 0, width: STAGE_W + 'px', height: STAGE_H + 'px', zIndex: 0 } },
+      parts.push(h('div', { key: 'under', className: 'pn-board-under', style: { position: 'absolute', left: 0, top: 0, width: STAGE_W + 'px', height: STAGE_H + 'px', zIndex: 0 } },
+        animate ? h(Signal) : null,
         h(SessionBoard, { sessions: back.sessions }),
         h(Ticker, { items: back.ticker, time: back.clock, animate: animate })));
       parts.push(scene.open === 'hour'
@@ -800,6 +820,7 @@
     } else if (mode === 'review') {
       parts.push(h(HourReview, { key: 'rv', rows: scene.rows, span: scene.span, label: scene.label }));
     } else {
+      if (animate) { parts.push(h(Signal, { key: 'signal' })); }
       parts.push(h(SessionBoard, { key: 'board', sessions: scene.sessions }));
     }
     parts.push(h(TopBand, { key: 'top' }));

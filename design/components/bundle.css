@@ -181,7 +181,8 @@
 .pn-ticker-clock > span { display: inline-block; transform: skewX(calc(var(--slant, -12deg) * -1)); }
 
 /* ---------- Live board ---------- */
-.pn-broadcast.pn-mode-board::before, .pn-broadcast.pn-mode-review::before {
+/* The ring at the top right: behind the board, THE HOUR IN REVIEW and an outro's board underneath */
+.pn-broadcast.pn-mode-board::before, .pn-broadcast.pn-mode-review::before, .pn-board-under::before {
   content: "";
   position: absolute;
   right: -190px;
@@ -192,6 +193,23 @@
   border: 2px solid rgba(255, 255, 255, 0.08);
   box-shadow: inset 0 0 0 70px rgba(255, 255, 255, 0.025), 0 0 0 46px rgba(255, 255, 255, 0.02);
 }
+/* The ring's signal (Signal in bundle.js): waves that leave the ring and
+   spread across the studio, fading as they go. They share the ring's
+   centre (830, 170) and start at its size; each wave's delay is set from
+   the clock when it is drawn. Not animating, nothing shows */
+.pn-signal { position: absolute; left: 830px; top: 170px; width: 0; height: 0; }
+.pn-signal > i {
+  position: absolute;
+  left: -320px;
+  top: -320px;
+  width: 640px;
+  height: 640px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.16);
+  box-shadow: inset 0 0 0 26px rgba(255, 255, 255, 0.025);
+  opacity: 0;
+}
+.pn-anim .pn-signal > i { animation: pn-signal 9s cubic-bezier(0.2, 0.6, 0.4, 1) infinite; }
 /* The listing, as the first station sketch drew it: a glossy row per session
    with a hard split across the middle, the title, and the state on a pill */
 .pn-board { position: absolute; left: var(--space-10, 40px); top: 92px; width: 880px; display: flex; flex-direction: column; gap: 12px; }
@@ -597,6 +615,7 @@
 @keyframes pn-slide { from { transform: translateX(-110%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
 @keyframes pn-glint { 0%, 70% { left: -20%; } 100% { left: 120%; } }
 @keyframes pn-power { 0% { transform: scaleY(0.02); filter: brightness(3); } 60% { transform: scaleY(1.04); filter: brightness(1.3); } 100% { transform: scaleY(1); filter: none; } }
+@keyframes pn-signal { 0% { transform: scale(1); opacity: 0; } 8% { opacity: 1; } 100% { transform: scale(2.5); opacity: 0; } }
 @media (prefers-reduced-motion: reduce) {
   .pn-anim, .pn-anim * { animation: none !important; }
 }

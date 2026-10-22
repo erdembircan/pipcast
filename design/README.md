@@ -76,6 +76,7 @@ Motion has no token family, so the values live here.
 
 | Piece | Motion |
 | --- | --- |
+| The board | The ring at the top right sends out its signal: a wave leaves the ring every 3 s and spreads across the studio to two and a half times the ring's size, fading as it goes, 9 s from the ring to gone. The waves keep time with the clock, so they carry on under an outro's fade and never restart when the board comes back |
 | Stinger, the intro | Runs on one progress value: a red wave crosses the glass wall and leaves its panes glowing, the chrome words slam in one line after another, and a glint crosses them. No title: the session is named at the desk. 1.4 s, the same for every story |
 | Stinger, the outro | After every desk: the intro's last picture, run out over 1.2 s. A glint crosses the words, the words leave to the right one after the other, the red wave sweeps back across the wall and darkens it, and the open fades away to the board underneath |
 | Ident, on the hour | Runs on one progress value over 7.5 s, from five seconds before the hour: the clock's seconds hand steps once with each pip; on the long pip the minute hand jumps to the hour and a glint crosses the face, then the clock steps left and ON THE HOUR slams in. Nothing runs under it |
