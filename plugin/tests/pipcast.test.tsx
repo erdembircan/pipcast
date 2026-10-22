@@ -82,7 +82,7 @@ scenario('the band on the desktop: our own line under another mod\'s', {}, async
 
   const root = await ui.drawn()
   expect(root.type).toBe('Box')
-  expect(root.props).toEqual({ flexDirection: 'column' })
+  expect(root.props).toEqual({ flexDirection: 'column', rowGap: 'md' })
   const [beneath, ours, ...rest] = root.children ?? []
   expect(rest).toEqual([])
   expect(JSON.stringify(beneath)).toContain('another band')
@@ -97,7 +97,7 @@ scenario('the band leaves another mod\'s line exactly as it was drawn', { otherB
   const ui = await mounted($)
   const root = await ui.drawn()
   expect(root.type).toBe('Box')
-  expect(root.props).toEqual({ flexDirection: 'column' })
+  expect(root.props).toEqual({ flexDirection: 'column', rowGap: 'md' })
   expect(root.children?.length).toBe(2)
   const other = root.children?.[0]
   expect(other?.type).toBe('Box')
@@ -133,6 +133,7 @@ scenario('the band draws alone when nothing else is in the band', { hasOtherBand
   expect(drawn.type).toBe('Box')
   expect(drawn.props.columnGap).toBe(1)
   expect(drawn.props.flexDirection).toBeUndefined()
+  expect(drawn.props.rowGap).toBeUndefined()
   expect(drawn.children?.map((child) => child.type)).toEqual(['Svg', 'Box'])
   await ui.unmount()
 })

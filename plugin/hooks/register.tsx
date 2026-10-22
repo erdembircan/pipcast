@@ -683,7 +683,7 @@ export const register: Register = (on) => {
       return ownLine
     }
     return (
-      <Box flexDirection="column">
+      <Box flexDirection="column" rowGap="md">
         {beneath}
         {ownLine}
       </Box>
