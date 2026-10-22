@@ -18,7 +18,22 @@ function scenario(name: string, options: WorldOptions, body: (w: ReturnType<type
     const w = world(on, options)
     on('ui.render', { component: 'AbovePrompt' }, ($ui, e) => {
       const { Box, Text } = $ui.ui.resolve(e)
-      return <Box>{options.hasOtherBand !== false && <Text>another band</Text>}</Box>
+      if (options.hasOtherBand === false) {
+        return <Box />
+      }
+      if (options.otherBand === 'row') {
+        return (
+          <Box alignItems="center" columnGap={3} flexWrap="wrap">
+            <Text>dial one</Text>
+            <Text>dial two</Text>
+          </Box>
+        )
+      }
+      return (
+        <Box>
+          <Text>another band</Text>
+        </Box>
+      )
     })
     await $.session.start(START)
     try {
@@ -47,7 +62,7 @@ const mounted = ($: Engine, surface: 'desktop' | 'terminal' = 'desktop', props: 
 // What a classic hook says about the session: its id and where its transcript is
 const located = { session_id: ID, transcript_path: TRANSCRIPT } as const
 
-scenario('the band on the desktop: the chip, the tab and a plain button, beside another mod', {}, async (w, $) => {
+scenario('the band on the desktop: our own line under another mod\'s', {}, async (w, $) => {
   w.other('aaaa', T0 - 2000)
   w.other('bbbb', T0 - 1000)
   w.other('stale', T0 - 100_000, T0 - 60_000)
@@ -64,6 +79,37 @@ scenario('the band on the desktop: the chip, the tab and a plain button, beside 
   expect(await ui.find({ type: 'Text', text: 'another band' })).toBeDefined()
   const drawn = JSON.stringify(await ui.drawn())
   expect(drawn.indexOf('another band')).toBeLessThan(drawn.indexOf('KLWD'))
+
+  const root = await ui.drawn()
+  expect(root.type).toBe('Box')
+  expect(root.props).toEqual({ flexDirection: 'column' })
+  const [beneath, ours, ...rest] = root.children ?? []
+  expect(rest).toEqual([])
+  expect(JSON.stringify(beneath)).toContain('another band')
+  expect(ours?.type).toBe('Box')
+  expect(ours?.props.columnGap).toBe(1)
+  expect(ours?.children?.map((child) => child.type)).toEqual(['Svg', 'Box'])
+  expect(JSON.stringify(beneath)).not.toContain('Svg')
+  await ui.unmount()
+})
+
+scenario('the band leaves another mod\'s line exactly as it was drawn', { otherBand: 'row' }, async (_w, $) => {
+  const ui = await mounted($)
+  const root = await ui.drawn()
+  expect(root.type).toBe('Box')
+  expect(root.props).toEqual({ flexDirection: 'column' })
+  expect(root.children?.length).toBe(2)
+  const other = root.children?.[0]
+  expect(other?.type).toBe('Box')
+  expect(other?.props).toEqual({ alignItems: 'center', columnGap: 3, flexWrap: 'wrap' })
+  expect(other?.children).toMatchObject([
+    { type: 'Text', children: ['dial one'] },
+    { type: 'Text', children: ['dial two'] },
+  ])
+  expect(other?.children?.length).toBe(2)
+  const text = JSON.stringify(other)
+  expect(text).not.toContain('"Svg"')
+  expect(text).not.toContain('"Button"')
   await ui.unmount()
 })
 
@@ -85,7 +131,9 @@ scenario('the band draws alone when nothing else is in the band', { hasOtherBand
   const ui = await mounted($)
   const drawn = await ui.drawn()
   expect(drawn.type).toBe('Box')
-  expect('children' in drawn ? drawn.children?.length : 0).toBe(1)
+  expect(drawn.props.columnGap).toBe(1)
+  expect(drawn.props.flexDirection).toBeUndefined()
+  expect(drawn.children?.map((child) => child.type)).toEqual(['Svg', 'Box'])
   await ui.unmount()
 })
 

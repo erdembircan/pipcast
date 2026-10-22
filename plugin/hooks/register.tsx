@@ -652,32 +652,40 @@ export const register: Register = (on) => {
   })
 
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
-    // Another mod may draw the band too: what it drew is kept beside this.
+    // The band is one tree for every mod: each adds its own line and passes the
+    // lines beneath through as they came. Ours goes under what another mod drew;
+    // we never open that up or set it in our row.
     const beneath = await next(e)
     if (e.surface !== 'desktop' || e.props.hasSurvey) {
       return beneath
     }
     const { Box, Button, Svg } = $.ui.resolve(e)
     const view = band({ tuned: (await read($, tuned)) === true, onAir: (await read($, onAir)) ?? 0 })
-    return (
-      <Box alignItems="center" columnGap={3} flexWrap="wrap">
-        {hasContent(beneath) && beneath}
-        <Box alignItems="center" columnGap={1}>
-          <Svg source={view.chip.svg} alt={view.chip.alt} width={view.chip.width} height={BAND_HEIGHT} />
-          <Box>
-            <Svg source={view.tab.svg} alt={view.tab.alt} width={view.tab.width} height={BAND_HEIGHT} />
-            {view.kind !== 'off' && (
-              <Box position="absolute" top={0} bottom={0} left={0} right={0} alignItems="center" justifyContent="center">
-                <Button
-                  key={view.kind === 'in' ? 'tune-in' : 'tune-out'}
-                  label={blankLabel(view.tab.width)}
-                  plain
-                  onPress={() => pressed($)}
-                />
-              </Box>
-            )}
-          </Box>
+    const ownLine = (
+      <Box alignItems="center" columnGap={1}>
+        <Svg source={view.chip.svg} alt={view.chip.alt} width={view.chip.width} height={BAND_HEIGHT} />
+        <Box>
+          <Svg source={view.tab.svg} alt={view.tab.alt} width={view.tab.width} height={BAND_HEIGHT} />
+          {view.kind !== 'off' && (
+            <Box position="absolute" top={0} bottom={0} left={0} right={0} alignItems="center" justifyContent="center">
+              <Button
+                key={view.kind === 'in' ? 'tune-in' : 'tune-out'}
+                label={blankLabel(view.tab.width)}
+                plain
+                onPress={() => pressed($)}
+              />
+            </Box>
+          )}
         </Box>
+      </Box>
+    )
+    if (!hasContent(beneath)) {
+      return ownLine
+    }
+    return (
+      <Box flexDirection="column">
+        {beneath}
+        {ownLine}
       </Box>
     )
   })

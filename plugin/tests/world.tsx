@@ -44,6 +44,8 @@ export interface WorldOptions {
   launchOut?: string
   hasRepo?: boolean
   hasOtherBand?: boolean
+  // The shape of the other mod's band: one plain Box, or a row like usage-band's
+  otherBand?: 'plain' | 'row'
 }
 
 // The world beneath the mod: a session with an id, an in-memory file system
