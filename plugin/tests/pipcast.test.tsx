@@ -137,6 +137,24 @@ scenario('the band draws alone when nothing else is in the band', { hasOtherBand
   await ui.unmount()
 })
 
+scenario('the tab\'s button stays inside its box', {}, async (_w, $) => {
+  const ui = await mounted($)
+  const drawn = await ui.drawn()
+  const tabWidth = (await ui.findAll({ type: 'Svg' }))[1]?.props.width
+  const label = (await ui.find({ type: 'Button' }))?.props.label
+  expect(typeof tabWidth).toBe('number')
+  expect(typeof label).toBe('string')
+  expect((label as string).replaceAll('\u2002', '')).toBe('')
+  expect((label as string).length).toBe(Math.floor((tabWidth as number) / 8))
+  expect(JSON.stringify(drawn)).not.toContain('\u2026')
+  // Our line is [chip, tab Box]; the tab Box holds [tab picture, the button's Box]
+  const ours = drawn.children?.[1]
+  const tabBox = ours !== undefined && typeof ours !== 'string' ? ours.children?.[1] : undefined
+  const holder = tabBox !== undefined && typeof tabBox !== 'string' ? tabBox.children?.[1] : undefined
+  expect(holder).toMatchObject({ type: 'Box', props: { position: 'absolute', left: -2, right: -2 } })
+  await ui.unmount()
+})
+
 scenario('pressing the tab tunes in: the record, the station, then TUNE OUT', { env: { PIPCAST_TARGET_BUNDLE_ID: 'com.example.never' } }, async (w, $) => {
   const ui = await mounted($)
   await ui.press({ key: 'tune-in' })
