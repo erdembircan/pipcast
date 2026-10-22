@@ -137,7 +137,7 @@ The four jingles are rendered from the design system's scores at build time and 
 
 `packages/director` decides what airs. `packages/renderer` is the web page that draws it with the KLWD components from `design/`.
 
-The director is a pure function of time and the latest snapshot. Each tick it returns a scene for the design system's `Broadcast` component, a key that changes when a new step begins, and any jingle to cue. A segment is a list of steps:
+The director is a pure function of time and the latest snapshot. Each tick it returns a scene for the design system's `Broadcast` component, a key that changes when a new step begins, and any jingle to cue. The page ticks it every 250 ms and again as each snapshot arrives: the system runs a hidden page's timers late, and the director has to see every snapshot the window was hidden in. A segment is a list of steps:
 
 | Segment | Steps |
 | --- | --- |
@@ -149,7 +149,7 @@ Between segments, the live board. The rules, from the design system's *Event des
 - Stories air one after another, in the order they land, at least 2 s apart. Nothing cuts in. A story that lands during another waits in the ticker as COMING UP.
 - A story whose session has moved on is dropped before it airs, and cut short at the desk if it moves on while on air. A story cut short is not restarted.
 - The report on the hour waits its turn like a story. If the window is hidden at the hour, it airs when the window shows again within ten minutes of the hour, and is skipped after that.
-- While the window is hidden nothing airs, and a segment on air when it hides is cut.
+- While the window is hidden, Claude is in front and shows every story itself. Nothing airs: a segment on air when the window hides is cut, the stories waiting their turn are dropped, and a story that lands while it is hidden never joins the queue. Only the report on the hour waits.
 - With reduced motion, the openers show their last picture and the outros cut straight to the board.
 
 ## Building and checking
@@ -172,3 +172,4 @@ Between segments, the live board. The rules, from the design system's *Event des
 - **Outlines in the band.** The desktop draws a mod's `Svg` as an image, which loads no fonts and cannot read the app's theme. Outlined letters and pieces with their own ground look the same everywhere.
 - **Two private switches in the station.** The window never takes the keyboard, so its app is never active, and macOS treats it that way: AppKit draws Liquid Glass flat in a window without an active appearance, and the window server ignores a pointer set by an app that is not frontmost. The station forces its panel's active appearance (`_setForceMainAppearance:`), which changes how the panel is drawn and never makes it key, and sets its window-server connection's `SetsCursorInBackground` property. Both are looked up at run time: on a macOS without one, the station logs it and carries on with flat glass or the plain pointer.
 - **The title from the engine's own file.** A mod gets no event for a rename and no call for the title, and the hooks carry the title only when a session starts or a prompt is sent, which misses a rename between prompts. The transcript records every rename too, but it runs to megabytes. `custom-title.json` holds the title alone, so reading it once a minute while on air costs next to nothing.
+- **Nothing airs from while Claude is in front.** Claude shows every story itself while it is in front. Kept for the window, those stories aired one after another when you left Claude, each looking like news that had just happened. They are dropped instead; the board and the ticker still show where each session stands.

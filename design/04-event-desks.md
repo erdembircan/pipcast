@@ -27,8 +27,9 @@ Every story's desk runs 10 s.
 - Stories air one after another, in the order they land. Nothing cuts in.
 - A story that lands while another is at the desk goes into the ticker at once as COMING UP, and airs with its own BREAKING NEWS as soon as that segment's outro ends.
 - A story that is cut off is not restarted. If you answer while a question's desk is on air, that story ends there, and the next one, or the board, follows.
-- First come, first served, with no roundups: stories that land together, during another story, or while the window is hidden wait in the ticker as COMING UP and air one by one, each with its own BREAKING NEWS, in the order they landed.
+- First come, first served, with no roundups: stories that land together or during another story wait in the ticker as COMING UP and air one by one, each with its own BREAKING NEWS, in the order they landed.
 - A story whose session has moved on before it airs (you answered it in Claude) is dropped.
+- Only what lands while you are away from Claude airs. While Claude is in front the window is hidden, and Claude shows every story itself: a segment on air when you switch to Claude is cut there, the stories waiting as COMING UP are dropped, and a story that lands while you are in Claude never airs. Back in another app, the board and the ticker show where every session stands, and the next BREAKING NEWS is the next story to land.
 
 ## On the hour
 
@@ -47,4 +48,4 @@ Every hour on the hour the channel airs a short report on the sessions, the way 
 - **Its own outro.** The report ends on the ident run out, after THE HOUR IN REVIEW or, in a quiet hour, after the desk; a story waiting as COMING UP airs once it ends.
 - **Nothing tracked:** no report, and no window.
 - **Every hour the same:** no report is special, 18:00 included.
-- **The window is hidden at the hour** (Claude is in front): the report airs when the window next shows, if that is within ten minutes of the hour, as the whole hour segment. After that it is skipped, and the next report covers everything since the last one that aired.
+- **The window is hidden at the hour** (Claude is in front): the report is not something Claude shows, so unlike a story it waits. It airs when the window next shows, if that is within ten minutes of the hour, as the whole hour segment. After that it is skipped, and the next report covers everything since the last one that aired.

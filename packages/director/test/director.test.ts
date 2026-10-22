@@ -239,18 +239,68 @@ describe('a story', () => {
 })
 
 describe('when the window is hidden', () => {
-  it('airs a story that lands while hidden once the window shows', () => {
+  it('drops a story that lands while it is hidden, and the ticker still says it is waiting', () => {
     const h = harness(T0, [session('a')])
     h.world.visible = false
     const hidden = h.land([asking('a', T0 + 1000)], T0 + 5000)
     expect(hidden.program.key).toBe('board')
-    expect(h.cues()).toEqual([])
-    expect(lines(hidden.program)).toContain('COMING UP Title a needs your input')
+    expect(lines(hidden.program).some((line) => line.startsWith('COMING UP'))).toBe(false)
 
     h.world.visible = true
     const shown = h.until(T0 + 5250).program
-    expect(shown.key).toBe('story:a:1:0')
-    expect(shown.cues).toEqual(['breaking'])
+    expect(shown.key).toBe('board')
+    expect(lines(shown)).toContain('STILL WAITING Title a needs your input')
+    h.until(T0 + 60_000)
+    expect(h.keys()).toEqual(['board'])
+    expect(h.cues()).toEqual([])
+  })
+
+  it('airs a story that lands once it shows again', () => {
+    const h = harness(T0, [session('a')])
+    h.world.visible = false
+    h.until(T0 + 5000)
+    h.world.visible = true
+    const start = h.land([asking('a', T0 + 6000)], T0 + 6000).program
+    expect(start.key).toBe('story:a:1:0')
+    expect(start.cues).toEqual(['breaking'])
+  })
+
+  it('drops the stories waiting their turn when it hides', () => {
+    const h = harness(T0, [session('a'), session('b')])
+    h.land([asking('a', T0 + 1000), asking('b', T0 + 1000)], T0 + 1000)
+    expect(lines(h.until(T0 + 4000).program)).toContain('COMING UP Title b needs your input')
+
+    h.world.visible = false
+    const hidden = h.until(T0 + 4250).program
+    expect(hidden.key).toBe('board')
+    expect(lines(hidden).some((line) => line.startsWith('COMING UP'))).toBe(false)
+
+    h.world.visible = true
+    h.until(T0 + 60_000)
+    expect(h.keys().some((key) => key.startsWith('story:b'))).toBe(false)
+    expect(h.cues()).toEqual([{ now: T0 + 1000, jingle: 'breaking' }])
+  })
+
+  it('keeps the report on the hour waiting, and drops the stories around it', () => {
+    const h = harness(at(14, 59, 0), [session('a'), session('b')])
+    h.land([asking('a', at(14, 59, 50)), session('b')], at(14, 59, 50))
+    h.land([asking('a', at(14, 59, 50)), asking('b', at(14, 59, 57))], at(14, 59, 57))
+    const desk = h.until(at(14, 59, 58)).program
+    expect(lines(desk)).toContain('COMING UP The 15:00 report')
+    expect(lines(desk)).toContain('COMING UP Title b needs your input')
+
+    h.world.visible = false
+    const hidden = h.until(at(15, 2, 0)).program
+    expect(lines(hidden)).toContain('COMING UP The 15:00 report')
+    expect(lines(hidden)).not.toContain('COMING UP Title b needs your input')
+
+    h.world.visible = true
+    const ident = h.until(at(15, 2, 0) + 250).program
+    expect(ident.cues).toEqual(['hour'])
+    expect(ident.reported).toBe(at(15))
+    h.until(at(15, 3, 0))
+    expect(h.keys().some((key) => key.startsWith('story:b'))).toBe(false)
+    expect(h.cues().map((cue) => cue.jingle)).toEqual(['breaking', 'hour', 'hour-out'])
   })
 
   it('cuts a segment on air when it hides and does not air it again', () => {

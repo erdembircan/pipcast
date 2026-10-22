@@ -18,20 +18,12 @@ export function prefersReducedMotion(): boolean {
 }
 
 // The live page: keeps the latest snapshot, ticks the director on a timer and
-// draws what it airs
+// as each snapshot comes, and draws what it airs
 export function App({ reducedMotion = prefersReducedMotion() }: { reducedMotion?: boolean }) {
   const director = useMemo(() => createDirector({ reducedMotion }), [reducedMotion])
   const snapshot = useRef<Snapshot | null>(null)
   const [program, setProgram] = useState<Program | null>(null)
   const [width, setWidth] = useState(window.innerWidth)
-
-  useEffect(() => {
-    return subscribe((message) => {
-      if (message.type === 'snapshot') {
-        snapshot.current = message
-      }
-    })
-  }, [])
 
   useEffect(() => {
     const onResize = () => setWidth(window.innerWidth)
@@ -53,9 +45,21 @@ export function App({ reducedMotion = prefersReducedMotion() }: { reducedMotion?
         setProgram(next)
       }
     }
+    // Each snapshot is ticked as it comes, as well as on the timer: a page the
+    // system counts as hidden gets its timers late, and the director has to
+    // see every snapshot the window was hidden in
+    const unsubscribe = subscribe((message) => {
+      if (message.type === 'snapshot') {
+        snapshot.current = message
+        tick()
+      }
+    })
     tick()
     const timer = window.setInterval(tick, TICK_MS)
-    return () => window.clearInterval(timer)
+    return () => {
+      unsubscribe()
+      window.clearInterval(timer)
+    }
   }, [director])
 
   if (program === null) {
