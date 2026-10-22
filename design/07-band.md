@@ -51,13 +51,13 @@ Our chip and tab sit on that box, so it is their ground in both themes.
 
 1. **Desktop only.** The band draws on the desktop surface; on any other it passes on what is beneath unchanged. The slash command works everywhere.
 2. **A survey comes first.** While a survey holds the band (`hasSurvey`), ours steps aside and draws nothing.
-3. **Beside, never over.** Another mod may draw the band too. Ours keeps what it drew and sits beside it, three columns apart, as the proof of concept does.
+3. **A line of our own.** Another mod may draw the band too. Ours is one line of its own, the chip and the tab and nothing else, under what the other mod drew. That stays exactly as it was drawn, on its own line: we never take it apart, set it in our row or draw over it. Every mod in the band does the same, so each mod has one line.
 4. **Every picture is 22 px tall** (`band-height`), as usage-band's marks are, about a regular macOS button's height.
 5. **A picture loads no fonts and cannot read the theme.** So the words in the chip and the tabs are outlines (or a subset of Anybody embedded in the `Svg`), and each piece carries its own ground, the studio plate or the tab, so it reads the same on the container's light and dark colours.
-6. **A tab is a picture with a blank button over it.** A mod's `Button` shows only text, so each tab gets a `plain` Button with a blank label (an en space) laid over it in a `Box` as wide as the tab, since the desktop draws a Button no wider than its Box. This is usage-band's padlock. The press is the Button's; under the pointer the app inverts it, as it does every plain Button. There is no hover of our own, and nothing pops up: no tooltip, no `<title>`, no card.
+6. **A tab is a picture with a blank button over it.** A mod's `Button` shows only text, so each tab gets a `plain` Button with a blank label (en spaces, about one for every 8 px of the tab) laid over it in a `Box` that reaches two columns past the tab on each side, since the desktop draws a Button no wider than its Box and cuts a longer label with an ellipsis. This is usage-band's padlock. The press is the Button's; under the pointer the app inverts it, as it does every plain Button. There is no hover of our own, and nothing pops up: no tooltip, no `<title>`, no card.
 7. **A screen reader** reads the picture's `alt` and then a button with no name, as with usage-band's padlock. The slash command works without either.
 8. **No text of our own.** Nothing in the band but the chip and the tab; the cells say how full KLWD is and which cell is this session. The two pieces need about 210 px and never shrink, so they fit beside a docked pane.
-9. **Gaps are columns.** One column between the chip and the tab; three between our group and another mod's. The boards draw a column at 8 px; the desktop's own figure is not measured yet.
+9. **Gaps are columns, lines are `md` apart.** One column between the chip and the tab. Between our line and another mod's, the app's own `md` gap, about the room the app leaves above and below the band's first line. The boards draw a column at 8 px; the desktop's own figure is not measured yet.
 10. **Copy.** Caps on the tabs, and nothing else to write.
 
 Two suggestions are on the canvas, not decided: this session's pill beside TUNE OUT, and the cells in each session's state colour.

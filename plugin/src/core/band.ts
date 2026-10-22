@@ -136,9 +136,15 @@ export function band(state: { tuned: boolean; onAir: number }): { chip: Picture;
   return { chip: chip(state.onAir, state.tuned), tab: tab(kind), kind }
 }
 
+// How far the box that holds the tab's button reaches past the tab on each
+// side, in columns
+export const REACH = 2
+
 // A mod's Button shows only text, so the tab's button has a blank label: en
-// spaces, enough to reach across the tab. The desktop draws a Button no wider
-// than the Box that holds it, which is the tab's width.
+// spaces, about one for every 8 px of the tab. The desktop draws a Button no
+// wider than the Box that holds it and cuts a longer label with an ellipsis,
+// so the label stays short of the tab and its Box reaches REACH columns past
+// the tab on each side, as usage-band's padlock does.
 export function blankLabel(width: number): string {
-  return ' '.repeat(Math.ceil(width / 7) + 1)
+  return ' '.repeat(Math.max(1, Math.floor(width / 8)))
 }

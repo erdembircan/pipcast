@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { TAB_ALT, chipAlt } from '@pipcast/contract'
-import { BAND_HEIGHT, band, blankLabel, chip, tab } from '../../plugin/src/core/band.ts'
+import { BAND_HEIGHT, REACH, band, blankLabel, chip, tab } from '../../plugin/src/core/band.ts'
 
 const count = (text: string, part: string): number => text.split(part).length - 1
 
@@ -125,12 +125,17 @@ describe('band', () => {
 })
 
 describe('blankLabel', () => {
-  it('is en spaces, enough to reach across the tab', () => {
+  it('is en spaces, short of the tab', () => {
     for (const width of [tab('in').width, tab('out').width]) {
       const label = blankLabel(width)
       expect(label.replaceAll('\u2002', '')).toBe('')
-      expect(label.length).toBe(Math.ceil(width / 7) + 1)
+      expect(label.length).toBe(Math.max(1, Math.floor(width / 8)))
+      expect(label.length * 7).toBeLessThan(width)
     }
+  })
+
+  it('reaches two columns past the tab on each side', () => {
+    expect(REACH).toBe(2)
   })
 
   it('grows with the width', () => {
