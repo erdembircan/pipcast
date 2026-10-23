@@ -76,6 +76,24 @@ describe('hourReport', () => {
     ])
   })
 
+  it('gives THE HOUR IN REVIEW 10 s for each page of four rows', () => {
+    const lengthWith = (sessions: number): number | undefined => {
+      const ids = Array.from({ length: sessions }, (_, i) => `s${i}`)
+      const report = hourReport(
+        at(15),
+        at(14),
+        snap(...ids.map((id, i) => session(id, i === 0 ? { stories: [story(`${id}:1`, 'complete', at(14, 30))] } : {}))),
+        at(14, 59, 55),
+        false,
+      )
+      return report.segment.steps.find((step) => step.role === 'review')?.length
+    }
+    expect(lengthWith(4)).toBe(10_000)
+    expect(lengthWith(5)).toBe(20_000)
+    expect(lengthWith(8)).toBe(20_000)
+    expect(lengthWith(9)).toBe(30_000)
+  })
+
   it('words the review rows from each session', () => {
     const waiting = story('a:1', 'needs-input', at(14, 50))
     const report = hourReport(

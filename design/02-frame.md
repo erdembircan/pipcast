@@ -17,7 +17,7 @@ The feed plays in our own window, not in macOS's picture-in-picture. The proof o
 | Back to Claude brings Claude forward | The window then hides by itself, because Claude is in front | `Visibility.swift` |
 | Sound on and off | The sound button on hover switches the jingles on and off. Sound starts on and the window remembers the choice; it plays at the Mac's volume | Your rule |
 | Shows only while something is tracked | With no tracked session there is no window at all | Your rule |
-| Tracks four sessions at most | For now; the listing's four rows hold them all | Your rule |
+| Tracks every session tuned in | No limit: the listing shows four a page and turns to the next every 8 s | Your rule |
 
 ## Size: the quadrant
 

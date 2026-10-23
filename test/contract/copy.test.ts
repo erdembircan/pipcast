@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
+  BAND_ALT,
   ERROR_WORDS,
   afterReportLine,
-  chipAlt,
   deskLine,
   doing,
   errorWords,
@@ -66,8 +66,9 @@ describe('doing', () => {
 })
 
 describe('the band and the station', () => {
-  it('describes the chip for a screen reader', () => {
-    expect(chipAlt(1)).toBe('KLWD: 1 of 4 sessions on air')
+  it('names the band for a screen reader: KLWD and the action', () => {
+    expect(BAND_ALT.in).toBe('KLWD, Tune in')
+    expect(BAND_ALT.out).toBe('KLWD, Tune out')
   })
 
   it('names a session that has no title yet', () => {

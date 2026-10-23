@@ -3,7 +3,7 @@ import type { Engine } from 'claude-code/testing'
 import { expect, test } from 'claude-code/testing'
 
 import { ACTIVITY_WRITE_MS } from '../src/contract/constants.ts'
-import { ERROR_WORDS, REPLY, TAB_ALT, TOAST_CANNOT_START, chipAlt } from '../src/contract/copy.ts'
+import { BAND_ALT, ERROR_WORDS, REPLY, TOAST_CANNOT_START } from '../src/contract/copy.ts'
 import { hourKey } from '../src/contract/format.ts'
 import { TITLE_CHECK_MS } from '../src/core/title.ts'
 import { BAND, HOME, ID, PROJECT_DIR, ROOT, RECORD, RUN, STATION, T0, TITLE_FILE, TRANSCRIPT, WORKTREE, world } from './world.tsx'
@@ -64,17 +64,10 @@ const mounted = ($: Engine, surface: 'desktop' | 'terminal' = 'desktop', props: 
 // What a classic hook says about the session: its id and where its transcript is
 const located = { session_id: ID, transcript_path: TRANSCRIPT } as const
 
-scenario('the band on the desktop: our own line under another mod\'s', {}, async (w, $) => {
-  w.other('aaaa', T0 - 2000)
-  w.other('bbbb', T0 - 1000)
-  w.other('stale', T0 - 100_000, T0 - 60_000)
-  // The count is taken at session.start and by the heartbeat
-  await $.session.end({ reason: 'other', sessionId: ID, resume: { id: ID } })
-  await $.session.start(START)
-
+scenario('the band on the desktop: our own line under another mod\'s', {}, async (_w, $) => {
   const ui = await mounted($)
   const svgs = await ui.findAll({ type: 'Svg' })
-  expect(svgs.map((svg) => svg.props.alt)).toEqual([chipAlt(2), TAB_ALT.in])
+  expect(svgs.map((svg) => svg.props.alt)).toEqual([BAND_ALT.in])
   const button = await ui.find({ type: 'Button' })
   expect(button?.key).toBe('tune-in')
   expect(button?.props.plain).toBe(true)
@@ -89,8 +82,9 @@ scenario('the band on the desktop: our own line under another mod\'s', {}, async
   expect(rest).toEqual([])
   expect(JSON.stringify(beneath)).toContain('another band')
   expect(ours?.type).toBe('Box')
-  expect(ours?.props.columnGap).toBe(1)
-  expect(ours?.children?.map((child) => child.type)).toEqual(['Svg', 'Box'])
+  expect(ours?.props).toEqual({ alignItems: 'center' })
+  expect(ours?.children?.map((child) => child.type)).toEqual(['Box'])
+  expect(ours?.children?.[0]?.children?.map((child) => child.type)).toEqual(['Svg', 'Box'])
   expect(JSON.stringify(beneath)).not.toContain('Svg')
   await ui.unmount()
 })
@@ -133,32 +127,31 @@ scenario('the band draws alone when nothing else is in the band', { hasOtherBand
   const ui = await mounted($)
   const drawn = await ui.drawn()
   expect(drawn.type).toBe('Box')
-  expect(drawn.props.columnGap).toBe(1)
-  expect(drawn.props.flexDirection).toBeUndefined()
-  expect(drawn.props.rowGap).toBeUndefined()
-  expect(drawn.children?.map((child) => child.type)).toEqual(['Svg', 'Box'])
+  expect(drawn.props).toEqual({ alignItems: 'center' })
+  expect(drawn.children?.map((child) => child.type)).toEqual(['Box'])
+  expect(drawn.children?.[0]?.children?.map((child) => child.type)).toEqual(['Svg', 'Box'])
   await ui.unmount()
 })
 
-scenario('the tab\'s button stays inside its box', {}, async (_w, $) => {
+scenario('the plate\'s button stays inside its box', {}, async (_w, $) => {
   const ui = await mounted($)
   const drawn = await ui.drawn()
-  const tabWidth = (await ui.findAll({ type: 'Svg' }))[1]?.props.width
+  const width = (await ui.findAll({ type: 'Svg' }))[0]?.props.width
   const label = (await ui.find({ type: 'Button' }))?.props.label
-  expect(typeof tabWidth).toBe('number')
+  expect(typeof width).toBe('number')
   expect(typeof label).toBe('string')
   expect((label as string).replaceAll('\u2002', '')).toBe('')
-  expect((label as string).length).toBe(Math.floor((tabWidth as number) / 8))
+  expect((label as string).length).toBe(Math.floor((width as number) / 8))
   expect(JSON.stringify(drawn)).not.toContain('\u2026')
-  // Our line is [chip, tab Box]; the tab Box holds [tab picture, the button's Box]
+  // Our line is [plate Box]; the plate Box holds [the picture, the button's Box]
   const ours = drawn.children?.[1]
-  const tabBox = ours !== undefined && typeof ours !== 'string' ? ours.children?.[1] : undefined
-  const holder = tabBox !== undefined && typeof tabBox !== 'string' ? tabBox.children?.[1] : undefined
+  const plateBox = ours !== undefined && typeof ours !== 'string' ? ours.children?.[0] : undefined
+  const holder = plateBox !== undefined && typeof plateBox !== 'string' ? plateBox.children?.[1] : undefined
   expect(holder).toMatchObject({ type: 'Box', props: { position: 'absolute', left: -2, right: -2 } })
   await ui.unmount()
 })
 
-scenario('pressing the tab tunes in: the record, the station, then TUNE OUT', { env: { PIPCAST_TARGET_BUNDLE_ID: 'com.example.never' } }, async (w, $) => {
+scenario('pressing the plate tunes in: the record, the station, then TUNE OUT', { env: { PIPCAST_TARGET_BUNDLE_ID: 'com.example.never' } }, async (w, $) => {
   const ui = await mounted($)
   await ui.press({ key: 'tune-in' })
   await ui.redraw()
@@ -180,7 +173,7 @@ scenario('pressing the tab tunes in: the record, the station, then TUNE OUT', { 
   expect(launch.slice(5)).toEqual(['--target-bundle-id', 'com.example.never'])
   expect(w.ran).toContainEqual(['/bin/chmod', '+x', STATION])
 
-  expect((await ui.findAll({ type: 'Svg' })).map((svg) => svg.props.alt)).toEqual([chipAlt(1), TAB_ALT.out])
+  expect((await ui.findAll({ type: 'Svg' })).map((svg) => svg.props.alt)).toEqual([BAND_ALT.out])
   expect((await ui.find({ type: 'Button' }))?.key).toBe('tune-out')
 
   await ui.press({ key: 'tune-out' })
@@ -195,21 +188,29 @@ scenario('the station is launched without a target when the variable is not set'
   expect(w.launched[0]?.includes('--target-bundle-id')).toBe(false)
 })
 
-scenario('with four others on air the tab is dim, has no button, and /pipcast says so', {}, async (w, $) => {
-  for (const [index, id] of ['a', 'b', 'c', 'd'].entries()) {
+scenario('with ten others on air TUNE IN still tunes in, and the plate shows no count', {}, async (w, $) => {
+  const first = await mounted($)
+  const source = (await first.find({ type: 'Svg' }))?.props.source
+  expect(typeof source).toBe('string')
+  await first.unmount()
+
+  for (const [index, id] of ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j'].entries()) {
     w.other(id, T0 - 10_000 + index)
   }
   await $.session.end({ reason: 'other', sessionId: ID, resume: { id: ID } })
   await $.session.start(START)
 
   const ui = await mounted($)
-  expect((await ui.findAll({ type: 'Svg' })).map((svg) => svg.props.alt)).toEqual([chipAlt(4), TAB_ALT.off])
-  expect(await ui.find({ type: 'Button' })).toBeUndefined()
+  const svgs = await ui.findAll({ type: 'Svg' })
+  expect(svgs.length).toBe(1)
+  expect(svgs[0]?.props.source).toBe(source)
+  expect(svgs[0]?.props.alt).toBe(BAND_ALT.in)
+  expect((await ui.find({ type: 'Button' }))?.key).toBe('tune-in')
   await ui.unmount()
 
-  expect((await tuneIn($)).text).toBe(REPLY.full)
-  expect(w.record()).toBeNull()
-  expect(w.launched.length).toBe(0)
+  expect((await tuneIn($)).text).toBe(REPLY.tunedIn)
+  expect(w.record()?.id).toBe(ID)
+  expect(w.launched.length).toBe(1)
 })
 
 scenario('/pipcast tunes in, then out', {}, async (w, $) => {
@@ -730,15 +731,6 @@ scenario('the heartbeat starts the station again when it has gone quiet', {}, as
   expect(w.launched.length).toBe(1)
   await w.clock.advance(20_000)
   expect(w.launched.length).toBeGreaterThan(1)
-})
-
-scenario('an untuned session counts who is on air at each heartbeat', {}, async (w, $) => {
-  w.other('aaaa', T0 - 1000)
-  await w.clock.advance(10_000)
-  w.other('aaaa', T0 - 1000, T0 + 10_000)
-  const ui = await mounted($)
-  expect((await ui.findAll({ type: 'Svg' })).map((svg) => svg.props.alt)[0]).toBe(chipAlt(1))
-  await ui.unmount()
 })
 
 scenario('session.end removes the record', {}, async (w, $) => {

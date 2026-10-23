@@ -8,7 +8,6 @@ public enum Constants {
     public static let schemaVersion = 1
 
     // On air
-    public static let maxOnAir = 4
     public static let heartbeatMs: Double = 10_000
     public static let staleMs: Double = 45_000
     /// How far ahead of now a check-in may be before it is not believed (validate.ts).

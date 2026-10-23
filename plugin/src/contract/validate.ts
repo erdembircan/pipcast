@@ -2,7 +2,7 @@
 // program, so each reader takes `unknown` and returns a well-formed value or
 // a safe default. The rest are the small rules about who is on air.
 
-import { MAX_ACTIVITY, MAX_HOURS, MAX_ON_AIR, MAX_STORIES, STALE_MS, STATION_STALE_MS } from './constants.ts'
+import { MAX_ACTIVITY, MAX_HOURS, MAX_STORIES, STALE_MS, STATION_STALE_MS } from './constants.ts'
 import type {
   Activity,
   HourStats,
@@ -152,11 +152,6 @@ export function onAir(records: readonly SessionRecord[], now: number): SessionRe
       }
       return a.id < b.id ? -1 : 1
     })
-    .slice(0, MAX_ON_AIR)
-}
-
-export function isOnAir(id: string, records: readonly SessionRecord[], now: number): boolean {
-  return onAir(records, now).some((record) => record.id === id)
 }
 
 // Keeps the newest of each list, oldest first

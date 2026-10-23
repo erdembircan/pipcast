@@ -1,17 +1,8 @@
 // Tuning in, tuning out and checking in. The services reach the world only
 // through the Io port, which register.tsx builds from `$`.
 
-import { MAX_ON_AIR } from '../contract/constants.ts'
 import { storePaths } from '../contract/paths.ts'
-import {
-  isOnAir,
-  isStationAlive,
-  onAir,
-  parseControl,
-  parseSessionRecord,
-  parseStationStatus,
-  trimRecord,
-} from '../contract/validate.ts'
+import { isStationAlive, parseControl, parseStationStatus, trimRecord } from '../contract/validate.ts'
 import type { SessionRecord } from '../contract/types.ts'
 import type { SessionModel } from './model.ts'
 
@@ -47,7 +38,7 @@ export interface Io {
   targetBundleId(): Promise<string | null>
 }
 
-export type TuneInResult = { status: 'on'; tunedInAt: number } | { status: 'full' } | { status: 'cannot-start' }
+export type TuneInResult = { status: 'on'; tunedInAt: number } | { status: 'cannot-start' }
 
 async function readJson(io: Io, path: string): Promise<unknown> {
   const text = await io.read(path)
@@ -59,26 +50,6 @@ async function readJson(io: Io, path: string): Promise<unknown> {
   } catch {
     return null
   }
-}
-
-// Every parseable sessions/*.json; a half-written .tmp is never read
-export async function readRecords(io: Io, home: string): Promise<SessionRecord[]> {
-  const paths = storePaths(home)
-  const records: SessionRecord[] = []
-  for (const name of await io.list(paths.sessions)) {
-    if (!name.endsWith('.json')) {
-      continue
-    }
-    const record = parseSessionRecord(await readJson(io, `${paths.sessions}/${name}`))
-    if (record !== null) {
-      records.push(record)
-    }
-  }
-  return records
-}
-
-export async function countOnAir(io: Io, home: string, now: number): Promise<number> {
-  return onAir(await readRecords(io, home), now).length
 }
 
 // The record as it is written: this model's, with its two times
@@ -112,17 +83,7 @@ export async function tuneIn(io: Io, model: SessionModel): Promise<TuneInResult>
   const home = await io.storeHome()
   const now = await io.now()
   const id = model.record.id
-  const others = (await readRecords(io, home)).filter((record) => record.id !== id)
-  if (onAir(others, now).length >= MAX_ON_AIR) {
-    return { status: 'full' }
-  }
   await writeRecord(io, home, model, now, now)
-  // Another session may have written at the same moment: the later reader of
-  // the same rule loses
-  if (!isOnAir(id, await readRecords(io, home), now)) {
-    await io.remove(storePaths(home).session(id))
-    return { status: 'full' }
-  }
   if (!(await ensureStation(io, home))) {
     await io.remove(storePaths(home).session(id))
     return { status: 'cannot-start' }
@@ -135,18 +96,18 @@ export async function tuneOut(io: Io, home: string, id: string): Promise<void> {
 }
 
 // The heartbeat of a tuned-in session
-export async function checkIn(io: Io, model: SessionModel, tunedInAt: number): Promise<{ closed: boolean; onAir: number }> {
+export async function checkIn(io: Io, model: SessionModel, tunedInAt: number): Promise<{ closed: boolean }> {
   const home = await io.storeHome()
   const now = await io.now()
   const paths = storePaths(home)
   const { closedAt } = parseControl(await readJson(io, paths.control))
   if (closedAt !== null && closedAt >= tunedInAt) {
     await io.remove(paths.session(model.record.id))
-    return { closed: true, onAir: await countOnAir(io, home, now) }
+    return { closed: true }
   }
   await writeRecord(io, home, model, tunedInAt, now)
   if (!isStationAlive(parseStationStatus(await readJson(io, paths.station)), now)) {
     await ensureStation(io, home)
   }
-  return { closed: false, onAir: await countOnAir(io, home, now) }
+  return { closed: false }
 }

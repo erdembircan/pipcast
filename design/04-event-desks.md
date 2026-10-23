@@ -39,7 +39,7 @@ Every hour on the hour the channel airs a short report on the sessions, the way 
 | --- | --- | --- | --- |
 | Ident | The station clock: a dial in the wall monitor's chrome bezel, a glossy blue face, gold hour marks, chrome hands and a gold seconds hand that steps with each pip. On the long pip the minute hand jumps to the hour and a glint crosses the face; then the clock steps aside and ON THE HOUR slams in in chrome. No strip or subtitle under it. Its jingle: the pips, then a brass fanfare on the logo (Sound, in the README) | — | 7.5 s, from five seconds before the hour |
 | Headlines | The desk. Tab ON THE HOUR, headline 2 STORIES (a story is a session whose state changed this hour), the strap counting them by kind. The wall monitor's THIS HOUR shows the lines changed and the span | talk | 10 s |
-| The hour in review | Full frame. One row per session in the listing's order: its project, one detail (the lines changed, or how long it has waited) and its state pill | — | 10 s |
+| The hour in review | Full frame. One row per session in the listing's order, four a page: its project, one detail (the lines changed, or how long it has waited) and its state pill. With more than four, the pages turn as the listing's do | — | 10 s a page |
 | Outro | The ident's last picture, run out: a glint crosses the words, the words leave to the right, the clock drops back, and the ident fades to the board underneath. Its own jingle closes the report (Sound, in the README) | — | 1.4 s |
 | Back to the board | The ticker leads with ON THE HOUR and says when the next report airs | — | — |
 

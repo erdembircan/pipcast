@@ -25,34 +25,26 @@ const bundled = await build({
   platform: 'node',
 })
 const code = bundled.outputFiles[0].text
-const { chip, tab } = await import(`data:text/javascript;base64,${Buffer.from(code).toString('base64')}`)
+const { plate } = await import(`data:text/javascript;base64,${Buffer.from(code).toString('base64')}`)
 
-// [label, sessions on air, this session tuned]
+// [label, this session tuned]
 const STATES = [
-  ['0 on air', 0, false],
-  ['1 on air', 1, false],
-  ['2 on air', 2, false],
-  ['3 on air', 3, false],
-  ['full', 4, false],
-  ['tuned, 1', 1, true],
-  ['tuned, 2', 2, true],
-  ['tuned, 3', 3, true],
-  ['tuned, 4', 4, true],
+  ['off air', false],
+  ['on air', true],
 ]
 
 const image = (picture) => `<img height="22" src="data:image/svg+xml;base64,${Buffer.from(picture.svg).toString('base64')}">`
 
-function ours(onAir, tuned) {
-  const kind = tuned ? 'out' : onAir >= 4 ? 'off' : 'in'
-  return `<div class="band">${image(chip(onAir, tuned))}${image(tab(kind))}</div>`
+function ours(tuned) {
+  return `<div class="band">${image(plate(tuned ? 'out' : 'in'))}</div>`
 }
 
 const rows = (theme) =>
   STATES.map(
-    ([label, onAir, tuned]) =>
+    ([label, tuned]) =>
       `<div class="label">${label}</div>` +
-      `<div class="cell ${theme}">${ours(onAir, tuned)}</div>` +
-      `<div class="cell ${theme}"><div class="design" data-on-air="${onAir}" data-tuned="${tuned}"></div></div>`,
+      `<div class="cell ${theme}">${ours(tuned)}</div>` +
+      `<div class="cell ${theme}"><div class="design" data-tuned="${tuned}"></div></div>`,
   ).join('')
 
 const font = (name, file, extra) =>
@@ -87,7 +79,6 @@ ${rows('dark')}
     var h = React.createElement;
     document.querySelectorAll('.design').forEach(function (node) {
       ReactDOM.createRoot(node).render(h(window.PipNews.Band, {
-        onAir: Number(node.dataset.onAir),
         tuned: node.dataset.tuned === 'true',
       }));
     });

@@ -39,6 +39,13 @@ describe('the board scene', () => {
     expect(scene.sessions?.map((row) => row.id)).toEqual(['b', 'a'])
     expect(scene.clock).toBe('14:30')
   })
+
+  it('puts every session on the board, more than four included', () => {
+    const ids = ['g', 'a', 'f', 'b', 'e', 'c', 'd']
+    const scene = boardScene(T0, snap(...ids.map((id) => session(id))), empty)
+    expect(scene.sessions).toHaveLength(7)
+    expect(scene.sessions?.map((row) => row.id)).toEqual(ids)
+  })
 })
 
 describe('the ticker', () => {

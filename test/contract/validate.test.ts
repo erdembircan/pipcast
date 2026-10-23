@@ -2,12 +2,10 @@ import { describe, expect, it } from 'vitest'
 import {
   MAX_ACTIVITY,
   MAX_HOURS,
-  MAX_ON_AIR,
   MAX_STORIES,
   STALE_MS,
   STATION_STALE_MS,
   isLive,
-  isOnAir,
   isStationAlive,
   onAir,
   parseControl,
@@ -147,13 +145,13 @@ describe('who is on air', () => {
     expect(isLive(record({ checkedInAt: NOW + 6000 }), NOW)).toBe(false)
   })
 
-  it('keeps four of six live records, in tune-in order', () => {
+  it('keeps every live record, in tune-in order', () => {
     const records = ['f', 'e', 'd', 'c', 'b', 'a'].map((id, i) =>
       record({ id, tunedInAt: NOW - 100_000 + i * 1000, checkedInAt: NOW - 1000 }),
     )
     const air = onAir(records, NOW)
-    expect(air).toHaveLength(MAX_ON_AIR)
-    expect(air.map((r) => r.id)).toEqual(['f', 'e', 'd', 'c'])
+    expect(air).toHaveLength(6)
+    expect(air.map((r) => r.id)).toEqual(['f', 'e', 'd', 'c', 'b', 'a'])
   })
 
   it('breaks a tie on tune-in time by id', () => {
@@ -164,14 +162,6 @@ describe('who is on air', () => {
   it('leaves stale records off the air', () => {
     const records = [record({ id: 'old', checkedInAt: NOW - 60_000 }), record({ id: 'new' })]
     expect(onAir(records, NOW).map((r) => r.id)).toEqual(['new'])
-  })
-
-  it('says whether an id is on air', () => {
-    const records = ['a', 'b', 'c', 'd', 'e'].map((id, i) => record({ id, tunedInAt: NOW - 10_000 + i }))
-    expect(isOnAir('a', records, NOW)).toBe(true)
-    expect(isOnAir('d', records, NOW)).toBe(true)
-    expect(isOnAir('e', records, NOW)).toBe(false)
-    expect(isOnAir('zzz', records, NOW)).toBe(false)
   })
 
   it('does not change the list it is given', () => {

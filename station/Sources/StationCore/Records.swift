@@ -78,18 +78,16 @@ private func precedes(_ a: SessionSummary, _ b: SessionSummary) -> Bool {
     return a.id.utf16.lexicographicallyPrecedes(b.id.utf16)
 }
 
-/// The live records sorted by `tunedInAt`, then `id`: the first four.
+/// The live records sorted by `tunedInAt`, then `id`: every one of them.
 public func onAir(_ summaries: [SessionSummary], now: Double) -> [SessionSummary] {
-    Array(summaries
+    summaries
         .filter { isLive($0, now: now) }
         .sorted(by: precedes)
-        .prefix(Constants.maxOnAir))
 }
 
 /// The same rule over whole records, in on-air order.
 public func onAir(_ records: [RecordFile], now: Double) -> [RecordFile] {
-    Array(records
+    records
         .filter { isLive($0.summary, now: now) }
         .sorted { precedes($0.summary, $1.summary) }
-        .prefix(Constants.maxOnAir))
 }
