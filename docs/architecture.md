@@ -162,6 +162,8 @@ Between segments, the live board. The rules, from the design system's *Event des
 | `scripts/capture-controls.sh` | Shows the real broadcast with the controls on and saves the station's own picture of its window to `artifacts/station/controls.png`, for checking the glass by eye |
 | `scripts/live.sh` | Shows or changes what the desktop app runs: the live checkout beside the clone, which the `pipcast` marketplace points at. `setup` makes it; `pr <number>`, a branch or a commit puts that in the app; `master` puts master back |
 
+CI runs the lint, the types and the unit tests on every pull request and on master, and checks that `plugin/` holds what its sources build: it builds the page and the band's artwork again and fails on any difference, and it fails when the stamp beside the station binary or the jingles names other sources. The binary and the jingles are built on a Mac, so CI checks their stamps, not the files.
+
 ## Decisions
 
 - **Files, not sockets.** A mod cannot keep writing to a child's input, and every session is its own process. Files need no server, survive any one of them crashing, and are easy to look at.
