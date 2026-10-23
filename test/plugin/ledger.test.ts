@@ -30,6 +30,8 @@ interface World {
   // Git's answers, per tree by its top folder
   trees: Map<string, FakeTree>
   files: Map<string, FakeFile>
+  // Folders: stat answers for them, as the engine's does, and they cannot be read
+  dirs: Set<string>
   runs: { argv: readonly string[]; cwd: string | undefined; timeoutMs: number | undefined }[]
   reads: string[]
   // Makes every run reject, as when git cannot be started
@@ -43,6 +45,7 @@ function world(): World {
     io: undefined as unknown as Io,
     trees: new Map(),
     files: new Map(),
+    dirs: new Set(),
     runs: [],
     reads: [],
     cannotRun: false,
@@ -65,9 +68,12 @@ function world(): World {
     claudeConfigDir: async () => '/cfg',
     read: async (path) => {
       state.reads.push(path)
-      return state.files.get(path)?.text ?? null
+      return state.dirs.has(path) ? null : (state.files.get(path)?.text ?? null)
     },
     stat: async (path) => {
+      if (state.dirs.has(path)) {
+        return { size: 96, mtimeMs: 1 }
+      }
       const found = state.files.get(path)
       return found === undefined ? null : { size: found.text.length, mtimeMs: found.mtimeMs }
     },
@@ -232,6 +238,7 @@ describe('readTree', () => {
     const w = world()
     w.trees.set('/repo', tree({ untracked: ['.claude/worktrees/agent-x/', 'notes.md'] }))
     w.files.set('/repo/notes.md', { text: 'one\ntwo\n', mtimeMs: 1 })
+    w.dirs.add('/repo/.claude/worktrees/agent-x/')
     const found = await reading(w, '/repo')
     expect([...found.counts]).toEqual([['notes.md', [2, 0]]])
     expect([...found.untracked.keys()]).toEqual(['notes.md'])
