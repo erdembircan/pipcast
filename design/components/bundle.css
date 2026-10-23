@@ -374,10 +374,17 @@
 }
 .pn-stinger-words { position: absolute; left: 0; right: 0; top: 50%; transform: translateY(-62%); display: flex; flex-direction: column; align-items: center; }
 .pn-stinger-line {
+  display: grid;
   font: italic 900 112px/0.94 var(--font-display, "Anybody", "Arial Black", sans-serif);
   font-stretch: 112%;
   letter-spacing: 0.005em;
   white-space: nowrap;
+  filter: drop-shadow(0 6px 0 rgba(0, 0, 0, 0.45)) drop-shadow(0 0 22px rgba(0, 0, 0, 0.35));
+}
+/* Each line is the word twice in one cell: the outline underneath and the chrome on top, so the outline runs round the outside of each letter. Stroked on the chrome itself, it also traced where the font's pieces overlap inside a letter, as the R's bowl and leg do */
+.pn-stinger-ink, .pn-stinger-face { grid-area: 1 / 1; }
+.pn-stinger-ink { color: transparent; -webkit-text-stroke: 4px rgba(6, 18, 51, 0.6); }
+.pn-stinger-face {
   background-image:
     linear-gradient(100deg, rgba(255, 255, 255, 0) 42%, rgba(255, 255, 255, 0.95) 49%, rgba(255, 255, 255, 0) 56%),
     linear-gradient(180deg, var(--chrome-hi, #ffffff) 0%, var(--chrome, #c9d3e3) 46%, var(--chrome-lo, #7f90b3) 52%, var(--chrome, #c9d3e3) 74%, var(--chrome-hi, #ffffff) 100%);
@@ -386,8 +393,6 @@
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
-  -webkit-text-stroke: 2px rgba(6, 18, 51, 0.6);
-  filter: drop-shadow(0 6px 0 rgba(0, 0, 0, 0.45)) drop-shadow(0 0 22px rgba(0, 0, 0, 0.35));
 }
 
 /* The glass wall: panes in perspective, each lit by the wave and left glowing */
