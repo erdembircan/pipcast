@@ -20,7 +20,13 @@ function snap(...sessions: ReturnType<typeof session>[]): Snapshot {
 }
 
 function text(items: TickerItem[]): string[] {
-  return items.map((item) => (typeof item === 'string' ? item : `${item.lead} ${item.text}`))
+  return items.map((item) =>
+    typeof item === 'string' ? item : item.lead === undefined ? item.text : `${item.lead} ${item.text}`,
+  )
+}
+
+function keys(items: TickerItem[]): (string | undefined)[] {
+  return items.map((item) => (typeof item === 'string' ? undefined : item.key))
 }
 
 describe('the board scene', () => {
@@ -64,6 +70,50 @@ describe('the ticker', () => {
     ])
   })
 
+  it('keys every line by what it is about', () => {
+    const waiting = story('w:1', 'needs-input', T0 - 27 * 60_000)
+    const failed = story('e:1', 'error', T0 - 5 * 60_000)
+    const finished = story('r:1', 'ready', T0 - 3 * 60_000)
+    const aired = story('b:1', 'complete', T0 - 20_000)
+    const snapshot = snap(
+      session('w', { state: 'needs-input', stateAt: waiting.at, stories: [waiting] }),
+      session('e', { state: 'error', stateAt: failed.at, stories: [failed] }),
+      session('r', { state: 'ready', stateAt: finished.at, stories: [finished] }),
+      session('b', { state: 'ready', stateAt: aired.at, stories: [aired] }),
+    )
+    const state: BoardState = {
+      ...empty,
+      queue: [{ kind: 'hour', hour: at(15) }],
+      carried: new Map([['b:1', { endedAt: T0 - 10_000, kind: 'complete', sessionId: 'b' }]]),
+      lastReport: { hour: at(14), stories: 3 },
+      reportEndedAt: T0 - 60_000,
+    }
+    expect(keys(boardTicker(T0, snapshot, state))).toEqual([
+      `coming:hour:${at(15)}`,
+      'breaking:b:1',
+      'waiting:w:1',
+      'waiting:e:1',
+      'ready:r:1',
+      'desk',
+    ])
+  })
+
+  it("keeps a working session's key when what it is doing changes", () => {
+    const before = boardTicker(
+      T0,
+      snap(session('a', { activity: [{ at: T0 - 3000, text: 'editing a.ts' }] })),
+      empty,
+    )
+    const after = boardTicker(
+      T0 + 1000,
+      snap(session('a', { activity: [{ at: T0 + 500, text: 'reading b.ts' }] })),
+      empty,
+    )
+    expect(before).toMatchObject([{ key: 'desk' }, { key: 'activity:a' }])
+    expect(after).toMatchObject([{ key: 'desk' }, { key: 'activity:a' }])
+    expect(text(after)[1]).toBe('project-a: reading b.ts')
+  })
+
   it('keeps at most six items and always the ON THE DESK line', () => {
     const sessions = ['a', 'b', 'c', 'd'].map((id) => {
       const waiting = story(`${id}:1`, 'needs-input', T0 - 60_000)
@@ -77,6 +127,21 @@ describe('the ticker', () => {
     const items = text(boardTicker(T0, snap(...sessions), state))
     expect(items).toHaveLength(6)
     expect(items.at(-1)).toBe('ON THE DESK 4 sessions on KLWD')
+  })
+
+  it('keys every line once', () => {
+    const sessions = ['a', 'b', 'c', 'd'].map((id) => {
+      const waiting = story(`${id}:1`, 'needs-input', T0 - 60_000)
+      return session(id, { state: 'needs-input', stateAt: waiting.at, stories: [waiting] })
+    })
+    const state: BoardState = {
+      ...empty,
+      queue: [{ kind: 'hour', hour: at(15) }],
+      carried: new Map([['a:1', { endedAt: T0 - 1000, kind: 'needs-input', sessionId: 'a' }]]),
+    }
+    const found = keys(boardTicker(T0, snap(...sessions), state))
+    expect(found.every((key) => key !== undefined)).toBe(true)
+    expect(new Set(found).size).toBe(found.length)
   })
 
   it('counts the working sessions and lists their newest activity first', () => {

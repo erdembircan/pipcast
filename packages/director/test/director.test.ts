@@ -9,7 +9,7 @@ import { at, harness, session, story, T0 } from './helpers.ts'
 
 function lines(program: Program): string[] {
   return (program.scene.ticker ?? []).map((item: TickerItem) =>
-    typeof item === 'string' ? item : `${item.lead} ${item.text}`,
+    typeof item === 'string' ? item : item.lead === undefined ? item.text : `${item.lead} ${item.text}`,
   )
 }
 
@@ -112,6 +112,14 @@ describe('a story', () => {
       'ON THE DESK 1 session working',
       'project-b: editing b.ts',
     ])
+  })
+
+  it("keys the desk's own line by the story on air", () => {
+    const h = harness(T0, [session('a'), session('b', { activity: [{ at: T0, text: 'editing b.ts' }] })])
+    h.land([asking('a', T0 + 1000), session('b', { activity: [{ at: T0, text: 'editing b.ts' }] })], T0 + 1000)
+    const desk = h.until(T0 + 3000).program
+    expect(desk.scene.mode).toBe('desk')
+    expect(desk.scene.ticker?.[0]).toMatchObject({ key: 'on-air:a:1' })
   })
 
   it('leads the ticker at a ready desk with the story on air', () => {
@@ -380,6 +388,15 @@ describe('the hour', () => {
     expect(board.key).toBe('board')
     expect(lines(board)).toContain('ON THE HOUR 2 stories at 15:00 · next report 16:00')
     expect(h.cues().map((cue) => cue.jingle)).toEqual(['hour', 'hour-out'])
+  })
+
+  it("keys the report's own line by its hour", () => {
+    const h = harness(at(14, 59, 0), afternoon())
+    h.until(at(15, 0, 2))
+    const desk = h.until(at(15, 0, 3)).program
+    expect(desk.scene.mode).toBe('desk')
+    expect(lines(desk)[0]).toBe('ON THE HOUR 2 stories since 14:00')
+    expect(desk.scene.ticker?.[0]).toMatchObject({ key: `on-air:hour:${at(15)}` })
   })
 
   it('waits for a story on air and shows the report as COMING UP', () => {

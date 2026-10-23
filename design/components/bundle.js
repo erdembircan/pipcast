@@ -306,12 +306,189 @@
       h('div', { className: 'pn-bug' }, h(Mark, { size: 40, text: props.mark })));
   }
 
+  /* ------------------------------------------------------------------
+     The crawl. On air it is a belt: each item, with the diamond after it,
+     is laid on the belt's end out of sight behind the clock, and keeps its
+     words until it has gone past the tab, so nothing changes on screen
+     while it is being read. A new list of items only decides what is laid
+     next. The belt runs at one speed whatever is on it, a frame at a time,
+     and each Stage keeps one belt for every Ticker it shows, so the crawl
+     carries on across the cuts.
+     ------------------------------------------------------------------ */
+  var CRAWL_SPEED = 53; /* stage px a second: the pace of the live board's sample crawl, one pass every 40 s */
+  var CRAWL_LEAD_IN = 22; /* a new belt starts its first item this far in from the tab, as a static frame does */
+  var CRAWL_AHEAD = 120; /* the belt is laid this far past the clock, out of sight */
+  var CRAWL_MAX_STEP = 0.1; /* seconds: after a pause (a hidden window), the crawl carries on from where it stopped */
+  var CrawlContext = React.createContext(null);
+
+  /* What an item is on the belt: its `key` if it has one, else its words */
+  function crawlKey(it) {
+    if (typeof it === 'string') { return 'text:' + it; }
+    if (!it) { return 'none'; }
+    if (it.key) { return 'key:' + it.key; }
+    return 'text:' + (it.lead ? it.lead + ' ' : '') + (it.text || '');
+  }
+
+  /* The next item to lay: the first in the list, top to bottom, not yet
+     laid in this round, and never the one laid just before while another
+     is waiting. However the list is reordered, every item comes round once
+     a round, and an item that joins the list is laid as soon as its place
+     in the list comes up. Null when the round is over. */
+  function crawlNext(items, done, last) {
+    var waiting = null;
+    for (var i = 0; i < items.length; i++) {
+      var key = crawlKey(items[i]);
+      if (done[key]) { continue; }
+      if (key !== last) { return items[i]; }
+      waiting = items[i];
+    }
+    return waiting;
+  }
+
+  /* One step of the belt, with no drawing in it. `belt` is { offset, units,
+     done, last, started }: how far the belt has moved past the left edge of
+     the view (stage px), its units ({ key, item, width }), the keys laid in
+     this round, the key of the last unit laid, and whether anything was
+     ever laid. `input` is { dt, speed, view, items, measure }: seconds since
+     the last step, stage px a second, the view's width, the list as it is
+     now, and measure(item), the width of a unit for that item. Returns
+     { belt, dropped, laid }: the belt after the step, how many units left
+     past the tab, and the items laid at its end. */
+  function crawlStep(belt, input) {
+    var dt = Math.min(Math.max(num(input.dt, 0), 0), CRAWL_MAX_STEP);
+    var offset = belt.offset + num(input.speed, CRAWL_SPEED) * dt;
+    var units = belt.units.slice();
+    var dropped = 0;
+    while (units.length && offset >= units[0].width) {
+      offset -= units[0].width;
+      units.shift();
+      dropped += 1;
+    }
+    var started = belt.started;
+    if (!units.length) {
+      /* An empty belt waits at the clock, so what comes next crawls in
+         from there; a belt that never ran starts in from the tab. */
+      offset = started ? -input.view : -CRAWL_LEAD_IN;
+    }
+    var end = 0;
+    for (var i = 0; i < units.length; i++) { end += units[i].width; }
+    var items = input.items || [];
+    var done = {};
+    for (var key in belt.done) { done[key] = true; }
+    var last = belt.last;
+    var laid = [];
+    while (items.length && end - offset < input.view + CRAWL_AHEAD && laid.length < 32) {
+      var item = crawlNext(items, done, last);
+      if (item === null) {
+        done = {};
+        item = crawlNext(items, done, last);
+      }
+      var width = num(input.measure(item), 0);
+      if (!(width > 0)) { break; }
+      last = crawlKey(item);
+      done[last] = true;
+      units.push({ key: last, item: item, width: width });
+      laid.push(item);
+      end += width;
+      started = true;
+    }
+    return { belt: { offset: offset, units: units, done: done, last: last, started: started }, dropped: dropped, laid: laid };
+  }
+
+  /* A unit: the item as a static frame draws it, and the diamond after it */
+  function crawlUnit(it) {
+    var unit = document.createElement('span');
+    unit.className = 'pn-ticker-unit';
+    var body = document.createElement('span');
+    body.className = 'pn-ticker-item';
+    var lead = typeof it === 'string' ? null : it.lead;
+    if (lead) {
+      var tag = document.createElement('span');
+      tag.className = 'pn-ticker-lead';
+      tag.textContent = lead + ' ';
+      body.appendChild(tag);
+    }
+    body.appendChild(document.createTextNode(typeof it === 'string' ? it : (it.text || '')));
+    var sep = document.createElement('i');
+    sep.className = 'pn-ticker-sep';
+    unit.appendChild(body);
+    unit.appendChild(sep);
+    return unit;
+  }
+
+  /* A unit's width as laid out, in stage px: the stage's scale, and any
+     other transform round it, do not count */
+  function crawlWidth(node) {
+    return parseFloat(window.getComputedStyle(node).width) || 0;
+  }
+
+  /* The belt on air. React draws it empty; the units are laid on and taken
+     off here, a frame at a time, so the words on screen never change. */
+  function Belt(props) {
+    var shared = React.useContext(CrawlContext);
+    var own = useState(function () { return { belt: null }; })[0];
+    var store = shared || own;
+    var ref = React.useRef(null);
+    var items = React.useRef(props.items);
+    items.current = props.items;
+    React.useLayoutEffect(function () {
+      var el = ref.current;
+      var view = el ? el.parentNode : null;
+      if (!el || !view) { return undefined; }
+      var clock = window.performance && window.performance.now ? function () { return window.performance.now(); } : Date.now;
+      var later = window.requestAnimationFrame
+        ? function (f) { return window.requestAnimationFrame(f); }
+        : function (f) { return window.setTimeout(function () { f(clock()); }, 16); };
+      var cancel = window.cancelAnimationFrame
+        ? function (id) { window.cancelAnimationFrame(id); }
+        : function (id) { window.clearTimeout(id); };
+      var belt = store.belt || { offset: -CRAWL_LEAD_IN, units: [], done: {}, last: null, started: false };
+      belt.units.forEach(function (u) { el.appendChild(crawlUnit(u.item)); });
+      function measure(item) {
+        var probe = crawlUnit(item);
+        el.appendChild(probe);
+        var width = crawlWidth(probe);
+        el.removeChild(probe);
+        return width;
+      }
+      var raf = 0;
+      var then = null;
+      function step(now) {
+        var dt = then === null ? 0 : (now - then) / 1000;
+        then = now;
+        /* the units as drawn now: a typeface that has landed since changes their widths */
+        for (var i = 0; i < belt.units.length; i++) {
+          var node = el.children[i];
+          var w = node ? crawlWidth(node) : 0;
+          if (w > 0) { belt.units[i].width = w; }
+        }
+        var next = crawlStep(belt, { dt: dt, speed: CRAWL_SPEED, view: view.clientWidth, items: items.current, measure: measure });
+        for (var d = 0; d < next.dropped; d++) { if (el.firstChild) { el.removeChild(el.firstChild); } }
+        next.laid.forEach(function (item) { el.appendChild(crawlUnit(item)); });
+        belt = next.belt;
+        store.belt = belt;
+        el.style.transform = 'translateX(' + (-belt.offset) + 'px)';
+      }
+      function frame(now) {
+        step(now);
+        raf = later(frame);
+      }
+      step(clock());
+      raf = later(frame);
+      return function () {
+        cancel(raf);
+        while (el.firstChild) { el.removeChild(el.firstChild); }
+      };
+    }, [store]);
+    return h('div', { ref: ref, className: 'pn-ticker-belt' });
+  }
+
   /* The crawl, with the clock at its right end. `sample` takes both from a scene. */
   function Ticker(props) {
     var scene = (props.sample && SAMPLES[props.sample]) || {};
     var items = props.items && props.items.length ? props.items : (scene.ticker || []);
     var time = props.time || scene.clock;
-    var animate = bool(props.animate, false);
+    var crawl = bool(props.animate, false) && !reducedMotion();
     var offset = num(props.offset, 0);
     function half(prefix) {
       var out = [];
@@ -324,14 +501,15 @@
       });
       return out;
     }
-    var track = animate ? half('a').concat(half('b')) : half('a');
     return h('div', { className: cx('pn-ticker', props.inline && 'pn-inline') },
       h('div', { className: 'pn-ticker-label' }, h('span', null, props.label || 'LATEST')),
       h('div', { className: 'pn-ticker-view' },
-        h('div', {
-          className: 'pn-ticker-track',
-          style: !animate && offset ? { transform: 'translateX(' + (-offset) + 'px)' } : undefined
-        }, track)),
+        crawl
+          ? h(Belt, { items: items })
+          : h('div', {
+            className: 'pn-ticker-track',
+            style: offset ? { transform: 'translateX(' + (-offset) + 'px)' } : undefined
+          }, half('a'))),
       time ? h('div', { className: 'pn-ticker-clock' }, h('span', null, time)) : null);
   }
 
@@ -836,11 +1014,14 @@
 
   function Stage(props) {
     var w = num(props.width, STAGE_W);
-    return h('div', { className: 'pn-stage-wrap', style: { width: w + 'px', height: (w * STAGE_H / STAGE_W) + 'px' } },
-      h('div', {
-        className: cx('pn-stage', bool(props.animate, false) && 'pn-anim'),
-        style: { transform: 'scale(' + (w / STAGE_W) + ')' }
-      }, props.children));
+    /* One crawl per stage: every Ticker drawn on it carries on the same belt */
+    var crawl = useState(function () { return { belt: null }; })[0];
+    return h(CrawlContext.Provider, { value: crawl },
+      h('div', { className: 'pn-stage-wrap', style: { width: w + 'px', height: (w * STAGE_H / STAGE_W) + 'px' } },
+        h('div', {
+          className: cx('pn-stage', bool(props.animate, false) && 'pn-anim'),
+          style: { transform: 'scale(' + (w / STAGE_W) + ')' }
+        }, props.children)));
   }
 
   /* ------------------------------------------------------------------
@@ -1972,6 +2153,8 @@
     Clawd: Clawd,
     Mark: Mark,
     Stage: Stage,
+    crawlStep: crawlStep,
+    crawlSpeed: CRAWL_SPEED,
     EVENTS: EVENTS,
     STATES: STATES,
     CLAWD_SOURCE: CLAWD_SOURCE,

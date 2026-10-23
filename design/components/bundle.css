@@ -161,7 +161,19 @@
 .pn-ticker-track > * { margin-right: 22px; }
 .pn-ticker-lead { font: italic 900 28px/1 var(--font-display, "Anybody", "Arial Black", sans-serif); font-stretch: 104%; color: var(--gold-hi, #ffe08a); }
 .pn-ticker-sep { width: 10px; height: 10px; flex: none; background: var(--gold, #f2b630); transform: rotate(45deg); }
-.pn-anim .pn-ticker-track { animation: pn-crawl var(--pn-crawl, 40s) linear infinite; }
+/* On air the crawl is a belt the Ticker moves itself, a frame at a time: a unit is one item and the diamond after it, spaced as on the track */
+.pn-ticker-belt {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  white-space: nowrap;
+  font: 700 28px/1 var(--font-text, "Archivo", "Helvetica Neue", Arial, sans-serif);
+}
+.pn-ticker-unit { flex: none; display: flex; align-items: center; box-sizing: border-box; padding-right: 22px; }
+.pn-ticker-unit > .pn-ticker-item { margin-right: 22px; }
 /* The clock, at the ticker's right end: the crawl runs out behind it */
 .pn-ticker-clock {
   position: relative;
@@ -611,7 +623,6 @@
 .pn-clawd-eye { fill: var(--clawd-eye, #141414); }
 
 /* ---------- Motion ---------- */
-@keyframes pn-crawl { from { transform: translateX(0); } to { transform: translateX(-50%); } }
 @keyframes pn-slide { from { transform: translateX(-110%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
 @keyframes pn-glint { 0%, 70% { left: -20%; } 100% { left: 120%; } }
 @keyframes pn-power { 0% { transform: scaleY(0.02); filter: brightness(3); } 60% { transform: scaleY(1.04); filter: brightness(1.3); } 100% { transform: scaleY(1); filter: none; } }
