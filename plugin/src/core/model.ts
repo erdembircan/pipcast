@@ -6,6 +6,9 @@ import { hourKey } from '../contract/format.ts'
 import { trimRecord } from '../contract/validate.ts'
 import type { SessionRecord, SessionState, Story } from '../contract/types.ts'
 import type { Booking } from './diffstat.ts'
+import { stillWorking } from './shells.ts'
+import type { Shell, ShellState } from './shells.ts'
+import type { Waiting } from './wake.ts'
 
 export interface Turn {
   id: string | null
@@ -30,6 +33,24 @@ export interface Titles {
   fallback: string
 }
 
+// A turn that ended while work it started may still wake the session. Its
+// finish waits, with the session working and no story, until a new turn
+// starts or nothing it waits on works any more, when it lands as the turn's
+// own story
+export interface Held {
+  // Claude's last words as the turn ended
+  lastWords: string
+  // When the turn ended
+  stoppedAt: number
+  // The background commands still working at the last look
+  shells: readonly Shell[]
+  // Work no look can clear: a subagent, a workflow, an MCP task or an MCP
+  // server's monitor, a scheduled wake-up, or a command no look can find
+  others: boolean
+  // When the commands were last looked at
+  lookedAt: number
+}
+
 function titleOf(titles: Titles): string {
   return titles.file ?? titles.hook ?? titles.fallback
 }
@@ -48,6 +69,8 @@ export interface SessionModel {
   tally: Tally
   // The files booked in the hour of the latest booking, so that each counts once in its hour
   hourFiles: { hour: string; files: ReadonlySet<string> } | null
+  // The finish of a turn that ended with work still to wake the session; null when none waits
+  held: Held | null
 }
 
 function emptyTurn(): Turn {
@@ -93,12 +116,13 @@ export function newModel(id: string, project: string, fallback: string, now: num
     waitingOn: null,
     tally: emptyTally(),
     hourFiles: null,
+    held: null,
   }
 }
 
 export function turnStarted(m: SessionModel, now: number, turnId: string): SessionModel {
   const turn: Turn = { id: turnId, startedAt: now, ended: false }
-  return withRecord(m, withState(m.record, 'working', now), { turn, waitingOn: null })
+  return withRecord(m, withState(m.record, 'working', now), { turn, waitingOn: null, held: null })
 }
 
 export function activity(m: SessionModel, now: number, text: string): SessionModel {
@@ -136,8 +160,9 @@ export function resumed(m: SessionModel, now: number, agent: string | null): Ses
   return withRecord(m, withState(m.record, 'working', now), { waitingOn: null })
 }
 
-function duration(m: SessionModel, now: number): { durationMs?: number } {
-  return m.turn.startedAt === null ? {} : { durationMs: Math.max(0, now - m.turn.startedAt) }
+// How long the turn ran, until `end`
+function duration(m: SessionModel, end: number): { durationMs?: number } {
+  return m.turn.startedAt === null ? {} : { durationMs: Math.max(0, end - m.turn.startedAt) }
 }
 
 function withHour(record: SessionRecord, key: string, added: number, removed: number, files: number): SessionRecord {
@@ -175,17 +200,27 @@ export function booked(m: SessionModel, now: number, booking: Booking): SessionM
   })
 }
 
-export function finished(m: SessionModel, now: number, done: { lastWords: string; background: boolean }): SessionModel {
-  if (done.background) {
-    // Work the session started will wake it again: still working, with no story yet, but this turn is over
-    return withRecord(m, withState(m.record, 'working', now), { turn: { ...m.turn, ended: true }, waitingOn: null })
+// The turn ended. While it waits on work that will wake the session, its
+// finish is held; otherwise it lands now
+export function finished(m: SessionModel, now: number, done: { lastWords: string; waiting: Waiting }): SessionModel {
+  const { shells, others } = done.waiting
+  if (shells.length > 0 || others) {
+    const held: Held = { lastWords: done.lastWords, stoppedAt: now, shells, others, lookedAt: now }
+    return withRecord(m, withState(m.record, 'working', now), { turn: { ...m.turn, ended: true }, waitingOn: null, held })
   }
+  return finishStory(m, now, done.lastWords, now)
+}
+
+// The turn's finish, landing at `now`: a ready story when files changed since
+// the last finished story, with the lines, else a complete story with Claude's
+// last words; it took until `stoppedAt`, when the turn ended
+function finishStory(m: SessionModel, now: number, lastWords: string, stoppedAt: number): SessionModel {
   const { tally } = m
   let story: Omit<Story, 'id' | 'at'>
   if (tally.files.size > 0) {
-    story = { kind: 'ready', added: tally.added, removed: tally.removed, files: tally.files.size, ...duration(m, now) }
+    story = { kind: 'ready', added: tally.added, removed: tally.removed, files: tally.files.size, ...duration(m, stoppedAt) }
   } else {
-    story = { kind: 'complete', ...(done.lastWords === '' ? {} : { quote: done.lastWords }), ...duration(m, now) }
+    story = { kind: 'complete', ...(lastWords === '' ? {} : { quote: lastWords }), ...duration(m, stoppedAt) }
   }
   const { record, seq } = addStory(m, now, story)
   return withRecord(m, withState(record, 'ready', now), {
@@ -193,7 +228,23 @@ export function finished(m: SessionModel, now: number, done: { lastWords: string
     turn: { ...m.turn, ended: true },
     waitingOn: null,
     tally: emptyTally(),
+    held: null,
   })
+}
+
+// A look at the background commands a held finish waits on. Those that run
+// until they are stopped no longer hold it, and once nothing holds it, it
+// lands as the turn's story
+export function looked(m: SessionModel, now: number, states: ReadonlyMap<string, ShellState>): SessionModel {
+  const { held } = m
+  if (held === null) {
+    return m
+  }
+  const shells = stillWorking(held.shells, states)
+  if (shells.length === 0 && !held.others) {
+    return finishStory(m, now, held.lastWords, held.stoppedAt)
+  }
+  return { ...m, held: { ...held, shells, lookedAt: now } }
 }
 
 export function failed(m: SessionModel, now: number, kind: string): SessionModel {
@@ -203,6 +254,7 @@ export function failed(m: SessionModel, now: number, kind: string): SessionModel
     turn: { ...m.turn, ended: true },
     waitingOn: null,
     tally: emptyTally(),
+    held: null,
   })
 }
 
@@ -210,7 +262,7 @@ export function aborted(m: SessionModel, now: number): SessionModel {
   if (m.turn.ended) {
     return m
   }
-  return withRecord(m, withState(m.record, 'ready', now), { turn: { ...m.turn, ended: true }, waitingOn: null, tally: emptyTally() })
+  return withRecord(m, withState(m.record, 'ready', now), { turn: { ...m.turn, ended: true }, waitingOn: null, tally: emptyTally(), held: null })
 }
 
 // After a reload: the stories and hours the session's own record kept, and

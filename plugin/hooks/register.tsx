@@ -14,7 +14,8 @@ import { FILE_TOOLS, MAX_FOLDERS, NOTHING, agentMetaPath, look, parseAgentMeta, 
 import type { Reading } from '../src/core/ledger.ts'
 import * as record from '../src/core/model.ts'
 import type { SessionModel } from '../src/core/model.ts'
-import { willWake } from '../src/core/wake.ts'
+import { lookAtShells, lookDue, stillWorking } from '../src/core/shells.ts'
+import { waitsOn } from '../src/core/wake.ts'
 import {
   checkIn,
   countOnAir,
@@ -56,6 +57,8 @@ const tops = new Map<string, string | null>()
 const agentFolders = new Map<string, string | null>()
 // Readings run one after another, so that two never book the same change
 let readings: Promise<void> = Promise.resolve()
+// A look at the background commands a held finish waits on is running
+let looking = false
 
 // The engine's own band is an empty Box; another mod's band has content.
 const hasContent = (drawn: RenderElement) => drawn.type !== 'Box' || (drawn.children?.length ?? 0) > 0
@@ -457,8 +460,41 @@ function startTitleChecks($: EngineInterface): void {
   })
 }
 
-// The heartbeat: a tuned-in session checks in; every session counts who is on air
+// While a turn's finish waits on background commands alone, the heartbeat
+// looks at them again: a dev server that listens a few seconds after the turn
+// ended, or a watcher that says so after its first build, lets it land
+async function lookAgain($: EngineInterface): Promise<void> {
+  const m = model
+  const held = m === null ? null : m.held
+  if (held === null || held.others || held.shells.length === 0 || looking) {
+    return
+  }
+  if (!lookDue(held.stoppedAt, held.lookedAt, await $.clock.now())) {
+    return
+  }
+  looking = true
+  try {
+    const states = await lookAtShells(ioFor($), held.shells)
+    // A turn that started, or ended again, meanwhile has its own finish
+    if (model === null || model.held !== held) {
+      return
+    }
+    const next = record.looked(model, await $.clock.now(), states)
+    model = next
+    if (next.held === null) {
+      await save($)
+    }
+  } catch (error) {
+    failure($, 'background commands', error)
+  } finally {
+    looking = false
+  }
+}
+
+// The heartbeat: a tuned-in session checks in; every session counts who is on
+// air; a held finish's background commands are looked at again
 async function beat($: EngineInterface): Promise<void> {
+  await lookAgain($)
   try {
     const io = ioFor($)
     let outcome: { closed: boolean; onAir: number } | null = null
@@ -681,14 +717,21 @@ async function onStop($: EngineInterface, e: { last_assistant_message?: string; 
   if (model === null) {
     return
   }
-  const background = willWake(e)
+  // With nothing else to wake the session, a look tells which of the commands
+  // it left running in the background work; with something else, the finish
+  // waits anyway
+  const waits = waitsOn(e)
+  const waiting =
+    waits.others || waits.shells.length === 0
+      ? waits
+      : { shells: stillWorking(waits.shells, await lookAtShells(ioFor($), waits.shells)), others: false }
   await lookOwnTree($)
   if (model === null) {
     return
   }
   model = record.finished(model, await $.clock.now(), {
     lastWords: lastWords(e.last_assistant_message ?? ''),
-    background,
+    waiting,
   })
   await save($)
 }

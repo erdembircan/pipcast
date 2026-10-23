@@ -4,7 +4,7 @@ Where every word and figure on the stage comes from once the mod is built. Check
 
 | On the stage | Where it comes from | Notes |
 | --- | --- | --- |
-| The story: needs your input, finished, stopped on an error | `PermissionRequest`, the `AskUserQuestion` call, `Stop`, `StopFailure` | A `Stop` with background tasks or scheduled wake-ups still pending is still working |
+| The story: needs your input, finished, stopped on an error | `PermissionRequest`, the `AskUserQuestion` call, `Stop`, `StopFailure` | A `Stop` with background tasks or scheduled wake-ups still pending is still working, unless the task is a command that runs until it is stopped: a dev server, a watcher, a log it follows. The engine gives only each command's task id and its line, so the mod also looks at the command's processes for a port they listen on |
 | Working, the LIVE pill | `turn.start`, until the turn ends | |
 | A session's title | Whatever title the engine gives the session | When it has none, its default name ("web-shop-3f") |
 | The project | The session's repository or folder (`$.session.repo()`, `cwd`) | The repository's name, else the folder's |

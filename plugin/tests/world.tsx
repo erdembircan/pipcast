@@ -19,6 +19,10 @@ export const TITLE_FILE = `${PROJECT_DIR}/${ID}/custom-title.json`
 // A subagent's worktree, inside the session's checkout as the engine puts it
 export const WORKTREE = `${ROOT}/.claude/worktrees/agent-a1`
 
+// Where the engine writes each background command's output, and its own pid
+export const TASKS = `/private/tmp/claude-501/-work-proj/${ID}/tasks`
+export const ENGINE_PID = 4000
+
 // A git working tree as the fake git sees it: its commit, what `diff-index`
 // prints, and its untracked files
 export interface FakeTree {
@@ -82,6 +86,20 @@ export function world(on: On, options: WorldOptions = {}) {
     worktrees: new Map<string, FakeTree>(),
   }
   const launch = { exit: options.launchExit ?? 0, out: options.launchOut ?? 'started 4242' }
+  // The Mac's processes as `ps` and `lsof` see them: each one's parent and
+  // process group, the files they write to, the ones that listen on a TCP
+  // port, and what each output file holds. `fails`: neither program answers.
+  const procs = {
+    table: [
+      { pid: 1, ppid: 0, pgid: 1 },
+      { pid: ENGINE_PID, ppid: 1, pgid: ENGINE_PID },
+    ] as { pid: number; ppid: number; pgid: number }[],
+    writing: [{ pid: ENGINE_PID, name: 'pipe' }] as { pid: number; name: string }[],
+    listening: new Set<number>(),
+    outputs: new Map<string, string>(),
+    fails: false,
+    next: 5000,
+  }
 
   const done = (exitCode: number, stdout = '', stderr = '') => ({
     value: { exitCode, stdout, stderr, isStdoutTruncated: false, isStderrTruncated: false },
@@ -211,6 +229,22 @@ export function world(on: On, options: WorldOptions = {}) {
         return done(0, options.transcriptDir === undefined ? '' : `${options.transcriptDir}/${ID}.jsonl\n`)
       case '/usr/bin/git':
         return gitRun(args, (e as { init?: { cwd?: string } }).init?.cwd ?? ROOT)
+      case '/bin/ps':
+        return procs.fails ? done(1, '', 'ps: no') : done(0, procs.table.map((p) => `${p.pid} ${p.ppid} ${p.pgid}`).join('\n'))
+      case '/usr/sbin/lsof': {
+        if (procs.fails) {
+          return done(1, '', 'lsof: no')
+        }
+        if (args.includes('-iTCP')) {
+          const asked = (args[args.indexOf('-p') + 1] ?? '').split(',').map(Number)
+          const found = asked.filter((pid) => procs.listening.has(pid))
+          return done(found.length === 0 ? 1 : 0, found.map((pid) => `p${pid}`).join('\n'))
+        }
+        return done(0, procs.writing.flatMap((file) => [`p${file.pid}`, 'f1', `n${file.name}`]).join('\n'))
+      }
+      case '/usr/bin/head':
+      case '/usr/bin/tail':
+        return done(0, procs.outputs.get(args.at(-1) ?? '') ?? '')
       default:
         return done(0)
     }
@@ -228,6 +262,32 @@ export function world(on: On, options: WorldOptions = {}) {
     reads,
     written,
     git,
+    procs,
+    // A command left running in the background, as the engine runs one: a
+    // shell leading its own process group, writing to `<task id>.output`, and
+    // the program it started. `listens`: the program listens on a TCP port;
+    // `output`: what the command has printed. `listen()` and `say()` change
+    // that later; `end()` takes both processes away.
+    task(id: string, options: { listens?: boolean; output?: string } = {}) {
+      const shell = procs.next
+      const program = shell + 1
+      procs.next += 10
+      const output = `${TASKS}/${id}.output`
+      procs.table.push({ pid: shell, ppid: ENGINE_PID, pgid: shell }, { pid: program, ppid: shell, pgid: shell })
+      procs.writing.push({ pid: shell, name: output }, { pid: program, name: output })
+      procs.outputs.set(output, options.output ?? '')
+      if (options.listens === true) {
+        procs.listening.add(program)
+      }
+      return {
+        listen: () => procs.listening.add(program),
+        say: (text: string) => procs.outputs.set(output, text),
+        end: () => {
+          procs.table = procs.table.filter((p) => p.pid !== shell && p.pid !== program)
+          procs.writing = procs.writing.filter((file) => file.pid !== shell && file.pid !== program)
+        },
+      }
+    },
     // A subagent in a worktree of its own, as the engine's note beside the
     // transcript names it; its tree starts clean
     subagent(agentId: string, worktree = WORKTREE): FakeTree {

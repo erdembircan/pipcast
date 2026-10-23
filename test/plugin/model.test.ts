@@ -8,6 +8,13 @@ const T = Date.UTC(2026, 9, 21, 14, 30, 0)
 const fresh = () => m.newModel('abc', 'proj', 'Title', T)
 const working = () => m.turnStarted(fresh(), T + 1000, 't1')
 
+// What a turn that ends waits on: nothing, or other work that will wake the session
+const NONE = { shells: [], others: false }
+const OTHERS = { shells: [], others: true }
+// Commands left running in the background, as a Stop lists them
+const server = { id: 'b1devsrv0', command: 'npm run dev' }
+const tests = { id: 'b2tstrun0', command: 'npm test' }
+
 describe('newModel', () => {
   it('starts ready, empty and not yet written', () => {
     const model = fresh()
@@ -27,6 +34,7 @@ describe('newModel', () => {
     expect(model.seq).toBe(0)
     expect(model.turn.ended).toBe(true)
     expect(model.titles).toEqual({ file: null, hook: null, fallback: 'Title' })
+    expect(model.held).toBeNull()
   })
 })
 
@@ -147,10 +155,10 @@ describe('resumed', () => {
   it('is cleared when a turn starts, finishes, fails or is interrupted', () => {
     const asked = () => m.askedPermission(working(), T + 2000, 'ls', undefined, 'a1')
     expect(m.turnStarted(asked(), T + 3000, 't2').waitingOn).toBeNull()
-    expect(m.finished(asked(), T + 3000, { lastWords: 'x', background: false }).waitingOn).toBeNull()
-    expect(m.finished(asked(), T + 3000, { lastWords: 'x', background: true }).waitingOn).toBeNull()
+    expect(m.finished(asked(), T + 3000, { lastWords: 'x', waiting: NONE }).waitingOn).toBeNull()
+    expect(m.finished(asked(), T + 3000, { lastWords: 'x', waiting: OTHERS }).waitingOn).toBeNull()
     const changed = m.booked(asked(), T + 2500, { added: 1, removed: 0, files: ['/p/a.ts'] })
-    expect(m.finished(changed, T + 3000, { lastWords: '', background: false }).waitingOn).toBeNull()
+    expect(m.finished(changed, T + 3000, { lastWords: '', waiting: NONE }).waitingOn).toBeNull()
     expect(m.failed(asked(), T + 3000, 'unknown').waitingOn).toBeNull()
     expect(m.aborted(asked(), T + 3000).waitingOn).toBeNull()
   })
@@ -203,7 +211,7 @@ describe('booked', () => {
 describe('finished', () => {
   it('with work that will wake the session, stays working with no story, and the turn is over', () => {
     const before = working()
-    const model = m.finished(before, T + 8000, { lastWords: 'Waiting.', background: true })
+    const model = m.finished(before, T + 8000, { lastWords: 'Waiting.', waiting: OTHERS })
     expect(model.record.state).toBe('working')
     expect(model.record.stories).toEqual([])
     expect(model.record.hours).toEqual([])
@@ -213,45 +221,107 @@ describe('finished', () => {
 
   it('with work that will wake the session keeps the tally for the next story', () => {
     const booked = m.booked(working(), T + 2000, { added: 5, removed: 1, files: ['/p/a.ts', '/p/b.ts'] })
-    const waiting = m.finished(booked, T + 8000, { lastWords: 'Waiting.', background: true })
+    const waiting = m.finished(booked, T + 8000, { lastWords: 'Waiting.', waiting: OTHERS })
     expect(waiting.tally).toEqual(booked.tally)
     expect(waiting.record.stories).toEqual([])
-    const next = m.finished(m.turnStarted(waiting, T + 9000, 't2'), T + 12_000, { lastWords: 'Done.', background: false })
+    const next = m.finished(m.turnStarted(waiting, T + 9000, 't2'), T + 12_000, { lastWords: 'Done.', waiting: NONE })
     expect(next.record.stories).toEqual([{ id: 'abc:1', kind: 'ready', at: T + 12_000, added: 5, removed: 1, files: 2, durationMs: 3000 }])
   })
 
   it('a ready story tells the tally, which then starts again', () => {
     const booked = m.booked(working(), T + 2000, { added: 12, removed: 3, files: ['/p/a.ts', '/p/b.ts'] })
-    const model = m.finished(booked, T + 61_000, { lastWords: 'Done.', background: false })
+    const model = m.finished(booked, T + 61_000, { lastWords: 'Done.', waiting: NONE })
     expect(model.record.state).toBe('ready')
     expect(model.record.stateAt).toBe(T + 61_000)
     expect(model.record.stories).toEqual([{ id: 'abc:1', kind: 'ready', at: T + 61_000, added: 12, removed: 3, files: 2, durationMs: 60_000 }])
     expect(model.turn.ended).toBe(true)
     expect(model.tally).toEqual({ added: 0, removed: 0, files: new Set() })
-    const quiet = m.finished(m.turnStarted(model, T + 70_000, 't2'), T + 75_000, { lastWords: 'Nothing to change.', background: false })
+    const quiet = m.finished(m.turnStarted(model, T + 70_000, 't2'), T + 75_000, { lastWords: 'Nothing to change.', waiting: NONE })
     expect(quiet.record.stories[1]?.kind).toBe('complete')
   })
 
   it('without changed files is a complete story with the last words', () => {
-    const model = m.finished(working(), T + 5000, { lastWords: 'All set.', background: false })
+    const model = m.finished(working(), T + 5000, { lastWords: 'All set.', waiting: NONE })
     expect(model.record.stories).toEqual([{ id: 'abc:1', kind: 'complete', at: T + 5000, quote: 'All set.', durationMs: 4000 }])
     expect(model.record.state).toBe('ready')
   })
 
   it('is a ready story for a booking that names a file with no lines', () => {
     const booked = m.booked(working(), T + 2000, { added: 0, removed: 0, files: ['/p/image.png'] })
-    const model = m.finished(booked, T + 5000, { lastWords: 'x', background: false })
+    const model = m.finished(booked, T + 5000, { lastWords: 'x', waiting: NONE })
     expect(model.record.stories[0]).toMatchObject({ kind: 'ready', added: 0, removed: 0, files: 1 })
   })
 
   it('leaves the quote out when Claude finished without a word', () => {
-    const model = m.finished(working(), T + 5000, { lastWords: '', background: false })
+    const model = m.finished(working(), T + 5000, { lastWords: '', waiting: NONE })
     expect('quote' in (model.record.stories[0] ?? {})).toBe(false)
   })
 
   it('leaves out the duration for a turn that never started', () => {
-    const model = m.finished(fresh(), T + 5000, { lastWords: 'x', background: false })
+    const model = m.finished(fresh(), T + 5000, { lastWords: 'x', waiting: NONE })
     expect('durationMs' in (model.record.stories[0] ?? {})).toBe(false)
+  })
+})
+
+describe('a held finish', () => {
+  it('holds while background commands work: working, no story, and the turn is over', () => {
+    const booked = m.booked(working(), T + 2000, { added: 3, removed: 1, files: ['/p/a.ts'] })
+    const model = m.finished(booked, T + 8000, { lastWords: 'Started the dev server.', waiting: { shells: [server, tests], others: false } })
+    expect(model.record.state).toBe('working')
+    expect(model.record.stories).toEqual([])
+    expect(model.turn.ended).toBe(true)
+    expect(model.held).toEqual({ lastWords: 'Started the dev server.', stoppedAt: T + 8000, shells: [server, tests], others: false, lookedAt: T + 8000 })
+    expect(model.tally).toEqual(booked.tally)
+  })
+
+  it('lands once no command works: the turn\'s story, timed to when the turn ended', () => {
+    const booked = m.booked(working(), T + 2000, { added: 3, removed: 1, files: ['/p/a.ts'] })
+    const held = m.finished(booked, T + 8000, { lastWords: 'Done.', waiting: { shells: [server], others: false } })
+    const model = m.looked(held, T + 30_000, new Map([[server.id, 'serving']]))
+    expect(model.held).toBeNull()
+    expect(model.record.state).toBe('ready')
+    expect(model.record.stateAt).toBe(T + 30_000)
+    expect(model.record.stories).toEqual([{ id: 'abc:1', kind: 'ready', at: T + 30_000, added: 3, removed: 1, files: 1, durationMs: 7000 }])
+    expect(model.tally).toEqual({ added: 0, removed: 0, files: new Set() })
+  })
+
+  it('lands as a complete story with the last words when no file changed', () => {
+    const held = m.finished(working(), T + 8000, { lastWords: 'The site is up.', waiting: { shells: [server], others: false } })
+    const model = m.looked(held, T + 18_000, new Map([[server.id, 'watching']]))
+    expect(model.record.stories).toEqual([{ id: 'abc:1', kind: 'complete', at: T + 18_000, quote: 'The site is up.', durationMs: 7000 }])
+  })
+
+  it('keeps holding while a command works, with the ones that do, and notes the look', () => {
+    const held = m.finished(working(), T + 8000, { lastWords: 'x', waiting: { shells: [server, tests], others: false } })
+    const model = m.looked(held, T + 18_000, new Map([[server.id, 'following'], [tests.id, 'working']]))
+    expect(model.record.state).toBe('working')
+    expect(model.record.stories).toEqual([])
+    expect(model.held).toEqual({ lastWords: 'x', stoppedAt: T + 8000, shells: [tests], others: false, lookedAt: T + 18_000 })
+  })
+
+  it('counts a command the look says nothing about as working', () => {
+    const held = m.finished(working(), T + 8000, { lastWords: 'x', waiting: { shells: [tests], others: false } })
+    expect(m.looked(held, T + 18_000, new Map()).held?.shells).toEqual([tests])
+  })
+
+  it('never lands while other work will wake the session', () => {
+    const held = m.finished(working(), T + 8000, { lastWords: 'x', waiting: { shells: [server], others: true } })
+    const model = m.looked(held, T + 18_000, new Map([[server.id, 'serving']]))
+    expect(model.record.stories).toEqual([])
+    expect(model.held).toMatchObject({ shells: [], others: true, lookedAt: T + 18_000 })
+  })
+
+  it('is dropped by a new turn, an error or a finish that lands', () => {
+    const held = () => m.finished(working(), T + 8000, { lastWords: 'x', waiting: { shells: [tests], others: false } })
+    expect(m.turnStarted(held(), T + 9000, 't2').held).toBeNull()
+    expect(m.failed(m.turnStarted(held(), T + 9000, 't2'), T + 9500, 'unknown').held).toBeNull()
+    expect(m.finished(m.turnStarted(held(), T + 9000, 't2'), T + 9500, { lastWords: 'y', waiting: NONE }).held).toBeNull()
+  })
+
+  it('changes nothing when no finish is held', () => {
+    const model = m.finished(working(), T + 5000, { lastWords: 'x', waiting: NONE })
+    expect(model.held).toBeNull()
+    expect(m.looked(model, T + 6000, new Map([[server.id, 'serving']]))).toBe(model)
   })
 })
 
@@ -333,7 +403,7 @@ describe('story ids, stateAt and the lists', () => {
     let model = working()
     model = m.askedPermission(model, T + 2000, 'a', undefined, null)
     model = m.resumed(model, T + 3000, null)
-    model = m.finished(model, T + 4000, { lastWords: 'x', background: false })
+    model = m.finished(model, T + 4000, { lastWords: 'x', waiting: NONE })
     model = m.turnStarted(model, T + 5000, 't2')
     model = m.failed(model, T + 6000, 'unknown')
     expect(model.record.stories.map((story) => story.id)).toEqual(['abc:1', 'abc:2', 'abc:3'])

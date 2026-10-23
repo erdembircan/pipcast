@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { wakes, willWake } from '../../plugin/src/core/wake.ts'
+import { shellOf, waitsOn, wakes } from '../../plugin/src/core/wake.ts'
 
 // Tasks as a Stop lists them (BackgroundTaskSummary), labelled as the engine labels them
 const shell = { id: 'b8d2k1q9z', type: 'shell', status: 'running', description: 'Thirty-minute check-in timer', command: 'sleep 1800' }
@@ -36,23 +36,52 @@ describe('wakes', () => {
   })
 })
 
-describe('willWake', () => {
-  it('is false when nothing is in flight', () => {
-    expect(willWake({})).toBe(false)
-    expect(willWake({ background_tasks: [], session_crons: [] })).toBe(false)
+describe('shellOf', () => {
+  it('takes a background command\'s task id and the line it runs', () => {
+    expect(shellOf(shell)).toEqual({ id: 'b8d2k1q9z', command: 'sleep 1800' })
+    expect(shellOf({ ...shell, command: undefined })).toEqual({ id: 'b8d2k1q9z', command: '' })
   })
 
-  it('is false for a session that only watches artifacts and keeps house', () => {
-    expect(willWake({ background_tasks: [artifactWatch, artifactWatch, dream, scan], session_crons: [] })).toBe(false)
+  it('is null for every other task, and for a command without a task id a look can use', () => {
+    for (const task of [subagent, workflow, mcpTask, mcpMonitor, artifactWatch, dream, cron, { ...shell, id: '' }, { ...shell, id: '../x' }, { ...shell, id: 7 }, null, 'shell']) {
+      expect(shellOf(task)).toBeNull()
+    }
+  })
+})
+
+describe('waitsOn', () => {
+  it('waits on nothing when nothing is in flight', () => {
+    expect(waitsOn({})).toEqual({ shells: [], others: false })
+    expect(waitsOn({ background_tasks: [], session_crons: [] })).toEqual({ shells: [], others: false })
   })
 
-  it('is true once one task wakes it, among any others', () => {
-    expect(willWake({ background_tasks: [artifactWatch, dream, shell] })).toBe(true)
-    expect(willWake({ background_tasks: [subagent] })).toBe(true)
+  it('waits on nothing for a session that only watches artifacts and keeps house', () => {
+    expect(waitsOn({ background_tasks: [artifactWatch, artifactWatch, dream, scan, teammate, cloud], session_crons: [] })).toEqual({ shells: [], others: false })
   })
 
-  it('is true for a scheduled wake-up, whatever else is listed', () => {
-    expect(willWake({ background_tasks: [artifactWatch], session_crons: [cron] })).toBe(true)
-    expect(willWake({ session_crons: [cron] })).toBe(true)
+  it('lists the commands left running in the background, for a look at them', () => {
+    const server = { ...shell, id: 'b1devsrv0', description: 'Start the dev server', command: 'npm run dev' }
+    expect(waitsOn({ background_tasks: [artifactWatch, shell, dream, server] })).toEqual({
+      shells: [
+        { id: 'b8d2k1q9z', command: 'sleep 1800' },
+        { id: 'b1devsrv0', command: 'npm run dev' },
+      ],
+      others: false,
+    })
+  })
+
+  it('waits on other work that will wake the session, beside any commands', () => {
+    for (const task of [subagent, workflow, mcpTask, mcpMonitor]) {
+      expect(waitsOn({ background_tasks: [shell, task] })).toEqual({ shells: [{ id: 'b8d2k1q9z', command: 'sleep 1800' }], others: true })
+    }
+  })
+
+  it('waits on a scheduled wake-up, whatever else is listed', () => {
+    expect(waitsOn({ background_tasks: [artifactWatch], session_crons: [cron] })).toEqual({ shells: [], others: true })
+    expect(waitsOn({ session_crons: [cron] })).toEqual({ shells: [], others: true })
+  })
+
+  it('counts a command without a task id a look can use as work no look can clear', () => {
+    expect(waitsOn({ background_tasks: [{ ...shell, id: '' }] })).toEqual({ shells: [], others: true })
   })
 })

@@ -26,8 +26,8 @@
   },
   "lastChange": {
     "by": "erdembircan",
-    "at": "2026-10-24T02:00:00Z",
+    "at": "2026-10-24T02:30:00Z",
     "via": "Claude Code",
-    "note": "On the hour: a report joins the queue only if the window shows as the hour strikes; one already waiting keeps its place until the next comes due"
+    "note": "A dev server, a watcher or a log left running in the background no longer keeps a session working"
   }
 }
