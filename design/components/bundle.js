@@ -592,6 +592,14 @@
     ];
   }
 
+  /* One line of chrome words: the outline underneath, hidden from VoiceOver,
+     and the chrome on top, which the glint crosses (0 to 1). */
+  function chromeLine(word, className, style, glint) {
+    return h('div', { key: word, className: className, style: style },
+      h('span', { className: 'pn-stinger-ink', 'aria-hidden': 'true' }, word),
+      h('span', { className: 'pn-stinger-face', style: { backgroundPosition: (130 - 160 * glint).toFixed(1) + '% 0, 0 0' } }, word));
+  }
+
   /* BREAKING NEWS, for every story, in red: the intro before the desk and
      the outro after it. Each runs on one number, progress 0 to 1, so a
      storyboard frame and the moving version are the same picture at the
@@ -608,15 +616,10 @@
     var glint = seg(p, 0.6, 0.92);
     var lines = words.map(function (w, i) {
       var s = easeOut(seg(p, 0.22 + 0.1 * i, 0.5 + 0.1 * i));
-      return h('div', {
-        key: w,
-        className: 'pn-stinger-line',
-        style: {
-          opacity: s,
-          transform: 'translateX(' + ((1 - s) * -140).toFixed(1) + 'px) scale(' + (1.3 - 0.3 * s).toFixed(3) + ')',
-          backgroundPosition: (130 - 160 * glint).toFixed(1) + '% 0, 0 0'
-        }
-      }, w);
+      return chromeLine(w, 'pn-stinger-line', {
+        opacity: s,
+        transform: 'translateX(' + ((1 - s) * -140).toFixed(1) + 'px) scale(' + (1.3 - 0.3 * s).toFixed(3) + ')'
+      }, glint);
     });
     return h('div', { className: 'pn-stinger pn-k-breaking' },
       glassWall(p),
@@ -631,15 +634,10 @@
     var glint = seg(p, 0, 0.3);
     var lines = words.map(function (w, i) {
       var s = easeInOut(seg(p, 0.1 + 0.12 * i, 0.45 + 0.12 * i));
-      return h('div', {
-        key: w,
-        className: 'pn-stinger-line',
-        style: {
-          opacity: (1 - s).toFixed(3),
-          transform: 'translateX(' + (s * 180).toFixed(1) + 'px) scale(' + (1 + 0.25 * s).toFixed(3) + ')',
-          backgroundPosition: (130 - 160 * glint).toFixed(1) + '% 0, 0 0'
-        }
-      }, w);
+      return chromeLine(w, 'pn-stinger-line', {
+        opacity: (1 - s).toFixed(3),
+        transform: 'translateX(' + (s * 180).toFixed(1) + 'px) scale(' + (1 + 0.25 * s).toFixed(3) + ')'
+      }, glint);
     });
     return h('div', { className: 'pn-stinger pn-k-breaking', style: { opacity: (1 - easeInOut(seg(p, 0.7, 1))).toFixed(3) } },
       glassWall(seg(p, 0, 0.75), true),
@@ -726,15 +724,10 @@
     var lines = words.map(function (w, i) {
       var s = easeOut(seg(p, STRIKE + 0.04 + 0.06 * i, STRIKE + 0.16 + 0.06 * i));
       var leave = outro ? easeInOut(seg(o, 0.15 + 0.12 * i, 0.5 + 0.12 * i)) : 0;
-      return h('div', {
-        key: w,
-        className: 'pn-stinger-line pn-ident-line',
-        style: {
-          opacity: (s * (1 - leave)).toFixed(3),
-          transform: 'translateX(' + ((1 - s) * 160 + leave * 180).toFixed(1) + 'px) scale(' + (1.3 - 0.3 * s + 0.25 * leave).toFixed(3) + ')',
-          backgroundPosition: (130 - 160 * glint).toFixed(1) + '% 0, 0 0'
-        }
-      }, w);
+      return chromeLine(w, 'pn-stinger-line pn-ident-line', {
+        opacity: (s * (1 - leave)).toFixed(3),
+        transform: 'translateX(' + ((1 - s) * 160 + leave * 180).toFixed(1) + 'px) scale(' + (1.3 - 0.3 * s + 0.25 * leave).toFixed(3) + ')'
+      }, glint);
     });
     var drop = outro ? easeInOut(seg(o, 0.4, 0.72)) : 0;
     /* the clock and the words share the frame's centre line */
