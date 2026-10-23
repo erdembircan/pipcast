@@ -18,9 +18,6 @@ export const GAP_MS = 2_000
 // The ident starts this long before the hour
 export const IDENT_LEAD_MS = 5_000
 
-// A report that has not started this long after its hour is skipped
-export const REPORT_GRACE_MS = 10 * 60_000
-
 // A story stays BREAKING in the ticker this long after its segment ends
 export const BREAKING_MS = 40_000
 

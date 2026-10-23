@@ -9,7 +9,6 @@ import {
   IDENT_LEAD_MS,
   IDENT_MS,
   REDUCED_OPENER_MS,
-  REPORT_GRACE_MS,
   REVIEW_MS,
   STINGER_MS,
   STORY_OUTRO_MS,
@@ -25,7 +24,6 @@ describe('timing', () => {
   it('keeps the other lengths of time', () => {
     expect(GAP_MS).toBe(2000)
     expect(IDENT_LEAD_MS).toBe(5000)
-    expect(REPORT_GRACE_MS).toBe(10 * 60_000)
     expect(BREAKING_MS).toBe(40_000)
     expect(AFTER_REPORT_MS).toBe(10 * 60_000)
   })
