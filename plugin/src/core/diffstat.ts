@@ -11,7 +11,7 @@ export interface Changes {
   files: number
 }
 
-// `git diff-index -M --numstat HEAD`:"added<TAB>removed<TAB>path" per file, "-" for a binary file's counts
+// `git diff-index -M --numstat HEAD`: "added<TAB>removed<TAB>path" per file, "-" for a binary file's counts
 export function parseNumstat(stdout: string): Numstat {
   const out: Numstat = new Map()
   for (const line of stdout.split('\n')) {
