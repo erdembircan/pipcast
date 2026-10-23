@@ -228,6 +228,15 @@ describe('readTree', () => {
     expect(w.reads).toEqual(['/repo/n.txt'])
   })
 
+  it("leaves out a repository inside the tree, such as a subagent's worktree", async () => {
+    const w = world()
+    w.trees.set('/repo', tree({ untracked: ['.claude/worktrees/agent-x/', 'notes.md'] }))
+    w.files.set('/repo/notes.md', { text: 'one\ntwo\n', mtimeMs: 1 })
+    const found = await reading(w, '/repo')
+    expect([...found.counts]).toEqual([['notes.md', [2, 0]]])
+    expect([...found.untracked.keys()]).toEqual(['notes.md'])
+  })
+
   it('reads at most 200 untracked files and leaves out one that has gone', async () => {
     const w = world()
     const names = Array.from({ length: 205 }, (_, i) => `f${i}.txt`)

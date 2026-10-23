@@ -7,7 +7,7 @@ import { ERROR_WORDS, REPLY, TAB_ALT, TOAST_CANNOT_START, chipAlt } from '../src
 import { hourKey } from '../src/contract/format.ts'
 import { TITLE_CHECK_MS } from '../src/core/title.ts'
 import { BAND, HOME, ID, PROJECT_DIR, ROOT, RECORD, RUN, STATION, T0, TITLE_FILE, TRANSCRIPT, WORKTREE, world } from './world.tsx'
-import type { WorldOptions } from './world.tsx'
+import type { FakeTree, WorldOptions } from './world.tsx'
 
 const START = { cwd: ROOT, surface: 'desktop', isInteractive: true } as const
 
@@ -474,6 +474,20 @@ scenario("a subagent's lines in its own worktree reach the hour and the story", 
   await stop($, { last_assistant_message: 'The implementer is done.' })
   expect(w.record()?.stories.at(-1)).toMatchObject({ kind: 'ready', added: 16, removed: 3, files: 2 })
   expect(w.record()?.hours.at(-1)).toMatchObject({ added: 16, removed: 3, files: 2 })
+})
+
+scenario('outside git, an edit to a file in a repository counts once, as git counts it', { hasRepo: false }, async (w, $) => {
+  const other: FakeTree = { head: 'cafe001', numstat: '', untracked: [] }
+  w.git.worktrees.set('/work/other', other)
+  await tuneIn($)
+  await turn($)
+  const edit = { tool: 'Edit', file_path: '/work/other/src/a.ts', old_string: 'a', new_string: 'b\nc\nd' } as never
+  // Its tree is read before the call, nothing has changed, so nothing is booked
+  await $.tool.call(edit)
+  other.numstat = '3\t0\tsrc/a.ts\n'
+  await $.tool.call(edit)
+  await stop($, { last_assistant_message: 'Done.' })
+  expect(w.record()?.stories.at(-1)).toMatchObject({ kind: 'ready', added: 3, removed: 0, files: 1 })
 })
 
 scenario('a commit keeps the lines counted before it', {}, async (w, $) => {

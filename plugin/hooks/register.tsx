@@ -324,8 +324,8 @@ async function bookNow($: EngineInterface, id: string | undefined, booking: Book
   return changed
 }
 
-// What a call is watched in: the trees it can change, and whether its folder
-// is outside git, where the edit tools' own figures count
+// What a call is watched in: the trees it can change. With none, the call
+// runs outside git, and the edit tools' own figures count.
 interface Watch {
   tops: string[]
   plain: boolean
@@ -354,7 +354,7 @@ async function watch($: EngineInterface, agent: string | null, tool: string, inp
       }
     })
   }
-  return { tops: found, plain: own === null }
+  return { tops: found, plain: found.length === 0 }
 }
 
 // After the call: each tree it could have changed is read again and what

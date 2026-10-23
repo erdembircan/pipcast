@@ -148,7 +148,7 @@ export function world(on: On, options: WorldOptions = {}) {
       : { value: { kind: 'file' as const, size: text.length, mtimeMs: 0, isLink: false } }
   })
 
-  // Which tree holds a folder: the longest worktree that is or holds it, else the session's own
+  // Which tree holds a folder: the longest worktree that is or holds it, else the session's own, when the session has a repository
   const treeAt = (folder: string): { top: string; tree: FakeTree } | null => {
     let best: string | null = null
     for (const top of git.worktrees.keys()) {
@@ -160,7 +160,7 @@ export function world(on: On, options: WorldOptions = {}) {
     if (best !== null && found !== undefined) {
       return { top: best, tree: found }
     }
-    if (folder === ROOT || folder.startsWith(`${ROOT}/`)) {
+    if (options.hasRepo !== false && (folder === ROOT || folder.startsWith(`${ROOT}/`))) {
       return { top: ROOT, tree: { head: git.head, numstat: git.numstat, untracked: git.untracked } }
     }
     return null

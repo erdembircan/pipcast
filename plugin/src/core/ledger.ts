@@ -94,7 +94,11 @@ export async function readTree(io: Io, top: string, before: Reading | null): Pro
     }
     const counts = parseNumstat(diff)
     const untracked = new Map<string, FileMark>()
-    for (const path of others.split('\0').filter((name) => name !== '').slice(0, MAX_UNTRACKED)) {
+    // A path that ends in / is a repository inside the tree, such as a
+    // subagent's worktree in a folder git does not ignore; its lines count in
+    // its own tree
+    const paths = others.split('\0').filter((name) => name !== '' && !name.endsWith('/'))
+    for (const path of paths.slice(0, MAX_UNTRACKED)) {
       const stat = await io.stat(`${top}/${path}`)
       if (stat === null) {
         continue
