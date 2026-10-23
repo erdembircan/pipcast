@@ -87,4 +87,19 @@ describe('the live page', () => {
     expect(container.querySelector('.pn-mode-desk')).not.toBeNull()
     expect(container.textContent).toContain('npm install')
   })
+
+  it('does not air a story that landed while the window was hidden, when the window shows before the timer ticks', () => {
+    act(() => root.render(<App reducedMotion={false} />))
+    const story = { id: 'a:1', kind: 'needs-input', at: Date.now(), command: 'npm install', quote: 'Install dependencies' }
+    const sessions = [record({ state: 'needs-input', stateAt: story.at, stories: [story] })]
+    // No timer runs between the two snapshots, as when a hidden page's timers are late
+    act(() => receive({ ...snapshot(sessions), visible: false }))
+    act(() => receive(snapshot(sessions)))
+    act(() => {
+      vi.advanceTimersByTime(5000)
+    })
+    expect(postMessage).not.toHaveBeenCalledWith({ type: 'cue', jingle: 'breaking' })
+    expect(container.querySelector('.pn-mode-stinger')).toBeNull()
+    expect(container.querySelector('.pn-mode-board')).not.toBeNull()
+  })
 })

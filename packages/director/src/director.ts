@@ -60,6 +60,16 @@ export function createDirector(options: DirectorOptions = {}): { tick(input: Tic
     }
   }
 
+  // Takes every story out of the queue and leaves the report on the hour. In
+  // place: the board reads this same array.
+  function dropWaitingStories(): void {
+    for (let index = queue.length - 1; index >= 0; index -= 1) {
+      if (queue[index]?.kind === 'story') {
+        queue.splice(index, 1)
+      }
+    }
+  }
+
   function tick({ now, snapshot }: Tick): Program {
     const cues: Jingle[] = []
     let reported: number | null = null
@@ -93,6 +103,8 @@ export function createDirector(options: DirectorOptions = {}): { tick(input: Tic
       }
     }
 
+    const visible = snapshot !== null && snapshot.visible
+
     if (snapshot !== null) {
       // 1. The first tick
       if (!initialized) {
@@ -110,7 +122,9 @@ export function createDirector(options: DirectorOptions = {}): { tick(input: Tic
         }
       }
 
-      // 2. New stories, in the order they landed
+      // 2. New stories, in the order they landed. While the window is hidden
+      // Claude is in front and shows every story itself, so a story that
+      // lands then is seen and never waits its turn
       const landed: { sessionId: string; story: Story }[] = []
       for (const session of snapshot.sessions) {
         for (const story of session.stories) {
@@ -121,8 +135,10 @@ export function createDirector(options: DirectorOptions = {}): { tick(input: Tic
       }
       landed.sort((a, b) => a.story.at - b.story.at)
       for (const { sessionId, story } of landed) {
-        queue.push({ kind: 'story', sessionId, story })
         seen.add(story.id)
+        if (visible) {
+          queue.push({ kind: 'story', sessionId, story })
+        }
       }
 
       // 3. The hour
@@ -133,11 +149,11 @@ export function createDirector(options: DirectorOptions = {}): { tick(input: Tic
       }
     }
 
-    const visible = snapshot !== null && snapshot.visible
-
     if (!visible) {
-      // 4. Hidden: what is on air is cut and not restarted
+      // 4. Hidden: what is on air is cut and not restarted, and the stories
+      // waiting their turn are dropped. The report on the hour waits on
       end(now, false)
+      dropWaitingStories()
     } else {
       // 5. Advance
       while (onAir !== null) {
