@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { STALE_MS, defaultHome, storePaths } from '@pipcast/contract'
 import type { SessionRecord } from '@pipcast/contract'
 import * as m from '../../plugin/src/core/model.ts'
-import { changesSince, checkIn, countOnAir, ensureStation, readRecords, recordOf, takeBaseline, tuneIn, tuneOut } from '../../plugin/src/core/services.ts'
+import { checkIn, countOnAir, ensureStation, readRecords, recordOf, tuneIn, tuneOut } from '../../plugin/src/core/services.ts'
 import type { Io, RunResult } from '../../plugin/src/core/services.ts'
 
 const HOME = '/store'
@@ -19,7 +19,6 @@ interface Fake {
   target: string | null
   launch: RunResult
   onWrite: (path: string) => void
-  git: { diff: RunResult; others: RunResult; reads: string[] }
 }
 
 function fake(): Fake {
@@ -31,17 +30,16 @@ function fake(): Fake {
     target: null,
     launch: { exitCode: 0, stdout: 'started 4242\n', stderr: '' },
     onWrite: () => undefined,
-    git: { diff: { exitCode: 0, stdout: '', stderr: '' }, others: { exitCode: 0, stdout: '', stderr: '' }, reads: [] },
   }
   state.io = {
     now: async () => state.now,
     storeHome: async () => HOME,
     claudeConfigDir: async () => '/cfg',
-    read: async (path) => {
-      state.git.reads.push(path)
-      return state.files.get(path) ?? null
+    read: async (path) => state.files.get(path) ?? null,
+    stat: async (path) => {
+      const text = state.files.get(path)
+      return text === undefined ? null : { size: text.length, mtimeMs: 0 }
     },
-    size: async (path) => state.files.get(path)?.length ?? null,
     write: async (path, text) => {
       state.files.set(path, text)
       state.onWrite(path)
@@ -57,9 +55,6 @@ function fake(): Fake {
       state.runs.push(argv)
       if (argv[0] === BIN) {
         return state.launch
-      }
-      if (argv[0] === '/usr/bin/git') {
-        return argv[1] === 'diff-index' ? state.git.diff : state.git.others
       }
       return { exitCode: 0, stdout: '', stderr: '' }
     },
@@ -319,79 +314,5 @@ describe('recordOf', () => {
 describe('the store home', () => {
   it('is where the contract puts it', () => {
     expect(defaultHome('/Users/me')).toBe('/Users/me/Library/Application Support/Pipcast')
-  })
-})
-
-describe('the baseline and the changes since', () => {
-  it('reads git at the start and finds what the turn changed', async () => {
-    const state = fake()
-    state.git.diff.stdout = '5\t1\tsrc/a.ts\n'
-    state.git.others.stdout = 'old.txt\0'
-    const baseline = await takeBaseline(state.io, '/work')
-    expect(baseline?.numstat.get('src/a.ts')).toEqual([5, 1])
-    expect([...(baseline?.untracked ?? [])]).toEqual(['old.txt'])
-    expect(state.runs[0]).toEqual(['/usr/bin/git', 'diff-index', '-M', '--numstat', 'HEAD'])
-    expect(state.runs[1]).toEqual(['/usr/bin/git', 'ls-files', '--others', '--exclude-standard', '-z'])
-
-    state.git.diff.stdout = '9\t1\tsrc/a.ts\n'
-    state.git.others.stdout = 'old.txt\0new.txt\0'
-    state.files.set('/work/new.txt', 'a\nb\n')
-    const changes = await changesSince(state.io, '/work', baseline as NonNullable<typeof baseline>)
-    expect(changes).toEqual({ added: 4 + 2, removed: 0, files: 2 })
-  })
-
-  it('has no baseline outside a repository, or where git cannot say', async () => {
-    const state = fake()
-    state.git.diff = { exitCode: 128, stdout: '', stderr: 'fatal' }
-    expect(await takeBaseline(state.io, '/work')).toBeNull()
-    state.git.diff = { exitCode: 0, stdout: '', stderr: '' }
-    state.git.others = { exitCode: 1, stdout: '', stderr: '' }
-    expect(await takeBaseline(state.io, '/work')).toBeNull()
-    state.io.run = async () => {
-      throw new Error('no git')
-    }
-    expect(await takeBaseline(state.io, '/work')).toBeNull()
-  })
-
-  it('reads at most 200 new files and none over 1 MB, but still counts them', async () => {
-    const state = fake()
-    const baseline = { numstat: new Map<string, [number, number]>(), untracked: new Set<string>() }
-    const names = Array.from({ length: 205 }, (_, i) => `f${i}.txt`)
-    state.git.others.stdout = `${names.join('\0')}\0`
-    for (const name of names) {
-      state.files.set(`/work/${name}`, 'x\n')
-    }
-    state.files.set('/work/f3.txt', 'y'.repeat(1_000_001))
-    state.git.reads.length = 0
-    const changes = await changesSince(state.io, '/work', baseline)
-    expect(state.git.reads.length).toBe(199)
-    expect(state.git.reads).not.toContain('/work/f3.txt')
-    expect(changes).toEqual({ added: 199, removed: 0, files: 205 })
-  })
-
-  it('finds nothing when git stops answering mid-turn', async () => {
-    const state = fake()
-    const baseline = { numstat: new Map<string, [number, number]>(), untracked: new Set<string>() }
-    state.git.diff = { exitCode: 128, stdout: '', stderr: '' }
-    expect(await changesSince(state.io, '/work', baseline)).toEqual({ added: 0, removed: 0, files: 0 })
-  })
-
-  it('counts a new binary file as a file with no lines, as git does', async () => {
-    const state = fake()
-    const baseline = { numstat: new Map<string, [number, number]>(), untracked: new Set<string>() }
-    state.git.others.stdout = 'shot.png\0notes.md\0'
-    state.files.set('/work/shot.png', '\u0089PNG\r\n\u001a\n\u0000\u0000\u0000\rIHDR\nwide\nhigh\n')
-    state.files.set('/work/notes.md', 'one\ntwo\n')
-    expect(await changesSince(state.io, '/work', baseline)).toEqual({ added: 2, removed: 0, files: 2 })
-  })
-
-  it('reads a new file whose size cannot be told, and counts its lines', async () => {
-    const state = fake()
-    const baseline = { numstat: new Map<string, [number, number]>(), untracked: new Set<string>() }
-    state.io.size = async () => null
-    state.git.others.stdout = 'notes.md\0'
-    state.files.set('/work/notes.md', 'one\ntwo\nthree\n')
-    expect(await changesSince(state.io, '/work', baseline)).toEqual({ added: 3, removed: 0, files: 1 })
-    expect(state.git.reads).toEqual(['/work/notes.md'])
   })
 })

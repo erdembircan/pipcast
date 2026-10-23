@@ -1,17 +1,20 @@
-// Lines changed during a turn: from git when the session is in a repository,
-// else from what the edit tools were asked to do.
+// Lines changed: from git where the work happens in a repository, else from
+// what the edit tools were asked to do.
 
 import type { ToolInput } from './describe.ts'
 
+// Per path, the lines added and removed against a commit
 export type Numstat = Map<string, [number, number]>
 
-export interface Changes {
+// Lines changed, and the files they changed in, each named once across the
+// session's trees
+export interface Booking {
   added: number
   removed: number
-  files: number
+  files: readonly string[]
 }
 
-// `git diff-index -M --numstat HEAD`: "added<TAB>removed<TAB>path" per file, "-" for a binary file's counts
+// `git diff-index -M --numstat <commit>`: "added<TAB>removed<TAB>path" per file, "-" for a binary file's counts
 export function parseNumstat(stdout: string): Numstat {
   const out: Numstat = new Map()
   for (const line of stdout.split('\n')) {
@@ -35,32 +38,29 @@ export function countLines(text: string): number {
   return text.endsWith('\n') ? breaks : breaks + 1
 }
 
-// What changed since `before`. A file whose counts differ counts once, with
-// the increases in added and removed lines; `newFiles` holds the line count of
-// each new untracked file, which counts as a file with all its lines added.
-export function delta(before: Numstat, after: Numstat, newFiles: readonly number[]): Changes {
+// What moved between two readings of a tree: the increases in added and
+// removed lines, and every path that changed. A path changed when its counts
+// differ, or when it is in one reading and not the other, as a binary file
+// with no lines is.
+export function delta(before: Numstat, after: Numstat): { added: number; removed: number; changed: string[] } {
   let added = 0
   let removed = 0
-  let files = 0
+  const changed: string[] = []
   const paths = new Set([...before.keys(), ...after.keys()])
   for (const path of paths) {
     const [oldAdded, oldRemoved] = before.get(path) ?? [0, 0]
     const [newAdded, newRemoved] = after.get(path) ?? [0, 0]
-    if (oldAdded === newAdded && oldRemoved === newRemoved) {
+    if (before.has(path) === after.has(path) && oldAdded === newAdded && oldRemoved === newRemoved) {
       continue
     }
-    files += 1
+    changed.push(path)
     added += Math.max(0, newAdded - oldAdded)
     removed += Math.max(0, newRemoved - oldRemoved)
   }
-  for (const lines of newFiles) {
-    files += 1
-    added += lines
-  }
-  return { added, removed, files }
+  return { added, removed, changed }
 }
 
-// With no repository: what an edit tool changed, and the file it touched
+// Outside git: what an edit tool changed, and the file it touched
 export function editCounts(tool: string, input: ToolInput): { added: number; removed: number; file: string } | null {
   const text = (value: unknown): string => (typeof value === 'string' ? value : '')
   switch (tool) {

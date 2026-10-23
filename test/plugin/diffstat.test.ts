@@ -42,28 +42,28 @@ describe('delta', () => {
   const before = parseNumstat('5\t1\tsrc/a.ts\n2\t2\tsrc/b.ts\n')
 
   it('is nothing when nothing moved', () => {
-    expect(delta(before, parseNumstat('5\t1\tsrc/a.ts\n2\t2\tsrc/b.ts\n'), [])).toEqual({ added: 0, removed: 0, files: 0 })
+    expect(delta(before, parseNumstat('5\t1\tsrc/a.ts\n2\t2\tsrc/b.ts\n'))).toEqual({ added: 0, removed: 0, changed: [] })
   })
 
   it('counts a changed file once, with the increases', () => {
     const after = parseNumstat('9\t4\tsrc/a.ts\n2\t2\tsrc/b.ts\n')
-    expect(delta(before, after, [])).toEqual({ added: 4, removed: 3, files: 1 })
+    expect(delta(before, after)).toEqual({ added: 4, removed: 3, changed: ['src/a.ts'] })
   })
 
   it('counts a file that is new to the diff from zero', () => {
     const after = parseNumstat('5\t1\tsrc/a.ts\n2\t2\tsrc/b.ts\n8\t0\tsrc/c.ts\n')
-    expect(delta(before, after, [])).toEqual({ added: 8, removed: 0, files: 1 })
+    expect(delta(before, after)).toEqual({ added: 8, removed: 0, changed: ['src/c.ts'] })
   })
 
   it('counts only the increases when a file shrinks, and still the file', () => {
     const after = parseNumstat('3\t1\tsrc/a.ts\n2\t2\tsrc/b.ts\n')
-    expect(delta(before, after, [])).toEqual({ added: 0, removed: 0, files: 1 })
-    expect(delta(before, new Map(), [])).toEqual({ added: 0, removed: 0, files: 2 })
+    expect(delta(before, after)).toEqual({ added: 0, removed: 0, changed: ['src/a.ts'] })
+    expect(delta(before, new Map())).toEqual({ added: 0, removed: 0, changed: ['src/a.ts', 'src/b.ts'] })
   })
 
-  it('adds each new untracked file as a file with all its lines added', () => {
-    const after = parseNumstat('6\t1\tsrc/a.ts\n2\t2\tsrc/b.ts\n')
-    expect(delta(before, after, [10, 0, 4])).toEqual({ added: 1 + 14, removed: 0, files: 1 + 3 })
+  it('names a file that comes or goes with no lines, as git names a binary one', () => {
+    expect(delta(new Map(), new Map([['image.png', [0, 0]]]))).toEqual({ added: 0, removed: 0, changed: ['image.png'] })
+    expect(delta(new Map([['gone.ts', [3, 1]]]), new Map())).toEqual({ added: 0, removed: 0, changed: ['gone.ts'] })
   })
 })
 

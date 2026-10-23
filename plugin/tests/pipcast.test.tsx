@@ -2,10 +2,12 @@ import type { On } from 'claude-code'
 import type { Engine } from 'claude-code/testing'
 import { expect, test } from 'claude-code/testing'
 
+import { ACTIVITY_WRITE_MS } from '../src/contract/constants.ts'
 import { ERROR_WORDS, REPLY, TAB_ALT, TOAST_CANNOT_START, chipAlt } from '../src/contract/copy.ts'
+import { hourKey } from '../src/contract/format.ts'
 import { TITLE_CHECK_MS } from '../src/core/title.ts'
-import { BAND, HOME, ID, PROJECT_DIR, ROOT, RECORD, RUN, STATION, T0, TITLE_FILE, TRANSCRIPT, world } from './world.tsx'
-import type { WorldOptions } from './world.tsx'
+import { BAND, HOME, ID, PROJECT_DIR, ROOT, RECORD, RUN, STATION, T0, TITLE_FILE, TRANSCRIPT, WORKTREE, world } from './world.tsx'
+import type { FakeTree, WorldOptions } from './world.tsx'
 
 const START = { cwd: ROOT, surface: 'desktop', isInteractive: true } as const
 
@@ -311,6 +313,7 @@ scenario('Stop with a last message and no changes is a complete story', {}, asyn
 scenario('Stop with changes in git is a ready story with the diff', {}, async (w, $) => {
   w.git.numstat = '3\t1\tsrc/a.ts\n'
   w.git.untracked = ['old.txt']
+  w.files.set(`${ROOT}/old.txt`, 'before\n')
   await tuneIn($)
   await turn($)
   await w.clock.settle()
@@ -332,7 +335,9 @@ scenario('git is read without ever taking the index lock', {}, async (w, $) => {
   expect(git.length > 0).toBe(true)
   for (const argv of git) {
     expect([
-      ['/usr/bin/git', 'diff-index', '-M', '--numstat', 'HEAD'],
+      ['/usr/bin/git', 'rev-parse', '--show-toplevel'],
+      ['/usr/bin/git', 'rev-parse', '--verify', '-q', 'HEAD'],
+      ['/usr/bin/git', 'diff-index', '-M', '--numstat', 'c0ffee1'],
       ['/usr/bin/git', 'ls-files', '--others', '--exclude-standard', '-z'],
     ]).toContainEqual(argv)
   }
@@ -440,13 +445,135 @@ scenario('an interrupted turn leaves the session ready, with no story', {}, asyn
   expect(w.record()?.stories.length).toBe(0)
 })
 
-scenario('a subagent changes nothing', {}, async (w, $) => {
+scenario("a subagent's calls and its end leave the activity and the turn alone", {}, async (w, $) => {
   await tuneIn($)
   await turn($)
   await $.tool.call({ tool: 'Bash', command: 'ls', description: 'List files', agentId: 'sub' } as never)
   await $.turn.complete({ answer: '', durationMs: 5, isAborted: true, turnId: 'x', reason: 'aborted', agentId: 'sub' } as never)
   expect(w.record()?.activity.length).toBe(0)
   expect(w.record()?.state).toBe('working')
+})
+
+scenario("a subagent's lines in its own worktree reach the hour and the story", { transcriptDir: PROJECT_DIR }, async (w, $) => {
+  const tree = w.subagent('a1')
+  await tuneIn($)
+  await turn($)
+  // A read-only call: the subagent's worktree is read first, nothing is booked
+  await $.tool.call({ tool: 'Bash', command: 'git log --oneline', agentId: 'a1' } as never)
+  tree.numstat = '12\t3\tsrc/a.ts\n'
+  await $.tool.call({ tool: 'Edit', file_path: `${WORKTREE}/src/a.ts`, old_string: 'a', new_string: 'b', agentId: 'a1' } as never)
+  await w.clock.advance(ACTIVITY_WRITE_MS)
+  expect(w.record()?.hours.at(-1)).toMatchObject({ added: 12, removed: 3, files: 1 })
+  // The commit moves the tree's head: nothing more is booked
+  tree.head = 'beef002'
+  tree.numstat = ''
+  await $.tool.call({ tool: 'Bash', command: 'git commit -am "Fix"', agentId: 'a1' } as never)
+  tree.untracked = ['src/b.ts']
+  w.files.set(`${WORKTREE}/src/b.ts`, 'one\ntwo\nthree\nfour\n')
+  await $.tool.call({ tool: 'Write', file_path: `${WORKTREE}/src/b.ts`, content: 'x', agentId: 'a1' } as never)
+  await stop($, { last_assistant_message: 'The implementer is done.' })
+  expect(w.record()?.stories.at(-1)).toMatchObject({ kind: 'ready', added: 16, removed: 3, files: 2 })
+  expect(w.record()?.hours.at(-1)).toMatchObject({ added: 16, removed: 3, files: 2 })
+})
+
+scenario('outside git, an edit to a file in a repository counts once, as git counts it', { hasRepo: false }, async (w, $) => {
+  const other: FakeTree = { head: 'cafe001', numstat: '', untracked: [] }
+  w.git.worktrees.set('/work/other', other)
+  await tuneIn($)
+  await turn($)
+  const edit = { tool: 'Edit', file_path: '/work/other/src/a.ts', old_string: 'a', new_string: 'b\nc\nd' } as never
+  // Its tree is read before the call, nothing has changed, so nothing is booked
+  await $.tool.call(edit)
+  other.numstat = '3\t0\tsrc/a.ts\n'
+  await $.tool.call(edit)
+  await stop($, { last_assistant_message: 'Done.' })
+  expect(w.record()?.stories.at(-1)).toMatchObject({ kind: 'ready', added: 3, removed: 0, files: 1 })
+})
+
+scenario('a commit keeps the lines counted before it', {}, async (w, $) => {
+  await tuneIn($)
+  await turn($)
+  w.git.numstat = '5\t1\tsrc/a.ts\n'
+  await $.tool.call({ tool: 'Edit', file_path: `${ROOT}/src/a.ts`, old_string: 'a', new_string: 'b' } as never)
+  w.git.head = 'c0ffee2'
+  w.git.numstat = ''
+  await $.tool.call({ tool: 'Bash', command: 'git commit -am "Fix"' } as never)
+  await stop($, { last_assistant_message: 'Done.' })
+  expect(w.record()?.stories.at(-1)).toMatchObject({ kind: 'ready', added: 5, removed: 1, files: 1 })
+  expect(w.record()?.hours.at(-1)).toMatchObject({ added: 5, removed: 1, files: 1 })
+})
+
+scenario('a turn that ends with work still running keeps its lines for the next story', {}, async (w, $) => {
+  await tuneIn($)
+  await turn($, 't1')
+  w.git.numstat = '7\t0\tsrc/a.ts\n'
+  await $.tool.call({ tool: 'Bash', command: 'npm run gen' } as never)
+  await stop($, {
+    last_assistant_message: 'Building.',
+    background_tasks: [{ id: 'b1', type: 'shell', status: 'running', description: 'Build', command: 'npm run build' }],
+  })
+  expect(w.record()?.stories).toHaveLength(0)
+  expect(w.record()?.hours.at(-1)).toMatchObject({ added: 7, files: 1 })
+  await turn($, 't2')
+  await stop($, { last_assistant_message: 'Built.' })
+  expect(w.record()?.stories[0]).toMatchObject({ kind: 'ready', added: 7, removed: 0, files: 1 })
+})
+
+scenario('lines count in the hour they are written', {}, async (w, $) => {
+  await tuneIn($)
+  await turn($)
+  w.git.numstat = '4\t0\tsrc/a.ts\n'
+  await $.tool.call({ tool: 'Bash', command: 'npm run gen' } as never)
+  await w.clock.advance(60 * 60_000)
+  w.git.numstat = '6\t0\tsrc/a.ts\n'
+  await $.tool.call({ tool: 'Bash', command: 'npm run gen' } as never)
+  await stop($, { last_assistant_message: 'Done.' })
+  expect(w.record()?.hours).toEqual([
+    { hour: hourKey(T0), added: 4, removed: 0, files: 1 },
+    { hour: hourKey(T0 + 60 * 60_000), added: 2, removed: 0, files: 1 },
+  ])
+  expect(w.record()?.stories.at(-1)).toMatchObject({ kind: 'ready', added: 6, files: 1 })
+})
+
+scenario('a call the engine ran read-only reads no git', {}, async (w, $) => {
+  await tuneIn($)
+  await turn($)
+  await w.clock.settle()
+  w.ran.length = 0
+  await $.tool.call({ tool: 'Bash', command: 'git log --oneline' } as never)
+  expect(w.ran.filter((argv) => argv[0] === '/usr/bin/git')).toEqual([])
+})
+
+scenario("what you change between turns is not the session's", {}, async (w, $) => {
+  await tuneIn($)
+  await turn($, 't1')
+  await stop($, { last_assistant_message: 'One.' })
+  w.git.numstat = '9\t2\tsrc/a.ts\n'
+  await turn($, 't2')
+  await stop($, { last_assistant_message: 'Two.' })
+  expect(w.record()?.stories.map((story) => story.kind)).toEqual(['complete', 'complete'])
+  expect(w.record()?.hours).toEqual([])
+})
+
+scenario('a reload keeps the stories and hours on the record, and numbers new stories after them', {}, async (w, $) => {
+  await tuneIn($)
+  const own = w.record()
+  // What the module before the reload left on the record
+  w.files.set(
+    RECORD,
+    JSON.stringify({
+      ...own,
+      stories: [{ id: `${ID}:7`, kind: 'complete', at: T0 }],
+      hours: [{ hour: hourKey(T0), added: 30, removed: 4, files: 2 }],
+    }),
+  )
+  // The module starts over; $.state says tuned in
+  await $.session.start(START)
+  expect(w.record()?.stories.map((story) => story.id)).toEqual([`${ID}:7`])
+  expect(w.record()?.hours).toEqual([{ hour: hourKey(T0), added: 30, removed: 4, files: 2 }])
+  await turn($)
+  await stop($, { last_assistant_message: 'Done.' })
+  expect(w.record()?.stories.at(-1)?.id).toBe(`${ID}:8`)
 })
 
 scenario('activity lines are written at most every two seconds, the last one by a timer', {}, async (w, $) => {

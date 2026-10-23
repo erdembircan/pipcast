@@ -9,15 +9,16 @@ import { BAND_HEIGHT, REACH, band, blankLabel } from '../src/core/band.ts'
 import { activity, lastWords, permission, question } from '../src/core/describe.ts'
 import type { ToolInput } from '../src/core/describe.ts'
 import { editCounts } from '../src/core/diffstat.ts'
+import type { Booking } from '../src/core/diffstat.ts'
+import { FILE_TOOLS, MAX_FOLDERS, NOTHING, agentMetaPath, look, parseAgentMeta, readTree, remember, topOf } from '../src/core/ledger.ts'
+import type { Reading } from '../src/core/ledger.ts'
 import * as record from '../src/core/model.ts'
 import type { SessionModel } from '../src/core/model.ts'
 import { willWake } from '../src/core/wake.ts'
 import {
-  changesSince,
   checkIn,
   countOnAir,
   ensureStation,
-  takeBaseline,
   tuneIn,
   tuneOut,
   writeRecord,
@@ -44,10 +45,17 @@ let transcriptDir: { id: string; dir: string | null } | null = null
 let lastWriteAt = 0
 // classic.SessionStart arrives before session.start: its title waits here
 let hookTitle: string | null = null
-// The turn's baseline being taken, so that classic.Stop can wait for it
-let baselineTask: Promise<void> = Promise.resolve()
 // Writes run one after another, so an older state never lands after a newer one
 let queue: Promise<void> = Promise.resolve()
+// The git trees the session's work runs in: each one's latest reading by its
+// top folder, least recently read first
+const trees = new Map<string, Reading>()
+// The top folder of the tree that holds each folder seen, or null outside git
+const tops = new Map<string, string | null>()
+// The worktree each subagent runs in, or null for one in the session's folder
+const agentFolders = new Map<string, string | null>()
+// Readings run one after another, so that two never book the same change
+let readings: Promise<void> = Promise.resolve()
 
 // The engine's own band is an empty Box; another mod's band has content.
 const hasContent = (drawn: RenderElement) => drawn.type !== 'Box' || (drawn.children?.length ?? 0) > 0
@@ -95,11 +103,14 @@ function ioFor($: EngineInterface): Io {
         return null
       }
     },
-    async size(path) {
+    async stat(path) {
       try {
         const found: unknown = await $.fs.stat(path)
-        const size = typeof found === 'object' && found !== null ? (found as { size?: unknown }).size : undefined
-        return typeof size === 'number' ? size : null
+        if (typeof found !== 'object' || found === null) {
+          return null
+        }
+        const { size, mtimeMs } = found as { size?: unknown; mtimeMs?: unknown }
+        return typeof size === 'number' && typeof mtimeMs === 'number' ? { size, mtimeMs } : null
       } catch {
         return null
       }
@@ -127,8 +138,15 @@ function ioFor($: EngineInterface): Io {
         return []
       }
     },
-    async run(argv, cwd) {
-      const done = await $.process.run(argv, cwd === undefined ? undefined : { cwd })
+    async run(argv, cwd, timeoutMs) {
+      const init: { cwd?: string; timeoutMs?: number } = {}
+      if (cwd !== undefined) {
+        init.cwd = cwd
+      }
+      if (timeoutMs !== undefined) {
+        init.timeoutMs = timeoutMs
+      }
+      const done = await $.process.run(argv, cwd === undefined && timeoutMs === undefined ? undefined : init)
       return { exitCode: done.exitCode, stdout: done.stdout, stderr: done.stderr }
     },
     async stationBinary() {
@@ -222,6 +240,187 @@ async function transcriptDirFor(io: Io, id: string): Promise<string | null> {
   return transcriptDir.dir
 }
 
+function inLine<T>(task: () => Promise<T>): Promise<T> {
+  const run = readings.then(task, task)
+  readings = run.then(
+    () => undefined,
+    () => undefined,
+  )
+  return run
+}
+
+// A new session, or none: its trees are found again
+function forgetTrees(): void {
+  trees.clear()
+  tops.clear()
+  agentFolders.clear()
+}
+
+function folderPart(path: string): string {
+  const at = path.lastIndexOf('/')
+  return at > 0 ? path.slice(0, at) : path
+}
+
+async function topFor(io: Io, folder: string): Promise<string | null> {
+  if (!tops.has(folder)) {
+    if (tops.size >= MAX_FOLDERS) {
+      tops.clear()
+    }
+    tops.set(folder, await topOf(io, folder))
+  }
+  return tops.get(folder) ?? null
+}
+
+// The folder a call runs in: a subagent's worktree, as the engine's note on
+// the subagent names it, else the session's own
+async function folderOf($: EngineInterface, io: Io, agent: string | null): Promise<string> {
+  const m = model
+  if (agent !== null && m !== null) {
+    if (!agentFolders.has(agent)) {
+      const dir = await transcriptDirFor(io, m.record.id)
+      const found = dir === null ? undefined : parseAgentMeta(await io.read(agentMetaPath(dir, m.record.id, agent)))
+      // With no note yet, the subagent's next call looks again
+      if (found !== undefined) {
+        if (agentFolders.size >= MAX_FOLDERS) {
+          agentFolders.clear()
+        }
+        agentFolders.set(agent, found)
+      }
+    }
+    const worktree = agentFolders.get(agent)
+    if (typeof worktree === 'string') {
+      return worktree
+    }
+  }
+  return $.session.cwd()
+}
+
+// Reads the tree at `top` again and keeps the reading: what changed since the last one
+function lookAt(io: Io, top: string): Promise<Booking> {
+  return inLine(async () => {
+    const before = trees.get(top)
+    if (before === undefined) {
+      return NOTHING
+    }
+    const { reading, booking } = await look(io, before)
+    if (reading === null) {
+      trees.delete(top)
+    } else {
+      remember(trees, reading)
+    }
+    return booking
+  })
+}
+
+// Books lines on the model of the session they were counted for; true when the model changed
+async function bookNow($: EngineInterface, id: string | undefined, booking: Booking): Promise<boolean> {
+  const now = await $.clock.now()
+  if (model === null || model.record.id !== id) {
+    return false
+  }
+  const next = record.booked(model, now, booking)
+  const changed = next !== model
+  model = next
+  return changed
+}
+
+// What a call is watched in: the trees it can change. With none, the call
+// runs outside git, and the edit tools' own figures count.
+interface Watch {
+  tops: string[]
+  plain: boolean
+}
+
+// Before a call that can change files: the trees it runs in, each read first
+// when it is new to the session
+async function watch($: EngineInterface, agent: string | null, tool: string, input: ToolInput): Promise<Watch> {
+  const io = ioFor($)
+  const own = await topFor(io, await folderOf($, io, agent))
+  const found = own === null ? [] : [own]
+  const edit = editCounts(tool, input)
+  if (edit !== null) {
+    const top = await topFor(io, folderPart(edit.file))
+    if (top !== null && !found.includes(top)) {
+      found.push(top)
+    }
+  }
+  for (const top of found) {
+    await inLine(async () => {
+      if (!trees.has(top)) {
+        const reading = await readTree(io, top, null)
+        if (reading !== null) {
+          remember(trees, reading)
+        }
+      }
+    })
+  }
+  return { tops: found, plain: found.length === 0 }
+}
+
+// After the call: each tree it could have changed is read again and what
+// changed is booked; outside git, the edit tool's own figures are. Nothing
+// for a call that was refused, or that the engine ran read-only.
+async function book($: EngineInterface, watched: Watch, tool: string, input: ToolInput, result: unknown): Promise<void> {
+  const { deny, isError, isReadOnly } = (typeof result === 'object' && result !== null ? result : {}) as {
+    deny?: unknown
+    isError?: unknown
+    isReadOnly?: unknown
+  }
+  if (deny !== undefined || isReadOnly === true) {
+    return
+  }
+  const io = ioFor($)
+  const id = model?.record.id
+  let changed = false
+  for (const top of watched.tops) {
+    changed = (await bookNow($, id, await lookAt(io, top))) || changed
+  }
+  const edit = watched.plain && isError !== true ? editCounts(tool, input) : null
+  if (edit !== null) {
+    changed = (await bookNow($, id, { added: edit.added, removed: edit.removed, files: [edit.file] })) || changed
+  }
+  if (changed) {
+    await saveActivity($)
+  }
+}
+
+// The session's own tree as a turn ends: what changed during the turn that no
+// call's reading caught
+async function lookOwnTree($: EngineInterface): Promise<void> {
+  try {
+    const io = ioFor($)
+    const id = model?.record.id
+    const top = await topFor(io, await $.session.cwd())
+    if (top !== null) {
+      await bookNow($, id, await lookAt(io, top))
+    }
+  } catch (error) {
+    failure($, 'lines', error)
+  }
+}
+
+// A turn starts from a fresh reading of the session's own tree, so what you
+// changed between turns is not counted as the session's
+async function rebaseOwnTree($: EngineInterface): Promise<void> {
+  try {
+    const io = ioFor($)
+    const top = await topFor(io, await $.session.cwd())
+    if (top === null) {
+      return
+    }
+    await inLine(async () => {
+      const reading = await readTree(io, top, trees.get(top) ?? null)
+      if (reading === null) {
+        trees.delete(top)
+      } else {
+        remember(trees, reading)
+      }
+    })
+  } catch (error) {
+    failure($, 'lines', error)
+  }
+}
+
 // Puts the engine's title file's title on the model, and writes the record at
 // once when the title changed
 async function checkTitle($: EngineInterface): Promise<void> {
@@ -305,6 +504,7 @@ async function ensureSession($: EngineInterface): Promise<SessionModel> {
   sessionRoot = root
   tunedInAt = null
   stopTimers()
+  forgetTrees()
   heartbeat?.cancel()
   heartbeat = $.clock.every(HEARTBEAT_MS, () => {
     void beat($)
@@ -324,6 +524,10 @@ async function startSession($: EngineInterface): Promise<void> {
     if (own === null) {
       await update($, tuned, () => false)
     } else {
+      // The module before the reload kept the session's stories and hours on its record
+      if (model !== null) {
+        model = record.restored(model, own)
+      }
       await checkTitle($)
       tunedInAt = own.tunedInAt
       await save($)
@@ -344,6 +548,7 @@ async function endSession($: EngineInterface): Promise<void> {
   tunedInAt = null
   hookTitle = null
   transcriptDir = null
+  forgetTrees()
   if (m !== null) {
     const io = ioFor($)
     const home = await io.storeHome()
@@ -430,17 +635,7 @@ async function onTurnStart($: EngineInterface, turnId: string): Promise<void> {
   }
   model = record.turnStarted(model, await $.clock.now(), turnId)
   await save($)
-  const io = ioFor($)
-  baselineTask = (async () => {
-    try {
-      const baseline = await takeBaseline(io, sessionRoot)
-      if (baseline !== null && model !== null) {
-        model = record.baselineTaken(model, turnId, baseline)
-      }
-    } catch (error) {
-      failure($, 'baseline', error)
-    }
-  })()
+  await rebaseOwnTree($)
 }
 
 async function onToolBefore($: EngineInterface, tool: string, input: ToolInput): Promise<void> {
@@ -451,10 +646,6 @@ async function onToolBefore($: EngineInterface, tool: string, input: ToolInput):
   const text = activity(tool, input, sessionRoot)
   if (text !== null) {
     model = record.activity(model, now, text)
-  }
-  const counts = editCounts(tool, input)
-  if (counts !== null) {
-    model = record.edited(model, counts.file, counts.added, counts.removed)
   }
   const asked = tool === 'AskUserQuestion' ? question(input) : null
   if (asked !== null) {
@@ -491,23 +682,12 @@ async function onStop($: EngineInterface, e: { last_assistant_message?: string; 
     return
   }
   const background = willWake(e)
-  let changes = { added: 0, removed: 0, files: 0 }
-  if (!background) {
-    await baselineTask
-    const baseline = model.turn.baseline
-    if (baseline !== null) {
-      changes = await changesSince(ioFor($), sessionRoot, baseline)
-    } else {
-      const edits = model.turn.edits
-      changes = { added: edits.added, removed: edits.removed, files: edits.files.size }
-    }
-  }
+  await lookOwnTree($)
   if (model === null) {
     return
   }
   model = record.finished(model, await $.clock.now(), {
     lastWords: lastWords(e.last_assistant_message ?? ''),
-    changes,
     background,
   })
   await save($)
@@ -517,11 +697,19 @@ async function onFailure($: EngineInterface, kind: string): Promise<void> {
   if (model === null) {
     return
   }
+  await lookOwnTree($)
+  if (model === null) {
+    return
+  }
   model = record.failed(model, await $.clock.now(), kind)
   await save($)
 }
 
 async function onComplete($: EngineInterface, isAborted: boolean, reason: string): Promise<void> {
+  if (model === null || model.turn.ended) {
+    return
+  }
+  await lookOwnTree($)
   if (model === null || model.turn.ended) {
     return
   }
@@ -578,14 +766,24 @@ export const register: Register = (on) => {
   })
 
   on('tool.call', async ($, e, next) => {
-    // A subagent's calls make no activity, edits or questions here; its permission
-    // is answered when its own call returns
+    // A subagent's calls make no activity or questions here, and its permission
+    // is answered when its own call returns. The lines it changes count as the
+    // main loop's do.
     const agent = typeof e.agentId === 'string' && e.agentId !== '' ? e.agentId : null
+    const input = toolInput(e)
     if (agent === null) {
       try {
-        await onToolBefore($, e.tool, toolInput(e))
+        await onToolBefore($, e.tool, input)
       } catch (error) {
         failure($, 'tool.call', error)
+      }
+    }
+    let watched: Watch | null = null
+    if (FILE_TOOLS.includes(e.tool)) {
+      try {
+        watched = await watch($, agent, e.tool, input)
+      } catch (error) {
+        failure($, 'lines', error)
       }
     }
     const result = await next(e)
@@ -593,6 +791,13 @@ export const register: Register = (on) => {
       await onToolAfter($, agent)
     } catch (error) {
       failure($, 'tool.call', error)
+    }
+    if (watched !== null) {
+      try {
+        await book($, watched, e.tool, input, result)
+      } catch (error) {
+        failure($, 'lines', error)
+      }
     }
     return result
   })

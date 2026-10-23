@@ -5,14 +5,21 @@ import { errorWords } from '../contract/copy.ts'
 import { hourKey } from '../contract/format.ts'
 import { trimRecord } from '../contract/validate.ts'
 import type { SessionRecord, SessionState, Story } from '../contract/types.ts'
-import type { Changes, Numstat } from './diffstat.ts'
+import type { Booking } from './diffstat.ts'
 
 export interface Turn {
   id: string | null
   startedAt: number | null
-  baseline: { numstat: Numstat; untracked: Set<string> } | null
-  edits: { added: number; removed: number; files: Set<string> }
   ended: boolean
+}
+
+// The lines and files changed since the session's last finished story: what
+// its next ready story says. A turn that ends with work still running leaves
+// it to the next turn.
+export interface Tally {
+  added: number
+  removed: number
+  files: ReadonlySet<string>
 }
 
 // The session's titles: the engine's title file's, the latest a hook carried,
@@ -37,10 +44,18 @@ export interface SessionModel {
   titles: Titles
   // The loop the session waits on: agent is the subagent's id, or null for the main loop; null when it waits on nobody
   waitingOn: { agent: string | null } | null
+  // What changed since the last finished story
+  tally: Tally
+  // The files booked in the hour of the latest booking, so that each counts once in its hour
+  hourFiles: { hour: string; files: ReadonlySet<string> } | null
 }
 
 function emptyTurn(): Turn {
-  return { id: null, startedAt: null, baseline: null, edits: { added: 0, removed: 0, files: new Set() }, ended: true }
+  return { id: null, startedAt: null, ended: true }
+}
+
+function emptyTally(): Tally {
+  return { added: 0, removed: 0, files: new Set<string>() }
 }
 
 function withRecord(m: SessionModel, record: SessionRecord, rest: Partial<Omit<SessionModel, 'record'>> = {}): SessionModel {
@@ -76,11 +91,13 @@ export function newModel(id: string, project: string, fallback: string, now: num
     turn: emptyTurn(),
     titles: { file: null, hook: null, fallback },
     waitingOn: null,
+    tally: emptyTally(),
+    hourFiles: null,
   }
 }
 
 export function turnStarted(m: SessionModel, now: number, turnId: string): SessionModel {
-  const turn: Turn = { id: turnId, startedAt: now, baseline: null, edits: { added: 0, removed: 0, files: new Set() }, ended: false }
+  const turn: Turn = { id: turnId, startedAt: now, ended: false }
   return withRecord(m, withState(m.record, 'working', now), { turn, waitingOn: null })
 }
 
@@ -123,52 +140,93 @@ function duration(m: SessionModel, now: number): { durationMs?: number } {
   return m.turn.startedAt === null ? {} : { durationMs: Math.max(0, now - m.turn.startedAt) }
 }
 
-function withHour(record: SessionRecord, now: number, changes: Changes): SessionRecord {
-  const key = hourKey(now)
+function withHour(record: SessionRecord, key: string, added: number, removed: number, files: number): SessionRecord {
   const hours = record.hours.slice()
   const at = hours.findIndex((hour) => hour.hour === key)
-  if (at >= 0) {
-    const hour = hours[at]
-    if (hour !== undefined) {
-      hours[at] = {
-        hour: key,
-        added: hour.added + changes.added,
-        removed: hour.removed + changes.removed,
-        files: hour.files + changes.files,
-      }
-    }
+  const hour = at >= 0 ? hours[at] : undefined
+  if (hour !== undefined) {
+    hours[at] = { hour: key, added: hour.added + added, removed: hour.removed + removed, files: hour.files + files }
   } else {
-    hours.push({ hour: key, added: changes.added, removed: changes.removed, files: changes.files })
+    hours.push({ hour: key, added, removed, files })
   }
   return { ...record, hours }
 }
 
-export function finished(m: SessionModel, now: number, done: { lastWords: string; changes: Changes; background: boolean }): SessionModel {
+// Lines a reading of a tree found, or an edit tool made: added to the hour of
+// now, where each file counts once, and to the tally
+export function booked(m: SessionModel, now: number, booking: Booking): SessionModel {
+  if (booking.added === 0 && booking.removed === 0 && booking.files.length === 0) {
+    return m
+  }
+  const key = hourKey(now)
+  const inHour = new Set<string>(m.hourFiles !== null && m.hourFiles.hour === key ? m.hourFiles.files : [])
+  const tallied = new Set<string>(m.tally.files)
+  let fresh = 0
+  for (const file of booking.files) {
+    if (!inHour.has(file)) {
+      inHour.add(file)
+      fresh += 1
+    }
+    tallied.add(file)
+  }
+  return withRecord(m, withHour(m.record, key, booking.added, booking.removed, fresh), {
+    tally: { added: m.tally.added + booking.added, removed: m.tally.removed + booking.removed, files: tallied },
+    hourFiles: { hour: key, files: inHour },
+  })
+}
+
+export function finished(m: SessionModel, now: number, done: { lastWords: string; background: boolean }): SessionModel {
   if (done.background) {
     // Work the session started will wake it again: still working, with no story yet, but this turn is over
     return withRecord(m, withState(m.record, 'working', now), { turn: { ...m.turn, ended: true }, waitingOn: null })
   }
-  const { changes } = done
+  const { tally } = m
   let story: Omit<Story, 'id' | 'at'>
-  if (changes.files > 0) {
-    story = { kind: 'ready', added: changes.added, removed: changes.removed, files: changes.files, ...duration(m, now) }
+  if (tally.files.size > 0) {
+    story = { kind: 'ready', added: tally.added, removed: tally.removed, files: tally.files.size, ...duration(m, now) }
   } else {
     story = { kind: 'complete', ...(done.lastWords === '' ? {} : { quote: done.lastWords }), ...duration(m, now) }
   }
   const { record, seq } = addStory(m, now, story)
-  return withRecord(m, withHour(withState(record, 'ready', now), now, changes), { seq, turn: { ...m.turn, ended: true }, waitingOn: null })
+  return withRecord(m, withState(record, 'ready', now), {
+    seq,
+    turn: { ...m.turn, ended: true },
+    waitingOn: null,
+    tally: emptyTally(),
+  })
 }
 
 export function failed(m: SessionModel, now: number, kind: string): SessionModel {
   const { record, seq } = addStory(m, now, { kind: 'error', quote: errorWords(kind), ...duration(m, now) })
-  return withRecord(m, withState(record, 'error', now), { seq, turn: { ...m.turn, ended: true }, waitingOn: null })
+  return withRecord(m, withState(record, 'error', now), {
+    seq,
+    turn: { ...m.turn, ended: true },
+    waitingOn: null,
+    tally: emptyTally(),
+  })
 }
 
 export function aborted(m: SessionModel, now: number): SessionModel {
   if (m.turn.ended) {
     return m
   }
-  return withRecord(m, withState(m.record, 'ready', now), { turn: { ...m.turn, ended: true }, waitingOn: null })
+  return withRecord(m, withState(m.record, 'ready', now), { turn: { ...m.turn, ended: true }, waitingOn: null, tally: emptyTally() })
+}
+
+// After a reload: the stories and hours the session's own record kept, and
+// story numbers that carry on after its newest, which the station has seen
+export function restored(m: SessionModel, own: SessionRecord): SessionModel {
+  const prefix = `${m.record.id}:`
+  let seq = m.seq
+  for (const story of own.stories) {
+    if (story.id.startsWith(prefix)) {
+      const n = Number.parseInt(story.id.slice(prefix.length), 10)
+      if (Number.isFinite(n) && n > seq) {
+        seq = n
+      }
+    }
+  }
+  return withRecord(m, { ...m.record, stories: own.stories, hours: own.hours }, { seq })
 }
 
 function withTitles(m: SessionModel, titles: Titles): SessionModel {
@@ -186,16 +244,4 @@ export function hookTitled(m: SessionModel, title: string): SessionModel {
 // The engine's title file was read: its title, or null when it holds none
 export function fileTitled(m: SessionModel, title: string | null): SessionModel {
   return withTitles(m, { ...m.titles, file: title === '' ? null : title })
-}
-
-// The turn's baseline, taken after it started; ignored for a turn that has moved on
-export function baselineTaken(m: SessionModel, turnId: string | null, baseline: NonNullable<Turn['baseline']>): SessionModel {
-  return m.turn.id === turnId && !m.turn.ended ? { ...m, turn: { ...m.turn, baseline } } : m
-}
-
-// What an edit tool did, for a session with no repository
-export function edited(m: SessionModel, file: string, added: number, removed: number): SessionModel {
-  const files = new Set(m.turn.edits.files)
-  files.add(file)
-  return { ...m, turn: { ...m.turn, edits: { added: m.turn.edits.added + added, removed: m.turn.edits.removed + removed, files } } }
 }

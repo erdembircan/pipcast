@@ -26,8 +26,8 @@
   },
   "lastChange": {
     "by": "erdembircan",
-    "at": "2026-10-23T10:23:00Z",
+    "at": "2026-10-23T12:30:00Z",
     "via": "Claude Code",
-    "note": "The ticker's belt is a layer of its own, so the crawl moves it each frame and redraws nothing"
+    "note": "Lines changed are counted in every working tree a session's work runs in, after each call that can change files"
   }
 }
