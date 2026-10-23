@@ -40,9 +40,9 @@ interface Story {
   at: number          // ms since the epoch, when it landed
   command?: string    // needs-input, a permission: the command, or "Edit src/a.ts"
   quote?: string      // the description, the question, the last words, or the error in words
-  added?: number      // ready: lines added during the turn
-  removed?: number    // ready: lines removed
-  files?: number      // ready: files changed
+  added?: number      // ready: lines added since the session's last finished story
+  removed?: number    // ready: lines removed since then
+  files?: number      // ready: files changed since then
   durationMs?: number // ready, complete, error: how long the turn ran
 }
 
@@ -70,17 +70,17 @@ interface SessionRecord {
 `plugin/` is a Claude Code plugin with one hooks module, `hooks/register.tsx`, which only wires hooks to the code in `plugin/src`.
 
 - `src/contract` holds the types, constants and words that the mod, the station and the broadcast share.
-- `src/core` holds the mod's logic with no `$` in it: the record reducer, the descriptions of tools and permissions, the diff counter, the band's artwork, and the services that tune in, tune out and check in. The services talk to the world through an `Io` port: read, write, list and rename files, look up a file's size, run a command, read the clock.
+- `src/core` holds the mod's logic with no `$` in it: the record reducer, the descriptions of tools and permissions, the diff counter and the ledger that reads git for the lines changed, the band's artwork, and the services that tune in, tune out and check in. The services and the ledger talk to the world through an `Io` port: read, write, list and rename files, look up a file's size and when it last changed, run a command with a time limit, read the clock.
 - `register.tsx` builds that port from `$` and hands it to the services. Only functions at the top of that file take `$`, which is what `claude plugin validate` asks for.
 
 What it listens to:
 
 | Event | What changes |
 | --- | --- |
-| `turn.start` | The session is working. The diff counter takes its baseline with `git diff-index -M --numstat HEAD` |
-| `tool.call` | One activity line. `AskUserQuestion` is a needs-input story with the question; when the call returns, the session is working again |
+| `turn.start` | The session is working. Its own tree is read afresh, so what you changed between turns does not count as its work |
+| `tool.call` | One activity line. `AskUserQuestion` is a needs-input story with the question; when the call returns, the session is working again. When a call that can change files returns, the main loop's or a subagent's, the tree it ran in is read again and what changed is booked (Lines changed, below) |
 | `classic.PermissionRequest` | A needs-input story with the command and Claude's description of it |
-| `classic.Stop` | While work the session started will wake it again, still working, with no story yet: a command running in the background, a subagent, a workflow, an MCP task or an MCP server's monitor, or a scheduled wake-up. Otherwise a ready story when files changed, with the diff, or a complete story with Claude's last words |
+| `classic.Stop` | While work the session started will wake it again, still working, with no story yet: a command running in the background, a subagent, a workflow, an MCP task or an MCP server's monitor, or a scheduled wake-up. Otherwise a ready story when files changed since the session's last finished story, with the lines, or a complete story with Claude's last words |
 | `classic.StopFailure` | An error story, its kind in plain words |
 | `turn.complete` | For a turn no `Stop` or `StopFailure` ended: an API error is an error story; an interrupt, or any other end, leaves the session ready, with no story |
 | `classic.SessionStart`, `classic.UserPromptSubmit` | The session's title, when they carry one |
@@ -89,6 +89,14 @@ What it listens to:
 The mod keeps its record in memory whether or not the session is tuned in, so tuning in mid-turn shows the right state at once. It writes the record only while tuned in: at once for a new state or story, at most every 2 s for activity, and every 10 s as a heartbeat. The heartbeat also reads `control.json`, counts who is on air for the band, and starts the station again if `station.json` has gone quiet for 20 s.
 
 The title on air is the one the engine keeps. The engine writes a session's title to a small file beside its transcript, `<the transcript's folder>/<session id>/custom-title.json`, the moment it changes: a rename in the desktop app or with `/rename`, or a title the app gives the session itself. While the session is tuned in, the mod reads that file once a minute, a read of a few dozen bytes that starts no process, and writes the record at once when the title has changed. Tuning in reads it first, so the record carries the current title from its first write. With no file, or no title in it, the title is the latest one a hook carried, else the default name; a file caught half-written leaves the title as it was. Every classic hook says where the transcript is; after a reload, before one has fired, the mod finds the transcript once with `find`.
+
+### Lines changed
+
+The lines on air are counted where the work happens, as it happens. The mod keeps a reading of each git working tree the session's work runs in: the session's own folder, and the worktree of each subagent, which the engine names in its note on the subagent beside the transcript (`<session id>/subagents/agent-<agent id>.meta.json`). A tree is first read just before the first call that can change files there. The calls that can are Bash, Edit, MultiEdit, Write and NotebookEdit, from the main loop or a subagent. After each one the tree is read again, unless the engine ran the call read-only, and what changed since the last reading is booked at once in two places. One is the hour it happened in, which the report on the hour adds up. The other is the tally for the session's next ready story. A turn that ends with work still running leaves its tally to the next turn.
+
+A reading is the commit (`git rev-parse HEAD`), each tracked file's lines against that commit (`git diff-index -M --numstat`), and the untracked files (`git ls-files --others --exclude-standard`), each counted as all its lines added. So a new file counts once, whether it is later added, committed or both. When the commit has moved since the last reading, through a commit, a pull, a rebase or a checkout, nothing is booked and the next reading starts from the new commit. The session's own lines were booked as they were written, and lines that arrive from elsewhere are not its work. The one thing this misses is a single command that both changes files and commits them. Each turn also starts with a fresh reading of the session's own tree, so what you change between turns is not counted, and ends with one more, which catches what no call's reading did. Outside git, the edit tools' own figures count once a call has run.
+
+The readings live in the mod's memory. A reload starts them over and keeps the record's stories and hours. The session's next story is numbered after the newest one the record holds, since the station takes a number it has already seen for a story that has aired.
 
 ### The band
 
@@ -175,4 +183,5 @@ CI runs the lint, the types and the unit tests on every pull request and on mast
 - **Two private switches in the station.** The window never takes the keyboard, so its app is never active, and macOS treats it that way: AppKit draws Liquid Glass flat in a window without an active appearance, and the window server ignores a pointer set by an app that is not frontmost. The station forces its panel's active appearance (`_setForceMainAppearance:`), which changes how the panel is drawn and never makes it key, and sets its window-server connection's `SetsCursorInBackground` property. Both are looked up at run time: on a macOS without one, the station logs it and carries on with flat glass or the plain pointer.
 - **The title from the engine's own file.** A mod gets no event for a rename and no call for the title, and the hooks carry the title only when a session starts or a prompt is sent, which misses a rename between prompts. The transcript records every rename too, but it runs to megabytes. `custom-title.json` holds the title alone, so reading it once a minute while on air costs next to nothing.
 - **Nothing airs from while Claude is in front.** Claude shows every story itself while it is in front. Kept for the window, those stories aired one after another when you left Claude, each looking like news that had just happened. They are dropped instead; the board and the ticker still show where each session stands.
-- **Git that never takes the index lock.** The diff counter runs git in the session's repository as every turn starts and ends, tuned in or not, while Claude or you may be running git there too. When files were touched without changing, `git diff` writes the index back under `.git/index.lock`, and a `git commit` that needs the lock at that moment fails. `git diff-index -M` gives the same counts and never writes the index. A new untracked file counts as git will count it once it is added: its lines, or none for a binary file or one over 1 MB. Its size is looked up first, so a big file is not read at all.
+- **Lines counted where the work happens, as it happens.** Reading only the session's own folder, as each turn started and ended, missed most of the work. A subagent in a worktree of its own works in another folder. A commit made during a turn took its lines out of the next `git diff`. A turn that ended with work still running booked nothing, and one that ran past the hour booked its lines in the next. On 23 October the report at 14:00 read +0 −0 for two sessions whose implementers had written and committed their changes in worktrees of their own. Reading a tree after every call that can change files books the lines in the hour they are written, before a commit can hide them, in whichever worktree they are written. A reading takes about 40 ms in a repository of a few hundred files, and none follows a call the engine ran read-only.
+- **Git that never takes the index lock.** The mod runs git in the trees the session works in, after every call that can change files, tuned in or not, while Claude or you may be running git there too. When files were touched without changing, `git diff` writes the index back under `.git/index.lock`, and a `git commit` that needs the lock at that moment fails. `git diff-index -M` gives the same counts and never writes the index. A new untracked file counts as git will count it once it is added: its lines, or none for a binary file or one over 1 MB. Its size is looked up first, so a big file is not read at all, and it is read again only when its size or the time it last changed moves.
