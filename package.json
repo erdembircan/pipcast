@@ -10,7 +10,7 @@
   },
   "scripts": {
     "lint": "eslint .",
-    "typecheck": "tsc -p tsconfig.plugin.json && tsc -p tsconfig.packages.json",
+    "typecheck": "tsc -p tsconfig.plugin.json && tsc -p tsconfig.packages.json && tsc -p tsconfig.real.json",
     "test": "TZ=UTC vitest run",
     "build:web": "node scripts/build-web.mjs",
     "build:jingles": "node scripts/render-jingles.mjs",

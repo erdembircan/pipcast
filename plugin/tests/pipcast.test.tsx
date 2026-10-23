@@ -409,6 +409,115 @@ scenario('Stop with only artifact watches, housekeeping and idle helpers in flig
   expect(w.record()?.stories[0]).toMatchObject({ kind: 'complete', quote: 'Published the board.' })
 })
 
+// A command left running in the background, as a Stop lists it
+const command = (id: string, line: string, description = 'A command in the background') => ({ id, type: 'shell', status: 'running', description, command: line })
+
+scenario('Stop with a dev server left running in the background is finished at once', {}, async (w, $) => {
+  await tuneIn($)
+  await turn($)
+  w.task('b1devsrv0', { listens: true, output: '  VITE v5.4.0  ready in 300 ms\n' })
+  await stop($, { last_assistant_message: 'The site is up at localhost:5173.', background_tasks: [command('b1devsrv0', 'npm run dev', 'Start the dev server')] })
+  expect(w.record()?.state).toBe('ready')
+  expect(w.record()?.stories).toHaveLength(1)
+  expect(w.record()?.stories[0]).toMatchObject({ kind: 'complete', quote: 'The site is up at localhost:5173.' })
+})
+
+scenario('Stop with a watcher left running is finished: by what it runs, or by what it says', {}, async (w, $) => {
+  await tuneIn($)
+  await turn($, 't1')
+  await stop($, { last_assistant_message: 'Types are watched.', background_tasks: [command('b2tscwch0', 'npx tsc --watch')] })
+  expect(w.record()?.state).toBe('ready')
+  expect(w.record()?.stories.at(-1)).toMatchObject({ kind: 'complete', quote: 'Types are watched.' })
+  await turn($, 't2')
+  w.task('b3build00', { output: '[watch] build finished, watching for changes...\n' })
+  await stop($, { last_assistant_message: 'The bundle rebuilds on save.', background_tasks: [command('b3build00', 'npm run build:watch')] })
+  expect(w.record()?.state).toBe('ready')
+  expect(w.record()?.stories.at(-1)).toMatchObject({ kind: 'complete', quote: 'The bundle rebuilds on save.' })
+})
+
+scenario('Stop while a background command works stays working, and its finish lands once the command serves', {}, async (w, $) => {
+  await tuneIn($)
+  await turn($)
+  await $.tool.call({ tool: 'Write', file_path: `${ROOT}/a.txt`, content: 'x\ny\n' } as never)
+  w.git.untracked = ['a.txt']
+  w.files.set(`${ROOT}/a.txt`, 'x\ny\n')
+  const dev = w.task('b4devsrv0')
+  await w.clock.advance(1000)
+  await stop($, { last_assistant_message: 'Starting the dev server.', background_tasks: [command('b4devsrv0', 'npm install && npm run dev')] })
+  expect(w.record()?.state).toBe('working')
+  expect(w.record()?.stories).toEqual([])
+  // Still installing at the next beat
+  await w.clock.advance(10_000)
+  expect(w.record()?.state).toBe('working')
+  expect(w.record()?.stories).toEqual([])
+  dev.listen()
+  await w.clock.advance(10_000)
+  expect(w.record()?.state).toBe('ready')
+  expect(w.record()?.stories).toEqual([{ id: `${ID}:1`, kind: 'ready', at: T0 + 20_000, added: 2, removed: 0, files: 1, durationMs: 1000 }])
+})
+
+scenario('a session waiting on a command the look cannot find stays working: a Monitor writes to the engine', {}, async (w, $) => {
+  await tuneIn($)
+  await turn($)
+  await stop($, {
+    last_assistant_message: 'Watching the deploy.',
+    background_tasks: [command('blv20kp2f', 'until gh run view 9 --json status | grep -q completed; do sleep 30; done', 'Deploy finished')],
+  })
+  await w.clock.advance(180_000)
+  expect(w.record()?.state).toBe('working')
+  expect(w.record()?.stories).toEqual([])
+})
+
+scenario('a look that cannot be made leaves the session working', {}, async (w, $) => {
+  await tuneIn($)
+  await turn($)
+  w.task('b5devsrv0', { listens: true })
+  w.procs.fails = true
+  await stop($, { last_assistant_message: 'Up.', background_tasks: [command('b5devsrv0', 'npm run dev')] })
+  expect(w.record()?.state).toBe('working')
+  expect(w.record()?.stories).toEqual([])
+})
+
+scenario('with a subagent at work beside a dev server, the finish waits and nothing is looked at', {}, async (w, $) => {
+  await tuneIn($)
+  await turn($)
+  w.task('b6devsrv0', { listens: true })
+  await stop($, {
+    last_assistant_message: 'The implementer is on it.',
+    background_tasks: [
+      { id: 'a3f9c2m7x', type: 'subagent', status: 'running', description: 'Implement the fix', agent_type: 'implementer' },
+      command('b6devsrv0', 'npm run dev'),
+    ],
+  })
+  await w.clock.advance(30_000)
+  expect(w.record()?.state).toBe('working')
+  expect(w.record()?.stories).toEqual([])
+  expect(w.ran.some((argv) => argv[0] === '/bin/ps' || argv[0] === '/usr/sbin/lsof')).toBe(false)
+})
+
+scenario('a new turn takes a waiting finish back: only the new turn\'s story lands', {}, async (w, $) => {
+  await tuneIn($)
+  await turn($, 't1')
+  const run = w.task('b7tstrun0')
+  await stop($, { last_assistant_message: 'Running the tests.', background_tasks: [command('b7tstrun0', 'npm test')] })
+  expect(w.record()?.state).toBe('working')
+  run.end()
+  await turn($, 't2')
+  await stop($, { last_assistant_message: 'All tests pass.' })
+  await w.clock.advance(30_000)
+  expect(w.record()?.stories).toHaveLength(1)
+  expect(w.record()?.stories[0]).toMatchObject({ kind: 'complete', quote: 'All tests pass.' })
+})
+
+scenario('a Stop with nothing in the background looks at no process', {}, async (w, $) => {
+  await tuneIn($)
+  await turn($)
+  await stop($, { last_assistant_message: 'Done.', background_tasks: [{ id: 's4j8w2n6q', type: 'monitor', status: 'running', description: 'PiP Newsroom · Station' }] })
+  await w.clock.advance(30_000)
+  expect(w.record()?.state).toBe('ready')
+  expect(w.ran.some((argv) => argv[0] === '/bin/ps' || argv[0] === '/usr/sbin/lsof')).toBe(false)
+})
+
 scenario('a turn that ends with no Stop the mod saw leaves the session ready, with no story', {}, async (w, $) => {
   await tuneIn($)
   await turn($)

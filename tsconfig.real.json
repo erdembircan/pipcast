@@ -1,0 +1,7 @@
+{
+  "extends": "./tsconfig.plugin.json",
+  "compilerOptions": {
+    "types": ["node"]
+  },
+  "include": ["test/real"]
+}
