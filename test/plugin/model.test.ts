@@ -4,7 +4,6 @@ import { ERROR_WORDS, MAX_ACTIVITY, MAX_HOURS, MAX_STORIES, hourKey } from '@pip
 import * as m from '../../plugin/src/core/model.ts'
 
 const T = Date.UTC(2026, 9, 21, 14, 30, 0)
-const none = { added: 0, removed: 0, files: 0 }
 
 const fresh = () => m.newModel('abc', 'proj', 'Title', T)
 const working = () => m.turnStarted(fresh(), T + 1000, 't1')
@@ -36,8 +35,7 @@ describe('turnStarted', () => {
     const model = working()
     expect(model.record.state).toBe('working')
     expect(model.record.stateAt).toBe(T + 1000)
-    expect(model.turn).toMatchObject({ id: 't1', startedAt: T + 1000, baseline: null, ended: false })
-    expect(model.turn.edits.files.size).toBe(0)
+    expect(model.turn).toMatchObject({ id: 't1', startedAt: T + 1000, ended: false })
   })
 
   it('leaves stateAt alone when the state does not change', () => {
@@ -149,18 +147,63 @@ describe('resumed', () => {
   it('is cleared when a turn starts, finishes, fails or is interrupted', () => {
     const asked = () => m.askedPermission(working(), T + 2000, 'ls', undefined, 'a1')
     expect(m.turnStarted(asked(), T + 3000, 't2').waitingOn).toBeNull()
-    expect(m.finished(asked(), T + 3000, { lastWords: 'x', changes: none, background: false }).waitingOn).toBeNull()
-    expect(m.finished(asked(), T + 3000, { lastWords: 'x', changes: none, background: true }).waitingOn).toBeNull()
-    expect(m.finished(asked(), T + 3000, { lastWords: '', changes: { added: 1, removed: 0, files: 1 }, background: false }).waitingOn).toBeNull()
+    expect(m.finished(asked(), T + 3000, { lastWords: 'x', background: false }).waitingOn).toBeNull()
+    expect(m.finished(asked(), T + 3000, { lastWords: 'x', background: true }).waitingOn).toBeNull()
+    const changed = m.booked(asked(), T + 2500, { added: 1, removed: 0, files: ['/p/a.ts'] })
+    expect(m.finished(changed, T + 3000, { lastWords: '', background: false }).waitingOn).toBeNull()
     expect(m.failed(asked(), T + 3000, 'unknown').waitingOn).toBeNull()
     expect(m.aborted(asked(), T + 3000).waitingOn).toBeNull()
+  })
+})
+
+describe('booked', () => {
+  it('adds the lines to the hour of now and to the tally', () => {
+    const model = m.booked(working(), T + 5000, { added: 4, removed: 1, files: ['/p/a.ts'] })
+    expect(model.record.hours).toEqual([{ hour: hourKey(T + 5000), added: 4, removed: 1, files: 1 }])
+    expect(model.tally).toEqual({ added: 4, removed: 1, files: new Set(['/p/a.ts']) })
+    const again = m.booked(model, T + 9000, { added: 2, removed: 2, files: ['/p/b.ts'] })
+    expect(again.record.hours).toEqual([{ hour: hourKey(T + 9000), added: 6, removed: 3, files: 2 }])
+    expect(again.tally).toEqual({ added: 6, removed: 3, files: new Set(['/p/a.ts', '/p/b.ts']) })
+  })
+
+  it('counts each file once in its hour, and once in the tally', () => {
+    let model = m.booked(working(), T + 5000, { added: 4, removed: 1, files: ['/p/a.ts', '/p/b.ts'] })
+    model = m.booked(model, T + 6000, { added: 3, removed: 0, files: ['/p/a.ts', '/p/c.ts'] })
+    expect(model.record.hours).toEqual([{ hour: hourKey(T + 6000), added: 7, removed: 1, files: 3 }])
+    expect(model.tally.added).toBe(7)
+    expect([...model.tally.files]).toEqual(['/p/a.ts', '/p/b.ts', '/p/c.ts'])
+  })
+
+  it('starts a new hour with files of its own', () => {
+    let model = m.booked(working(), T + 5000, { added: 4, removed: 0, files: ['/p/a.ts'] })
+    model = m.booked(model, T + 3_600_000, { added: 2, removed: 0, files: ['/p/a.ts'] })
+    expect(model.record.hours).toEqual([
+      { hour: hourKey(T + 5000), added: 4, removed: 0, files: 1 },
+      { hour: hourKey(T + 3_600_000), added: 2, removed: 0, files: 1 },
+    ])
+    expect(model.tally).toEqual({ added: 6, removed: 0, files: new Set(['/p/a.ts']) })
+  })
+
+  it('keeps the newest three hours', () => {
+    let model = working()
+    for (let i = 0; i < 5; i += 1) {
+      model = m.booked(model, T + i * 3_600_000, { added: i + 1, removed: 0, files: ['/p/a.ts'] })
+    }
+    expect(model.record.hours).toHaveLength(MAX_HOURS)
+    expect(model.record.hours.map((hour) => hour.added)).toEqual([3, 4, 5])
+    expect(model.record.hours.map((hour) => hour.hour)).toEqual([2, 3, 4].map((i) => hourKey(T + i * 3_600_000)))
+  })
+
+  it('ignores a booking of nothing', () => {
+    const model = working()
+    expect(m.booked(model, T + 5000, { added: 0, removed: 0, files: [] })).toBe(model)
   })
 })
 
 describe('finished', () => {
   it('with work that will wake the session, stays working with no story, and the turn is over', () => {
     const before = working()
-    const model = m.finished(before, T + 8000, { lastWords: 'Waiting.', changes: { added: 5, removed: 1, files: 2 }, background: true })
+    const model = m.finished(before, T + 8000, { lastWords: 'Waiting.', background: true })
     expect(model.record.state).toBe('working')
     expect(model.record.stories).toEqual([])
     expect(model.record.hours).toEqual([])
@@ -168,46 +211,46 @@ describe('finished', () => {
     expect(model.seq).toBe(0)
   })
 
-  it('with changed files is a ready story with the diff and how long the turn ran', () => {
-    const model = m.finished(working(), T + 61_000, { lastWords: 'Done.', changes: { added: 12, removed: 3, files: 2 }, background: false })
+  it('with work that will wake the session keeps the tally for the next story', () => {
+    const booked = m.booked(working(), T + 2000, { added: 5, removed: 1, files: ['/p/a.ts', '/p/b.ts'] })
+    const waiting = m.finished(booked, T + 8000, { lastWords: 'Waiting.', background: true })
+    expect(waiting.tally).toEqual(booked.tally)
+    expect(waiting.record.stories).toEqual([])
+    const next = m.finished(m.turnStarted(waiting, T + 9000, 't2'), T + 12_000, { lastWords: 'Done.', background: false })
+    expect(next.record.stories).toEqual([{ id: 'abc:1', kind: 'ready', at: T + 12_000, added: 5, removed: 1, files: 2, durationMs: 3000 }])
+  })
+
+  it('a ready story tells the tally, which then starts again', () => {
+    const booked = m.booked(working(), T + 2000, { added: 12, removed: 3, files: ['/p/a.ts', '/p/b.ts'] })
+    const model = m.finished(booked, T + 61_000, { lastWords: 'Done.', background: false })
     expect(model.record.state).toBe('ready')
     expect(model.record.stateAt).toBe(T + 61_000)
     expect(model.record.stories).toEqual([{ id: 'abc:1', kind: 'ready', at: T + 61_000, added: 12, removed: 3, files: 2, durationMs: 60_000 }])
     expect(model.turn.ended).toBe(true)
+    expect(model.tally).toEqual({ added: 0, removed: 0, files: new Set() })
+    const quiet = m.finished(m.turnStarted(model, T + 70_000, 't2'), T + 75_000, { lastWords: 'Nothing to change.', background: false })
+    expect(quiet.record.stories[1]?.kind).toBe('complete')
   })
 
   it('without changed files is a complete story with the last words', () => {
-    const model = m.finished(working(), T + 5000, { lastWords: 'All set.', changes: none, background: false })
+    const model = m.finished(working(), T + 5000, { lastWords: 'All set.', background: false })
     expect(model.record.stories).toEqual([{ id: 'abc:1', kind: 'complete', at: T + 5000, quote: 'All set.', durationMs: 4000 }])
     expect(model.record.state).toBe('ready')
   })
 
+  it('is a ready story for a booking that names a file with no lines', () => {
+    const booked = m.booked(working(), T + 2000, { added: 0, removed: 0, files: ['/p/image.png'] })
+    const model = m.finished(booked, T + 5000, { lastWords: 'x', background: false })
+    expect(model.record.stories[0]).toMatchObject({ kind: 'ready', added: 0, removed: 0, files: 1 })
+  })
+
   it('leaves the quote out when Claude finished without a word', () => {
-    const model = m.finished(working(), T + 5000, { lastWords: '', changes: none, background: false })
+    const model = m.finished(working(), T + 5000, { lastWords: '', background: false })
     expect('quote' in (model.record.stories[0] ?? {})).toBe(false)
   })
 
-  it('adds the changes to the hour of now, and to the same hour again', () => {
-    let model = m.finished(working(), T + 5000, { lastWords: '', changes: { added: 4, removed: 1, files: 1 }, background: false })
-    expect(model.record.hours).toEqual([{ hour: hourKey(T + 5000), added: 4, removed: 1, files: 1 }])
-    model = m.turnStarted(model, T + 6000, 't2')
-    model = m.finished(model, T + 9000, { lastWords: '', changes: { added: 2, removed: 2, files: 3 }, background: false })
-    expect(model.record.hours).toEqual([{ hour: hourKey(T + 9000), added: 6, removed: 3, files: 4 }])
-  })
-
-  it('starts another hour when the clock moves on, and keeps the newest three', () => {
-    let model = working()
-    for (let i = 0; i < 5; i += 1) {
-      model = m.turnStarted(model, T + i * 3_600_000, `t${i}`)
-      model = m.finished(model, T + i * 3_600_000 + 10, { lastWords: '', changes: { added: i + 1, removed: 0, files: 1 }, background: false })
-    }
-    expect(model.record.hours).toHaveLength(MAX_HOURS)
-    expect(model.record.hours.map((hour) => hour.added)).toEqual([3, 4, 5])
-    expect(model.record.hours.map((hour) => hour.hour)).toEqual([2, 3, 4].map((i) => hourKey(T + i * 3_600_000 + 10)))
-  })
-
   it('leaves out the duration for a turn that never started', () => {
-    const model = m.finished(fresh(), T + 5000, { lastWords: 'x', changes: none, background: false })
+    const model = m.finished(fresh(), T + 5000, { lastWords: 'x', background: false })
     expect('durationMs' in (model.record.stories[0] ?? {})).toBe(false)
   })
 })
@@ -222,6 +265,16 @@ describe('failed', () => {
 
   it('says the unknown words for a kind it does not know', () => {
     expect(m.failed(working(), T + 3000, 'something_new').record.stories[0]?.quote).toBe(ERROR_WORDS.unknown)
+  })
+})
+
+describe('failed and aborted', () => {
+  it('an error or an interrupt starts the tally again', () => {
+    const booked = m.booked(working(), T + 2000, { added: 5, removed: 1, files: ['/p/a.ts'] })
+    const empty = { added: 0, removed: 0, files: new Set<string>() }
+    expect(m.failed(booked, T + 3000, 'unknown').tally).toEqual(empty)
+    expect(m.aborted(booked, T + 3000).tally).toEqual(empty)
+    expect(m.aborted(booked, T + 3000).record.hours).toEqual(booked.record.hours)
   })
 })
 
@@ -280,7 +333,7 @@ describe('story ids, stateAt and the lists', () => {
     let model = working()
     model = m.askedPermission(model, T + 2000, 'a', undefined, null)
     model = m.resumed(model, T + 3000, null)
-    model = m.finished(model, T + 4000, { lastWords: 'x', changes: none, background: false })
+    model = m.finished(model, T + 4000, { lastWords: 'x', background: false })
     model = m.turnStarted(model, T + 5000, 't2')
     model = m.failed(model, T + 6000, 'unknown')
     expect(model.record.stories.map((story) => story.id)).toEqual(['abc:1', 'abc:2', 'abc:3'])
@@ -311,29 +364,28 @@ describe('story ids, stateAt and the lists', () => {
   })
 })
 
-describe('the turn', () => {
-  it('takes a baseline only for the turn that is running', () => {
-    const baseline = { numstat: new Map<string, [number, number]>([['a', [1, 0]]]), untracked: new Set(['n']) }
-    const model = m.baselineTaken(working(), 't1', baseline)
-    expect(model.turn.baseline).toBe(baseline)
-    expect(m.baselineTaken(working(), 'other', baseline).turn.baseline).toBeNull()
-    const ended = m.aborted(working(), T + 2000)
-    expect(m.baselineTaken(ended, 't1', baseline).turn.baseline).toBeNull()
+describe('restored', () => {
+  it('takes the stories and hours from the record and numbers the next story after its newest', () => {
+    const own = {
+      ...fresh().record,
+      stories: [
+        { id: 'abc:6', kind: 'complete' as const, at: T },
+        { id: 'abc:7', kind: 'complete' as const, at: T + 1 },
+        { id: 'other:9', kind: 'complete' as const, at: T + 2 },
+      ],
+      hours: [{ hour: hourKey(T), added: 30, removed: 4, files: 2 }],
+    }
+    const model = m.restored(fresh(), own)
+    expect(model.record.stories.map((story) => story.id)).toEqual(['abc:6', 'abc:7', 'other:9'])
+    expect(model.record.hours).toEqual(own.hours)
+    expect(model.seq).toBe(7)
+    const asked = m.askedQuestion(model, T + 5000, 'Which?')
+    expect(asked.record.stories.at(-1)?.id).toBe('abc:8')
   })
 
-  it('adds up what the edit tools did, a file once', () => {
-    let model = working()
-    model = m.edited(model, '/p/a.ts', 3, 1)
-    model = m.edited(model, '/p/a.ts', 2, 0)
-    model = m.edited(model, '/p/b.ts', 1, 1)
-    expect(model.turn.edits.added).toBe(6)
-    expect(model.turn.edits.removed).toBe(2)
-    expect([...model.turn.edits.files]).toEqual(['/p/a.ts', '/p/b.ts'])
-  })
-
-  it('does not share its edits with the model it came from', () => {
-    const before = working()
-    m.edited(before, '/p/a.ts', 3, 1)
-    expect(before.turn.edits.files.size).toBe(0)
+  it('keeps the numbering it has when the record holds nothing newer', () => {
+    const model = m.restored(m.askedQuestion(working(), T + 2000, 'q'), fresh().record)
+    expect(model.seq).toBe(1)
+    expect(model.record.stories).toEqual([])
   })
 })

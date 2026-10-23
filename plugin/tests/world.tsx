@@ -16,6 +16,17 @@ export const PROJECT_DIR = '/Users/me/.claude/projects/-work-proj'
 export const TRANSCRIPT = `${PROJECT_DIR}/${ID}.jsonl`
 export const TITLE_FILE = `${PROJECT_DIR}/${ID}/custom-title.json`
 
+// A subagent's worktree, inside the session's checkout as the engine puts it
+export const WORKTREE = `${ROOT}/.claude/worktrees/agent-a1`
+
+// A git working tree as the fake git sees it: its commit, what `diff-index`
+// prints, and its untracked files
+export interface FakeTree {
+  head: string
+  numstat: string
+  untracked: string[]
+}
+
 export const BAND = {
   plugin: 'pipcast',
   component: 'AbovePrompt',
@@ -62,7 +73,14 @@ export function world(on: On, options: WorldOptions = {}) {
   const written: string[] = []
   const launched: (readonly string[])[] = []
   const toasts: string[] = []
-  const git = { numstat: '', untracked: [] as string[], fails: false }
+  // The session's own tree at ROOT, and other trees by their top folder
+  const git = {
+    head: 'c0ffee1',
+    numstat: '',
+    untracked: [] as string[],
+    fails: false,
+    worktrees: new Map<string, FakeTree>(),
+  }
   const launch = { exit: options.launchExit ?? 0, out: options.launchOut ?? 'started 4242' }
 
   const done = (exitCode: number, stdout = '', stderr = '') => ({
@@ -71,6 +89,7 @@ export function world(on: On, options: WorldOptions = {}) {
 
   on('session.id', () => ({ value: ID }))
   on('session.root', () => ({ value: ROOT }))
+  on('session.cwd', () => ({ value: ROOT }))
   on('session.repo', () => ({
     value: options.hasRepo === false ? null : { root: ROOT, remote: null, internal: false, name: null },
   }))
@@ -91,10 +110,12 @@ export function world(on: On, options: WorldOptions = {}) {
   on('classic.UserPromptSubmit', () => ({}))
   // What the record said when a tool call reached the engine, below the mod
   const atTool: (string | undefined)[] = []
-  on('tool.call', () => {
+  on('tool.call', (_, e) => {
     const text = files.get(RECORD)
     atTool.push(text === undefined ? undefined : (JSON.parse(text) as SessionRecord).state)
-    return { result: { stdout: '', stderr: '', interrupted: false }, text: '' } as never
+    const command = (e as { command?: unknown }).command
+    const readOnly = typeof command === 'string' && command.startsWith('git log')
+    return { result: { stdout: '', stderr: '', interrupted: false }, text: '', ...(readOnly ? { isReadOnly: true } : {}) } as never
   })
 
   on('fs.read', (_, e) => {
@@ -127,6 +148,43 @@ export function world(on: On, options: WorldOptions = {}) {
       : { value: { kind: 'file' as const, size: text.length, mtimeMs: 0, isLink: false } }
   })
 
+  // Which tree holds a folder: the longest worktree that is or holds it, else the session's own
+  const treeAt = (folder: string): { top: string; tree: FakeTree } | null => {
+    let best: string | null = null
+    for (const top of git.worktrees.keys()) {
+      if ((folder === top || folder.startsWith(`${top}/`)) && (best === null || top.length > best.length)) {
+        best = top
+      }
+    }
+    const found = best === null ? undefined : git.worktrees.get(best)
+    if (best !== null && found !== undefined) {
+      return { top: best, tree: found }
+    }
+    if (folder === ROOT || folder.startsWith(`${ROOT}/`)) {
+      return { top: ROOT, tree: { head: git.head, numstat: git.numstat, untracked: git.untracked } }
+    }
+    return null
+  }
+  const gitRun = (args: string[], folder: string) => {
+    if (git.fails) {
+      return done(128, '', 'not a git repository')
+    }
+    const at = treeAt(folder)
+    if (at === null) {
+      return done(128, '', 'not a git repository')
+    }
+    switch (args[0]) {
+      case 'rev-parse':
+        return args[1] === '--show-toplevel' ? done(0, `${at.top}\n`) : done(0, `${at.tree.head}\n`)
+      case 'diff-index':
+        return done(0, at.tree.numstat)
+      case 'ls-files':
+        return done(0, at.tree.untracked.join('\0'))
+      default:
+        return done(0)
+    }
+  }
+
   on('process.run', (_, e) => {
     ran.push(e.argv)
     const [program, ...args] = e.argv
@@ -152,10 +210,7 @@ export function world(on: On, options: WorldOptions = {}) {
       case '/usr/bin/find':
         return done(0, options.transcriptDir === undefined ? '' : `${options.transcriptDir}/${ID}.jsonl\n`)
       case '/usr/bin/git':
-        if (git.fails) {
-          return done(128, '', 'not a git repository')
-        }
-        return args[0] === 'diff-index' ? done(0, git.numstat) : done(0, git.untracked.join('\0'))
+        return gitRun(args, (e as { init?: { cwd?: string } }).init?.cwd ?? ROOT)
       default:
         return done(0)
     }
@@ -173,6 +228,17 @@ export function world(on: On, options: WorldOptions = {}) {
     reads,
     written,
     git,
+    // A subagent in a worktree of its own, as the engine's note beside the
+    // transcript names it; its tree starts clean
+    subagent(agentId: string, worktree = WORKTREE): FakeTree {
+      files.set(
+        `${PROJECT_DIR}/${ID}/subagents/agent-${agentId}.meta.json`,
+        JSON.stringify({ agentType: 'implementer', worktreePath: worktree, spawnedWithWorktree: true }),
+      )
+      const tree: FakeTree = { head: 'beef001', numstat: '', untracked: [] }
+      git.worktrees.set(worktree, tree)
+      return tree
+    },
     // The session's own record, as the store has it
     record(): SessionRecord | null {
       const text = files.get(RECORD)
