@@ -76,7 +76,7 @@ npm ci
 scripts/build.sh
 ```
 
-builds the station, the broadcast and the band's artwork into `plugin/`, where the mod runs them. Commit what it builds: an install copies `plugin/` as it is.
+builds the station, the broadcast and the band's artwork into `plugin/`, where the mod runs them. Commit what it builds: an install copies `plugin/` as it is, and CI fails a pull request whose `plugin/` differs from what its sources build.
 
 ```bash
 scripts/test.sh

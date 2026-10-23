@@ -322,6 +322,36 @@ scenario('Stop with changes in git is a ready story with the diff', {}, async (w
   expect(w.record()?.hours.at(-1)).toMatchObject({ added: 12, removed: 3, files: 3 })
 })
 
+scenario('git is read without ever taking the index lock', {}, async (w, $) => {
+  w.git.numstat = '3\t1\tsrc/a.ts\n'
+  await tuneIn($)
+  await turn($)
+  await w.clock.settle()
+  await stop($, { last_assistant_message: 'Done.' })
+  const git = w.ran.filter((argv) => argv[0] === '/usr/bin/git')
+  expect(git.length > 0).toBe(true)
+  for (const argv of git) {
+    expect([
+      ['/usr/bin/git', 'diff-index', '-M', '--numstat', 'HEAD'],
+      ['/usr/bin/git', 'ls-files', '--others', '--exclude-standard', '-z'],
+    ]).toContainEqual(argv)
+  }
+})
+
+scenario('a new binary file, or one too big to read, is a file with no lines', {}, async (w, $) => {
+  await tuneIn($)
+  await turn($)
+  await w.clock.settle()
+  w.git.untracked = ['shot.png', 'dump.log', 'notes.md']
+  w.files.set(`${ROOT}/shot.png`, '\u0089PNG\r\n\u001a\n\u0000\u0000\u0000\rIHDR\nwide\nhigh\n')
+  w.files.set(`${ROOT}/dump.log`, 'line\n'.repeat(250_000))
+  w.files.set(`${ROOT}/notes.md`, 'one\ntwo\n')
+  w.reads.length = 0
+  await stop($, { last_assistant_message: 'Done.' })
+  expect(w.record()?.stories[0]).toMatchObject({ kind: 'ready', added: 2, removed: 0, files: 3 })
+  expect(w.reads).not.toContain(`${ROOT}/dump.log`)
+})
+
 scenario('with no repository the edit tools are counted', { hasRepo: false }, async (w, $) => {
   w.git.fails = true
   await tuneIn($)

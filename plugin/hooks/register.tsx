@@ -95,6 +95,15 @@ function ioFor($: EngineInterface): Io {
         return null
       }
     },
+    async size(path) {
+      try {
+        const found: unknown = await $.fs.stat(path)
+        const size = typeof found === 'object' && found !== null ? (found as { size?: unknown }).size : undefined
+        return typeof size === 'number' ? size : null
+      } catch {
+        return null
+      }
+    },
     async write(path, text) {
       const dir = path.slice(0, path.lastIndexOf('/'))
       if (!(await $.fs.exists(dir))) {

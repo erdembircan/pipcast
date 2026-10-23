@@ -41,6 +41,7 @@ function fake(): Fake {
       state.git.reads.push(path)
       return state.files.get(path) ?? null
     },
+    size: async (path) => state.files.get(path)?.length ?? null,
     write: async (path, text) => {
       state.files.set(path, text)
       state.onWrite(path)
@@ -58,7 +59,7 @@ function fake(): Fake {
         return state.launch
       }
       if (argv[0] === '/usr/bin/git') {
-        return argv[1] === 'diff' ? state.git.diff : state.git.others
+        return argv[1] === 'diff-index' ? state.git.diff : state.git.others
       }
       return { exitCode: 0, stdout: '', stderr: '' }
     },
@@ -329,7 +330,7 @@ describe('the baseline and the changes since', () => {
     const baseline = await takeBaseline(state.io, '/work')
     expect(baseline?.numstat.get('src/a.ts')).toEqual([5, 1])
     expect([...(baseline?.untracked ?? [])]).toEqual(['old.txt'])
-    expect(state.runs[0]).toEqual(['/usr/bin/git', 'diff', '--numstat', 'HEAD'])
+    expect(state.runs[0]).toEqual(['/usr/bin/git', 'diff-index', '-M', '--numstat', 'HEAD'])
     expect(state.runs[1]).toEqual(['/usr/bin/git', 'ls-files', '--others', '--exclude-standard', '-z'])
 
     state.git.diff.stdout = '9\t1\tsrc/a.ts\n'
@@ -363,7 +364,8 @@ describe('the baseline and the changes since', () => {
     state.files.set('/work/f3.txt', 'y'.repeat(1_000_001))
     state.git.reads.length = 0
     const changes = await changesSince(state.io, '/work', baseline)
-    expect(state.git.reads.length).toBe(200)
+    expect(state.git.reads.length).toBe(199)
+    expect(state.git.reads).not.toContain('/work/f3.txt')
     expect(changes).toEqual({ added: 199, removed: 0, files: 205 })
   })
 
@@ -372,5 +374,24 @@ describe('the baseline and the changes since', () => {
     const baseline = { numstat: new Map<string, [number, number]>(), untracked: new Set<string>() }
     state.git.diff = { exitCode: 128, stdout: '', stderr: '' }
     expect(await changesSince(state.io, '/work', baseline)).toEqual({ added: 0, removed: 0, files: 0 })
+  })
+
+  it('counts a new binary file as a file with no lines, as git does', async () => {
+    const state = fake()
+    const baseline = { numstat: new Map<string, [number, number]>(), untracked: new Set<string>() }
+    state.git.others.stdout = 'shot.png\0notes.md\0'
+    state.files.set('/work/shot.png', '\u0089PNG\r\n\u001a\n\u0000\u0000\u0000\rIHDR\nwide\nhigh\n')
+    state.files.set('/work/notes.md', 'one\ntwo\n')
+    expect(await changesSince(state.io, '/work', baseline)).toEqual({ added: 2, removed: 0, files: 2 })
+  })
+
+  it('reads a new file whose size cannot be told, and counts its lines', async () => {
+    const state = fake()
+    const baseline = { numstat: new Map<string, [number, number]>(), untracked: new Set<string>() }
+    state.io.size = async () => null
+    state.git.others.stdout = 'notes.md\0'
+    state.files.set('/work/notes.md', 'one\ntwo\nthree\n')
+    expect(await changesSince(state.io, '/work', baseline)).toEqual({ added: 3, removed: 0, files: 1 })
+    expect(state.git.reads).toEqual(['/work/notes.md'])
   })
 })

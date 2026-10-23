@@ -70,14 +70,14 @@ interface SessionRecord {
 `plugin/` is a Claude Code plugin with one hooks module, `hooks/register.tsx`, which only wires hooks to the code in `plugin/src`.
 
 - `src/contract` holds the types, constants and words that the mod, the station and the broadcast share.
-- `src/core` holds the mod's logic with no `$` in it: the record reducer, the descriptions of tools and permissions, the diff counter, the band's artwork, and the services that tune in, tune out and check in. The services talk to the world through an `Io` port: read, write, list and rename files, run a command, read the clock.
+- `src/core` holds the mod's logic with no `$` in it: the record reducer, the descriptions of tools and permissions, the diff counter, the band's artwork, and the services that tune in, tune out and check in. The services talk to the world through an `Io` port: read, write, list and rename files, look up a file's size, run a command, read the clock.
 - `register.tsx` builds that port from `$` and hands it to the services. Only functions at the top of that file take `$`, which is what `claude plugin validate` asks for.
 
 What it listens to:
 
 | Event | What changes |
 | --- | --- |
-| `turn.start` | The session is working. The diff counter takes its baseline with `git diff --numstat HEAD` |
+| `turn.start` | The session is working. The diff counter takes its baseline with `git diff-index -M --numstat HEAD` |
 | `tool.call` | One activity line. `AskUserQuestion` is a needs-input story with the question; when the call returns, the session is working again |
 | `classic.PermissionRequest` | A needs-input story with the command and Claude's description of it |
 | `classic.Stop` | While work the session started will wake it again, still working, with no story yet: a command running in the background, a subagent, a workflow, an MCP task or an MCP server's monitor, or a scheduled wake-up. Otherwise a ready story when files changed, with the diff, or a complete story with Claude's last words |
@@ -162,6 +162,8 @@ Between segments, the live board. The rules, from the design system's *Event des
 | `scripts/capture-controls.sh` | Shows the real broadcast with the controls on and saves the station's own picture of its window to `artifacts/station/controls.png`, for checking the glass by eye |
 | `scripts/live.sh` | Shows or changes what the desktop app runs: the live checkout beside the clone, which the `pipcast` marketplace points at. `setup` makes it; `pr <number>`, a branch or a commit puts that in the app; `master` puts master back |
 
+CI runs the lint, the types and the unit tests on every pull request and on master, and checks that `plugin/` holds what its sources build: it builds the page and the band's artwork again and fails on any difference, and it fails when the stamp beside the station binary or the jingles names other sources. The binary and the jingles are built on a Mac, so CI checks their stamps, not the files.
+
 ## Decisions
 
 - **Files, not sockets.** A mod cannot keep writing to a child's input, and every session is its own process. Files need no server, survive any one of them crashing, and are easy to look at.
@@ -173,3 +175,4 @@ Between segments, the live board. The rules, from the design system's *Event des
 - **Two private switches in the station.** The window never takes the keyboard, so its app is never active, and macOS treats it that way: AppKit draws Liquid Glass flat in a window without an active appearance, and the window server ignores a pointer set by an app that is not frontmost. The station forces its panel's active appearance (`_setForceMainAppearance:`), which changes how the panel is drawn and never makes it key, and sets its window-server connection's `SetsCursorInBackground` property. Both are looked up at run time: on a macOS without one, the station logs it and carries on with flat glass or the plain pointer.
 - **The title from the engine's own file.** A mod gets no event for a rename and no call for the title, and the hooks carry the title only when a session starts or a prompt is sent, which misses a rename between prompts. The transcript records every rename too, but it runs to megabytes. `custom-title.json` holds the title alone, so reading it once a minute while on air costs next to nothing.
 - **Nothing airs from while Claude is in front.** Claude shows every story itself while it is in front. Kept for the window, those stories aired one after another when you left Claude, each looking like news that had just happened. They are dropped instead; the board and the ticker still show where each session stands.
+- **Git that never takes the index lock.** The diff counter runs git in the session's repository as every turn starts and ends, tuned in or not, while Claude or you may be running git there too. When files were touched without changing, `git diff` writes the index back under `.git/index.lock`, and a `git commit` that needs the lock at that moment fails. `git diff-index -M` gives the same counts and never writes the index. A new untracked file counts as git will count it once it is added: its lines, or none for a binary file or one over 1 MB. Its size is looked up first, so a big file is not read at all.

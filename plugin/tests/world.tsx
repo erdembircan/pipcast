@@ -120,6 +120,12 @@ export function world(on: On, options: WorldOptions = {}) {
       ? { deny: 'ENOENT' }
       : { value: names.map((path) => ({ name: path.slice(prefix.length), kind: 'file' as const, size: 0, mtimeMs: 0, isLink: false })) }
   })
+  on('fs.stat', (_, e) => {
+    const text = files.get(e.path)
+    return text === undefined
+      ? { deny: 'ENOENT' }
+      : { value: { kind: 'file' as const, size: text.length, mtimeMs: 0, isLink: false } }
+  })
 
   on('process.run', (_, e) => {
     ran.push(e.argv)
@@ -149,7 +155,7 @@ export function world(on: On, options: WorldOptions = {}) {
         if (git.fails) {
           return done(128, '', 'not a git repository')
         }
-        return args[0] === 'diff' ? done(0, git.numstat) : done(0, git.untracked.join('\0'))
+        return args[0] === 'diff-index' ? done(0, git.numstat) : done(0, git.untracked.join('\0'))
       default:
         return done(0)
     }

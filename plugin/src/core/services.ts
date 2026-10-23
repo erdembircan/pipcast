@@ -31,6 +31,8 @@ export interface Io {
   claudeConfigDir(): Promise<string>
   // null when missing
   read(path: string): Promise<string | null>
+  // A file's size in bytes; null when it cannot be told
+  size(path: string): Promise<number | null>
   // `${path}.tmp`, then renamed into place
   write(path: string, text: string): Promise<void>
   // fine when missing
@@ -159,9 +161,15 @@ export interface Baseline {
 
 const MAX_NEW_FILES_READ = 200
 const MAX_NEW_FILE_BYTES = 1_000_000
+// git takes a file with a NUL byte in its first 8,000 bytes for binary
+const BINARY_PROBE = 8_000
 
+// git's counts and the untracked files. `git diff-index`, not `git diff`: when
+// files were touched without changing, `git diff` writes the index back under
+// .git/index.lock, and a git command of Claude's or yours that needs the lock
+// at that moment fails. -M finds renames, as `git diff` does.
 async function gitState(io: Io, cwd: string): Promise<Baseline | null> {
-  const diff = await io.run(['/usr/bin/git', 'diff', '--numstat', 'HEAD'], cwd)
+  const diff = await io.run(['/usr/bin/git', 'diff-index', '-M', '--numstat', 'HEAD'], cwd)
   if (diff.exitCode !== 0) {
     return null
   }
@@ -180,6 +188,21 @@ export async function takeBaseline(io: Io, cwd: string): Promise<Baseline | null
   }
 }
 
+// A new untracked file's lines, as git counts them once it is added: none for
+// a binary file or one over MAX_NEW_FILE_BYTES. The size is looked up first,
+// so a big file is not read at all.
+async function newFileLines(io: Io, path: string): Promise<number> {
+  const size = await io.size(path)
+  if (size !== null && size > MAX_NEW_FILE_BYTES) {
+    return 0
+  }
+  const text = await io.read(path)
+  if (text === null || text.length > MAX_NEW_FILE_BYTES || text.slice(0, BINARY_PROBE).includes('\u0000')) {
+    return 0
+  }
+  return countLines(text)
+}
+
 // The turn's changes: git's counts and untracked files now, against the baseline
 export async function changesSince(io: Io, cwd: string, baseline: Baseline): Promise<Changes> {
   const now = await gitState(io, cwd)
@@ -189,8 +212,7 @@ export async function changesSince(io: Io, cwd: string, baseline: Baseline): Pro
   const fresh = [...now.untracked].filter((path) => !baseline.untracked.has(path))
   const newFiles: number[] = []
   for (const [index, path] of fresh.entries()) {
-    const text = index < MAX_NEW_FILES_READ ? await io.read(`${cwd}/${path}`) : null
-    newFiles.push(text === null || text.length > MAX_NEW_FILE_BYTES ? 0 : countLines(text))
+    newFiles.push(index < MAX_NEW_FILES_READ ? await newFileLines(io, `${cwd}/${path}`) : 0)
   }
   return delta(baseline.numstat, now.numstat, newFiles)
 }
