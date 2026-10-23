@@ -15,7 +15,7 @@ The window shows only while you're in another app. Switch back to Claude and it 
 - **Tune in from Claude.** Press **TUNE IN** in the band above the prompt box, or run `/pipcast`. Up to four sessions can be on air at once.
 - **The live board.** Each session on air gets a row with its title and its state on a pill: INPUT when it needs you, ERROR when it stopped on an error, READY when it finished, LIVE while it works.
 - **BREAKING NEWS for every story.** A session that needs your input, that is ready for review, whose work is complete, or that stopped on an error airs as its own segment. Stories air one after another, in the order they land. Nothing cuts in, and KLWD airs only what happens while you're away from Claude: switch to Claude and the stories still waiting are dropped, along with any that land while you're there.
-- **On the hour.** The station clock strikes the hour, Clawd reads the headlines, and THE HOUR IN REVIEW shows what each session did.
+- **On the hour.** The station clock strikes the hour, Clawd reads the headlines, and THE HOUR IN REVIEW shows what each session did. If you're in Claude as the hour strikes, that hour is skipped, and the next report covers it.
 - **A window that stays out of the way.** It fills its quarter of the screen, resizes down to 70% from its edges, and moves to another corner when you drag it there. It floats above every app and never takes the keyboard.
 - **Controls on hover.** Close stops tracking every session, the speaker turns the jingles on and off, and Back to Claude brings Claude to the front.
 

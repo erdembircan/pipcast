@@ -311,6 +311,27 @@ describe('when the window is hidden', () => {
     expect(h.cues().map((cue) => cue.jingle)).toEqual(['breaking', 'hour', 'hour-out'])
   })
 
+  it('drops a report still waiting when the next one comes due', () => {
+    const h = harness(at(14, 59, 0), [session('a'), session('b')])
+    h.world.lastReportAt = at(14)
+    h.land([asking('a', at(14, 59, 50)), session('b')], at(14, 59, 50))
+    expect(lines(h.until(at(14, 59, 58)).program)).toContain('COMING UP The 15:00 report')
+
+    h.world.visible = false
+    expect(lines(h.until(at(15, 30, 0)).program)).toContain('COMING UP The 15:00 report')
+    h.until(at(15, 59, 56))
+
+    h.world.visible = true
+    const ident = h.until(at(15, 59, 56) + 250).program
+    expect(ident.cues).toEqual(['hour'])
+    expect(ident.reported).toBe(at(16))
+    const desk = h.until(at(16, 0, 4)).program
+    expect(desk.scene).toMatchObject({ mode: 'desk', event: { foot: '14:00 to 16:00' } })
+    expect(h.history.filter((sample) => sample.program.reported !== null).map((sample) => sample.program.reported)).toEqual([
+      at(16),
+    ])
+  })
+
   it('cuts a segment on air when it hides and does not air it again', () => {
     const h = harness(T0, [session('a')])
     h.land([asking('a', T0 + 1000)], T0 + 1000)
@@ -414,23 +435,58 @@ describe('the hour', () => {
     expect(ident.scene.mode).toBe('ident')
   })
 
-  it('airs a late report when the window shows within ten minutes, and skips it after that', () => {
-    const late = harness(at(14, 59, 0), afternoon())
-    late.world.visible = false
-    late.until(at(15, 5))
-    expect(late.cues()).toEqual([])
-    late.world.visible = true
-    const shown = late.until(at(15, 5) + 250).program
-    expect(shown.cues).toEqual(['hour'])
-    expect(shown.reported).toBe(at(15))
+  it('skips the report when the window is hidden through the hour, and never airs it late', () => {
+    // Shown as the hour strikes, once the ident's five seconds are over
+    const strike = harness(at(14, 59, 0), afternoon())
+    strike.world.visible = false
+    strike.until(at(14, 59, 59) + 750)
+    strike.world.visible = true
+    const shown = strike.until(at(15, 0, 0)).program
+    expect(shown.key).toBe('board')
+    expect(lines(shown)).not.toContain('COMING UP The 15:00 report')
+    strike.until(at(15, 20))
+    expect(strike.cues()).toEqual([])
+    expect(strike.keys()).toEqual(['board'])
 
-    const tooLate = harness(at(14, 59, 0), afternoon())
-    tooLate.world.visible = false
-    tooLate.until(at(15, 11))
-    tooLate.world.visible = true
-    tooLate.until(at(15, 20))
-    expect(tooLate.cues()).toEqual([])
-    expect(tooLate.keys()).toEqual(['board'])
+    // Shown two minutes after the hour
+    const later = harness(at(14, 59, 0), afternoon())
+    later.world.visible = false
+    later.until(at(15, 2, 42))
+    later.world.visible = true
+    later.until(at(15, 20))
+    expect(later.cues()).toEqual([])
+    expect(later.keys()).toEqual(['board'])
+    expect(later.history.every((sample) => sample.program.reported === null)).toBe(true)
+  })
+
+  it('airs the report when the window shows just before it comes due', () => {
+    const h = harness(at(14, 59, 0), afternoon())
+    h.world.visible = false
+    h.until(at(14, 59, 54) + 750)
+    h.world.visible = true
+    const ident = h.until(at(14, 59, 55)).program
+    expect(ident.cues).toEqual(['hour'])
+    expect(ident.reported).toBe(at(15))
+    expect(ident.scene.mode).toBe('ident')
+  })
+
+  it('airs the report when the window shows in the five seconds before the hour', () => {
+    const h = harness(at(14, 59, 0), afternoon())
+    h.world.visible = false
+    h.until(at(14, 59, 56))
+    h.world.visible = true
+    const ident = h.until(at(14, 59, 56) + 250).program
+    expect(ident.cues).toEqual(['hour'])
+    expect(ident.reported).toBe(at(15))
+    expect(ident.scene.mode).toBe('ident')
+  })
+
+  it('airs no report for an hour that struck before the station started', () => {
+    const h = harness(at(15, 3, 0), afternoon())
+    h.world.lastReportAt = at(14)
+    h.until(at(15, 20))
+    expect(h.cues()).toEqual([])
+    expect(h.keys()).toEqual(['board'])
   })
 
   it('covers everything since the last report that aired', () => {
@@ -450,6 +506,19 @@ describe('the hour', () => {
     h.until(at(15, 59, 55))
     const desk = h.until(at(16, 0, 3)).program
     expect(desk.scene).toMatchObject({ event: { foot: '15:00 to 16:00' } })
+  })
+
+  it('covers a skipped hour in the next report', () => {
+    const h = harness(at(14, 59, 0), [session('a')])
+    h.world.lastReportAt = at(14)
+    h.world.visible = false
+    h.until(at(15, 0, 30))
+    h.world.visible = true
+    const desk = h.until(at(16, 0, 3)).program
+    expect(desk.scene).toMatchObject({ mode: 'desk', headline: 'A QUIET HOUR', event: { foot: '14:00 to 16:00' } })
+    expect(h.history.filter((sample) => sample.program.reported !== null).map((sample) => sample.program.reported)).toEqual([
+      at(16),
+    ])
   })
 
   it('leaves out the review in a quiet hour', () => {

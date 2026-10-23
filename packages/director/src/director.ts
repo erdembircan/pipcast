@@ -6,7 +6,7 @@ import { boardScene, boardTicker } from './board.ts'
 import { hourReport } from './hour.ts'
 import { movedOn, storySegment } from './story.ts'
 import type { Segment } from './story.ts'
-import { GAP_MS, HOUR_MS, IDENT_LEAD_MS, LAST_REPORT_KEEP_MS, REPORT_GRACE_MS } from './timing.ts'
+import { GAP_MS, HOUR_MS, IDENT_LEAD_MS, LAST_REPORT_KEEP_MS } from './timing.ts'
 import type { BoardState, Carried, QueueItem, ReportMemory } from './types.ts'
 
 export interface DirectorOptions {
@@ -65,6 +65,17 @@ export function createDirector(options: DirectorOptions = {}): { tick(input: Tic
   function dropWaitingStories(): void {
     for (let index = queue.length - 1; index >= 0; index -= 1) {
       if (queue[index]?.kind === 'story') {
+        queue.splice(index, 1)
+      }
+    }
+  }
+
+  // Takes out a report still waiting when the next one comes due: it has
+  // missed its hour. In place, as above
+  function dropMissedReports(now: number): void {
+    for (let index = queue.length - 1; index >= 0; index -= 1) {
+      const item = queue[index]
+      if (item?.kind === 'hour' && now >= item.hour + HOUR_MS - IDENT_LEAD_MS) {
         queue.splice(index, 1)
       }
     }
@@ -141,9 +152,13 @@ export function createDirector(options: DirectorOptions = {}): { tick(input: Tic
         }
       }
 
-      // 3. The hour
+      // 3. The hour. Its report joins the queue only while the window shows
+      // in the five seconds before the hour, as its ident is due; a window
+      // hidden all that time skips the hour. A report still waiting when the
+      // next one comes due is dropped
+      dropMissedReports(now)
       const next = hourStart(now) + HOUR_MS
-      if (now >= next - IDENT_LEAD_MS && next > scheduledHour) {
+      if (visible && now >= next - IDENT_LEAD_MS && next > scheduledHour) {
         queue.push({ kind: 'hour', hour: next })
         scheduledHour = next
       }
@@ -196,7 +211,7 @@ export function createDirector(options: DirectorOptions = {}): { tick(input: Tic
             }
             onAir = { item, segment: storySegment(item.sessionId, item.story, snapshot, reducedMotion), index: 0, stepStartedAt: now }
           } else {
-            if (item.hour + REPORT_GRACE_MS < now || snapshot === null) {
+            if (snapshot === null) {
               continue
             }
             const from = lastReport !== null && lastReport.hour < item.hour ? lastReport.hour : item.hour - HOUR_MS
