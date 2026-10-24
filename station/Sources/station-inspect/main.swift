@@ -10,6 +10,7 @@ usage: station-inspect window <pid>
        station-inspect expect <pid> shown <top-left|top-right|bottom-left|bottom-right> <scale>
        station-inspect expect <pid> hidden
        station-inspect expect <pid> gone-within <ms> <station.log>
+       station-inspect expect <pid> alpha <on|off>
        station-inspect spaces <pid> <bundle id>
        station-inspect frontmost
        station-inspect locked
@@ -23,6 +24,7 @@ struct Window {
     let owner: String
     let layer: Int
     let onScreen: Bool
+    let alpha: Double
     /// AppKit coordinates: origin at the bottom left of the primary screen, y up.
     let appKit: CGRect
 }
@@ -47,6 +49,7 @@ func windows(options: CGWindowListOption) -> [Window] {
                       owner: entry[kCGWindowOwnerName as String] as? String ?? "?",
                       layer: layer,
                       onScreen: entry[kCGWindowIsOnscreen as String] as? Bool ?? false,
+                      alpha: entry[kCGWindowAlpha as String] as? Double ?? 1,
                       appKit: appKit)
     }
 }
@@ -231,6 +234,28 @@ case "spaces" where arguments.count == 3:
     let detail = "the window is on \(spaceList(on)); \(target)'s own full-screen Spaces: \(spaceList(own)); you are on \(spaces.active())"
     if !both.isEmpty { fail("FAIL the window is on \(target)'s own full-screen Space \(spaceList(both)): \(detail)") }
     pass("ok   the window is off \(target)'s own full-screen Spaces: \(detail)")
+
+case "expect" where arguments.count == 4 && arguments[2] == "alpha":
+    guard let pid = Int32(arguments[1]), ["on", "off"].contains(arguments[3]) else { usageError() }
+    let setting = arguments[3]
+    func percent(_ alpha: Double) -> String { "\(Int((alpha * 100).rounded()))%" }
+    // The station reads options.json every second and fades over 0.25 s. Nothing here moves the pointer: the
+    // opacity expected follows wherever it happens to be.
+    var seen = "no window on screen"
+    for _ in 0..<60 {
+        if let window = stationWindows(pid).first {
+            let pointerOn = window.appKit.contains(NSEvent.mouseLocation)
+            let expected = windowAlpha(transparent: setting == "on", hovered: pointerOn)
+            let place = pointerOn ? "the pointer on it" : "the pointer elsewhere"
+            if abs(window.alpha - expected) < 0.01 {
+                pass("ok   Transparent window \(setting): the window server shows the window at \(percent(window.alpha)) with \(place)")
+            }
+            seen = "\(percent(window.alpha)) with \(place), where \(percent(expected)) was expected"
+        }
+        pause(0.05)
+    }
+    guard isRunning(pid) else { fail("FAIL the station (pid \(pid)) is not running") }
+    fail("FAIL Transparent window \(setting): the window server shows the window at \(seen)")
 
 case "expect" where arguments.count == 5 && arguments[2] == "gone-within":
     guard let pid = Int32(arguments[1]), let limit = Double(arguments[3]) else { usageError() }

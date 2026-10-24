@@ -1,15 +1,18 @@
 #!/bin/bash
 # Runs the mod in real, headless Claude Code sessions on the engine bundled
-# with the desktop app. In the first, with Tune in every new session off,
-# /pipcast has to tune in (a record in the store, the station launched), a
-# second /pipcast has to tune out (the record gone), and a session that ends
-# while tuned in has to take its record with it. In the second, with the
-# setting on, the session has to stay off the air while nothing shows it, tune
-# in by itself once a stand-in for the desktop app attaches as the app does
-# (ui_attach), stay off the air after /pipcast tunes it out and a second window
-# shows it, and tune in again after /clear. No model call is made and no
-# station is started: PIPCAST_STATION_BIN is a stand-in that logs its
-# arguments. Everything lives in a temporary folder that is removed on exit.
+# with the desktop app. In the first, with Tune in every new session off and
+# Transparent window on, /pipcast has to tune in (a record in the store,
+# options.json telling the station the window is transparent, the station
+# launched), a second /pipcast has to tune out (the record gone), and a session
+# that ends while tuned in has to take its record with it. In the second, with
+# Tune in every new session on and Transparent window off, the session has to
+# stay off the air while nothing shows it, tune in by itself once a stand-in
+# for the desktop app attaches as the app does (ui_attach), telling the station
+# the window is solid, stay off the air after /pipcast tunes it out and a
+# second window shows it, and tune in again after /clear. No model call is
+# made and no station is started: PIPCAST_STATION_BIN is a stand-in that logs
+# its arguments. Everything lives in a temporary folder that is removed on
+# exit.
 set -uo pipefail
 
 root="$(cd "$(dirname "$0")/.." && pwd)"
@@ -52,10 +55,22 @@ record_state() { # <store>
   ' "$1/sessions"
 }
 
-# The settings a session runs with: Tune in every new session on or off, for
-# the plugin as --plugin-dir loads it
-settings() { # <true|false>
-  printf '{"pluginConfigs":{"pipcast@inline":{"options":{"autoTuneIn":%s}}}}' "$1"
+# What options.json in a store tells the station of Transparent window: on,
+# off, or none when there is no file
+options_state() { # <store>
+  node -e '
+    const fs = require("node:fs")
+    const file = process.argv[1] + "/options.json"
+    if (!fs.existsSync(file)) { process.stdout.write("none"); process.exit(0) }
+    const options = JSON.parse(fs.readFileSync(file, "utf8"))
+    process.stdout.write(options.v === 1 && options.transparent === true ? "on" : options.v === 1 && options.transparent === false ? "off" : "bad")
+  ' "$1"
+}
+
+# The settings a session runs with: Tune in every new session and Transparent
+# window, each on or off, for the plugin as --plugin-dir loads it
+settings() { # <true|false> <true|false>
+  printf '{"pluginConfigs":{"pipcast@inline":{"options":{"autoTuneIn":%s,"transparentWindow":%s}}}}' "$1" "$2"
 }
 
 command='{"type":"user","message":{"role":"user","content":"/pipcast"}}'
@@ -70,6 +85,7 @@ attach() { # <client id>
   echo "$command"
   sleep 3
   echo "after-in $(record_state "$home")" >>"$notes"
+  echo "options-in $(options_state "$home")" >>"$notes"
   echo "$command"
   sleep 3
   echo "after-out $(record_state "$home")" >>"$notes"
@@ -82,7 +98,7 @@ attach() { # <client id>
   CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1 \
   "$claude" -p \
   --input-format stream-json --output-format stream-json --verbose \
-  --model haiku --no-session-persistence --settings "$(settings false)" --plugin-dir "$root/plugin" >"$out" 2>&1
+  --model haiku --no-session-persistence --settings "$(settings false true)" --plugin-dir "$root/plugin" >"$out" 2>&1
 
 sleep 1
 echo "after-end $(record_state "$home")" >>"$notes"
@@ -94,6 +110,7 @@ echo "running $(pgrep -f "$tmp" | wc -l | tr -d ' ')" >>"$notes"
   attach window-1
   sleep 3
   echo "auto-shown $(record_state "$auto_home")" >>"$notes"
+  echo "auto-options $(options_state "$auto_home")" >>"$notes"
   echo "$command"
   sleep 3
   echo "auto-out $(record_state "$auto_home")" >>"$notes"
@@ -109,7 +126,7 @@ echo "running $(pgrep -f "$tmp" | wc -l | tr -d ' ')" >>"$notes"
   CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1 \
   "$claude" -p \
   --input-format stream-json --output-format stream-json --verbose \
-  --model haiku --no-session-persistence --settings "$(settings true)" --plugin-dir "$root/plugin" >"$auto_out" 2>&1
+  --model haiku --no-session-persistence --settings "$(settings true false)" --plugin-dir "$root/plugin" >"$auto_out" 2>&1
 
 sleep 1
 echo "auto-end $(record_state "$auto_home")" >>"$notes"
@@ -127,6 +144,7 @@ check() { # fixed text to find, in a file, and what it shows
 }
 
 check "after-in ok" "$notes" "the first /pipcast wrote the session's record"
+check "options-in on" "$notes" "tuning in told the station the window is transparent"
 check "$tuned_in" "$out" "the first /pipcast answered that it tuned in"
 check "launch --home $home --assets $root/plugin/station --target-bundle-id com.example.pipcast.never-frontmost" "$calls" "the station was launched with the store, the assets and the target"
 check "after-out none" "$notes" "the second /pipcast removed the record"
@@ -136,6 +154,7 @@ check "after-end none" "$notes" "the session ending took the record with it"
 check "running 0" "$notes" "nothing is left running"
 check "auto-unshown none" "$notes" "with Tune in every new session on, a session nothing shows stays off the air"
 check "auto-shown ok" "$notes" "the desktop app showing the new session tuned it in"
+check "auto-options off" "$notes" "tuning in by itself told the station the window is solid"
 check "launch --home $auto_home --assets $root/plugin/station --target-bundle-id com.example.pipcast.never-frontmost" "$calls" "the station was launched for it"
 check "auto-out none" "$notes" "/pipcast took it off the air"
 check "$tuned_out" "$auto_out" "/pipcast answered that it tuned out"

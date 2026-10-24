@@ -161,3 +161,26 @@ import Testing
         #expect(text.components(separatedBy: "\n").dropLast(2).allSatisfy { $0.count == 99 })
     }
 }
+
+@Suite struct SharedOptionsTests {
+    @Test func aMissingOrUnreadableFileLeavesTheWindowSolid() throws {
+        let folder = temporaryFolder()
+        defer { try? FileManager.default.removeItem(atPath: folder) }
+        let path = "\(folder)/options.json"
+        #expect(!SharedOptions.load(from: path).transparent)
+        for text in ["nope", "[1]", #"{"v":2,"transparent":true}"#, #"{"v":1,"transparent":"yes"}"#, #"{"v":1,"transparent":1}"#, #"{"transparent":true}"#] {
+            try text.write(toFile: path, atomically: true, encoding: .utf8)
+            #expect(!SharedOptions.load(from: path).transparent, "\(text)")
+        }
+    }
+
+    @Test func readsTransparentFromVersionOne() throws {
+        let folder = temporaryFolder()
+        defer { try? FileManager.default.removeItem(atPath: folder) }
+        let path = "\(folder)/options.json"
+        try #"{"v":1,"transparent":true,"extra":3}"#.write(toFile: path, atomically: true, encoding: .utf8)
+        #expect(SharedOptions.load(from: path).transparent)
+        try #"{"v":1,"transparent":false}"#.write(toFile: path, atomically: true, encoding: .utf8)
+        #expect(!SharedOptions.load(from: path).transparent)
+    }
+}

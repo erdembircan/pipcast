@@ -9,6 +9,7 @@ public struct StorePaths: Equatable {
     public let station: String
     public let control: String
     public let prefs: String
+    public let options: String
     public let lock: String
     public let log: String
 
@@ -20,6 +21,7 @@ public struct StorePaths: Equatable {
         station = "\(root)/station.json"
         control = "\(root)/control.json"
         prefs = "\(root)/prefs.json"
+        options = "\(root)/options.json"
         lock = "\(root)/station.lock"
         log = "\(root)/station.log"
     }

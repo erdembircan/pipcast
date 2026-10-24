@@ -2,8 +2,8 @@
 // through the Io port, which register.tsx builds from `$`.
 
 import { storePaths } from '../contract/paths.ts'
-import { isStationAlive, parseControl, parseStationStatus, trimRecord } from '../contract/validate.ts'
-import type { SessionRecord } from '../contract/types.ts'
+import { isStationAlive, parseControl, parseSharedOptions, parseStationStatus, trimRecord } from '../contract/validate.ts'
+import type { SessionRecord, SharedOptions } from '../contract/types.ts'
 import type { SessionModel } from './model.ts'
 
 export interface RunResult {
@@ -22,8 +22,8 @@ export interface Io {
   read(path: string): Promise<string | null>
   // A file's size in bytes and when it last changed; null when it cannot be told
   stat(path: string): Promise<{ size: number; mtimeMs: number } | null>
-  // `${path}.tmp`, then renamed into place
-  write(path: string, text: string): Promise<void>
+  // `temp`, by default `${path}.tmp`, then renamed into place
+  write(path: string, text: string, temp?: string): Promise<void>
   // fine when missing
   remove(path: string): Promise<void>
   // names; [] when missing
@@ -111,4 +111,17 @@ export async function checkIn(io: Io, model: SessionModel, tunedInAt: number): P
     await ensureStation(io, home)
   }
   return { closed: false }
+}
+
+// options.json, what the station follows of the plugin's options; null when
+// it is missing or not one
+export async function readSharedOptions(io: Io, home: string): Promise<SharedOptions | null> {
+  return parseSharedOptions(await readJson(io, storePaths(home).options))
+}
+
+// Writes options.json through a temporary file named after the writer, so two
+// sessions writing at once never move each other's
+export async function shareOptions(io: Io, home: string, options: SharedOptions, writer: string): Promise<void> {
+  const path = storePaths(home).options
+  await io.write(path, JSON.stringify(options), `${path}.${writer}.tmp`)
 }

@@ -9,6 +9,7 @@ import type {
   Quadrant,
   SessionRecord,
   SessionState,
+  SharedOptions,
   StationControl,
   StationPrefs,
   StationStatus,
@@ -207,4 +208,12 @@ export function parsePrefs(value: unknown): StationPrefs {
     prefs.lastReportAt = value.lastReportAt
   }
   return prefs
+}
+
+// options.json, or null when it is missing or not one
+export function parseSharedOptions(value: unknown): SharedOptions | null {
+  if (!isObject(value) || value.v !== 1 || typeof value.transparent !== 'boolean') {
+    return null
+  }
+  return { v: 1, transparent: value.transparent }
 }

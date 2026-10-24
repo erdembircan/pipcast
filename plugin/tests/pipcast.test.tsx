@@ -6,7 +6,7 @@ import { ACTIVITY_WRITE_MS } from '../src/contract/constants.ts'
 import { BAND_ALT, ERROR_WORDS, OPTION_REPLY, REPLY, TOAST_CANNOT_START, optionState } from '../src/contract/copy.ts'
 import { hourKey } from '../src/contract/format.ts'
 import { TITLE_CHECK_MS } from '../src/core/title.ts'
-import { BAND, ENGINE, HOME, ID, PROJECT_DIR, ROOT, RECORD, RUN, STATION, T0, TITLE_FILE, TRANSCRIPT, WORKTREE, world } from './world.tsx'
+import { BAND, ENGINE, HOME, ID, PROJECT_DIR, ROOT, RECORD, OPTIONS_FILE, RUN, STATION, T0, TITLE_FILE, TRANSCRIPT, WORKTREE, world } from './world.tsx'
 import type { FakeTree, WorldOptions } from './world.tsx'
 
 const START = { cwd: ROOT, surface: 'desktop', isInteractive: true } as const
@@ -70,6 +70,9 @@ const located = { session_id: ID, transcript_path: TRANSCRIPT } as const
 
 // Tune in every new session, on
 const AUTO = { settings: { autoTuneIn: true } } as const
+
+// Transparent window, on
+const SEE_THROUGH = { settings: { transparentWindow: true } } as const
 
 // The engine starting a session, as classic.SessionStart says where it came from
 const started = ($: Engine, source: 'startup' | 'resume' | 'clear' | 'compact' | 'fork') =>
@@ -1114,4 +1117,89 @@ scenario('CLAUDE_CODE_EXECPATH names the engine when it is set', { env: { CLAUDE
 scenario('with no engine to be found, /pipcast auto says it could not read or save', { engine: null }, async (_w, $) => {
   expect((await option($, 'auto')).text).toBe(OPTION_REPLY.cannotRead('auto'))
   expect((await option($, 'auto on')).text).toBe(OPTION_REPLY.cannotSave('auto', true))
+})
+
+scenario('/pipcast transparency says what Transparent window is set to', {}, async (w, $) => {
+  expect((await option($, 'transparency')).text).toBe(optionState('transparency', false))
+  w.saved.transparentWindow = 'true'
+  expect((await option($, 'transparency')).text).toBe(optionState('transparency', true))
+  // Reading it tells the station nothing
+  expect(w.shared()).toBeNull()
+})
+
+scenario('/pipcast transparency on and off save the setting and tell the station at once, tuned in or not', {}, async (w, $) => {
+  expect((await option($, 'transparency on')).text).toBe(optionState('transparency', true))
+  expect(w.saved.transparentWindow).toBe('true')
+  expect(w.engineCalls.find((call) => call.argv.includes('--values-stdin'))?.stdin).toBe(JSON.stringify({ transparentWindow: 'true' }))
+  expect(w.shared()).toEqual({ v: 1, transparent: true })
+  expect((await option($, 'transparency off')).text).toBe(optionState('transparency', false))
+  expect(w.saved.transparentWindow).toBe('false')
+  expect(w.shared()).toEqual({ v: 1, transparent: false })
+  // Neither tunes the session in or out
+  expect(w.record()).toBeNull()
+  expect(w.launched.length).toBe(0)
+})
+
+scenario('options.json goes through a temporary file named after the session', {}, async (w, $) => {
+  await option($, 'transparency on')
+  expect(w.writes).toContain(`${OPTIONS_FILE}.${ID}.tmp`)
+  expect(w.writes).not.toContain(`${OPTIONS_FILE}.tmp`)
+  expect(w.files.has(`${OPTIONS_FILE}.${ID}.tmp`)).toBe(false)
+})
+
+scenario('a save Claude Code refuses tells the station nothing', { configureFails: true }, async (w, $) => {
+  expect((await option($, 'transparency on')).text).toBe(OPTION_REPLY.cannotSave('transparency', true))
+  expect(w.shared()).toBeNull()
+})
+
+scenario('/pipcast auto on tells the station nothing', {}, async (w, $) => {
+  await option($, 'auto on')
+  expect(w.shared()).toBeNull()
+})
+
+scenario('tuning in tells the station Transparent window before the station starts', SEE_THROUGH, async (w, $) => {
+  await tuneIn($)
+  expect(w.shared()).toEqual({ v: 1, transparent: true })
+  const order = w.ran.flatMap((argv) => (argv[0] === STATION ? ['station'] : argv[0] === '/bin/mv' && argv.includes(OPTIONS_FILE) ? ['options'] : []))
+  expect(order).toEqual(['options', 'station'])
+})
+
+scenario('tuning in leaves options.json alone when it already agrees', SEE_THROUGH, async (w, $) => {
+  w.files.set(OPTIONS_FILE, JSON.stringify({ v: 1, transparent: true }))
+  await tuneIn($)
+  expect(w.writes.filter((path) => path.startsWith(OPTIONS_FILE))).toEqual([])
+  expect(w.shared()).toEqual({ v: 1, transparent: true })
+})
+
+scenario('tuning in puts its own value over an options.json that says otherwise or cannot be read', {}, async (w, $) => {
+  w.files.set(OPTIONS_FILE, JSON.stringify({ v: 1, transparent: true }))
+  await tuneIn($)
+  expect(w.shared()).toEqual({ v: 1, transparent: false })
+  expect((await tuneIn($)).text).toBe(REPLY.tunedOut)
+  w.files.set(OPTIONS_FILE, 'not json')
+  await tuneIn($)
+  expect(w.shared()).toEqual({ v: 1, transparent: false })
+})
+
+scenario('a session that tunes in by itself tells the station too', { settings: { autoTuneIn: true, transparentWindow: true } }, async (w, $) => {
+  await started($, 'startup')
+  await shown($)
+  expect(w.record()?.id).toBe(ID)
+  expect(w.shared()).toEqual({ v: 1, transparent: true })
+})
+
+scenario('a reload while tuned in tells the station the value it brings', SEE_THROUGH, async (w, $) => {
+  await tuneIn($)
+  // An older load's value
+  w.files.set(OPTIONS_FILE, JSON.stringify({ v: 1, transparent: false }))
+  // The module starts over; $.state says tuned in
+  await $.session.start(START)
+  expect(w.shared()).toEqual({ v: 1, transparent: true })
+})
+
+scenario('a session that is not tuned in tells the station nothing as it loads and works', SEE_THROUGH, async (w, $) => {
+  await $.session.start(START)
+  await turn($)
+  await w.clock.advance(10_000)
+  expect(w.shared()).toBeNull()
 })

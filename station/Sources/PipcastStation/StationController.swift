@@ -36,6 +36,13 @@ final class StationController: NSObject, InteractionDelegate, WKNavigationDelega
     private var watcher: DispatchSourceFileSystemObject?
     private var timers: [Timer] = []
     private var selfCaptureScheduled = false
+    /// Whether the window counts as hovered, as the station last looked: the controls show and the window is whole.
+    /// Never while it is hidden.
+    private var hovered = false
+    /// Transparent window, as options.json last said.
+    private var transparent = false
+    /// The self-capture holds the controls up.
+    private var holdingControls = false
 
     init(options: StationOptions) {
         self.options = options
@@ -50,6 +57,7 @@ final class StationController: NSObject, InteractionDelegate, WKNavigationDelega
         web.navigationDelegate = self
         panel.contentView = chrome
         chrome.interaction.delegate = self
+        chrome.interaction.onPointer = { [weak self] in self?.followPointer() }
         chrome.close.onPress = { [weak self] in self?.close() }
         chrome.sound.onPress = { [weak self] in self?.toggleSound() }
         chrome.back.onPress = { [weak self] in self?.backToClaude() }
@@ -72,6 +80,8 @@ final class StationController: NSObject, InteractionDelegate, WKNavigationDelega
         log.write(spaces != nil
                   ? "spaces: off the target's own full-screen Spaces"
                   : "error cannot keep the window off the target's own full-screen Spaces; it can show there as you switch to it")
+        transparent = SharedOptions.load(from: paths.options).transparent
+        log.write(transparent ? "transparent on" : "transparent off")
         jingles = Jingles(folder: "\(options.assets)/sounds", onProblem: { [log] in log.write("error \($0)") })
         place(on: NSScreen.main ?? NSScreen.screens[0], animated: false)
 
@@ -153,7 +163,10 @@ final class StationController: NSObject, InteractionDelegate, WKNavigationDelega
 
     private func tick() {
         keepOffOwnSpaces()
+        readOptions()
         refreshStore()
+        // macOS tells a window nothing when it appears under a resting pointer, or moves out from under it.
+        followPointer()
         if shouldQuit() {
             // Look once more before giving up on the air.
             refreshStore()
@@ -251,6 +264,9 @@ final class StationController: NSObject, InteractionDelegate, WKNavigationDelega
         guard want != isShown else { return }
         isShown = want
         if want {
+            // It shows with the look the pointer asks for: hovered if the pointer is already on it.
+            hovered = pointerIsOn()
+            showLook(animated: false)
             // Never makeKeyAndOrderFront or activate: the station must not take the keyboard.
             panel.forceActiveAppearance()
             panel.animationBehavior = .default
@@ -263,6 +279,9 @@ final class StationController: NSObject, InteractionDelegate, WKNavigationDelega
             // At once: AppKit's fade would leave the window on screen for a quarter of a second more.
             panel.animationBehavior = .none
             panel.orderOut(nil)
+            // Hidden, it is hovered by nothing; it looks at the pointer again as it shows.
+            hovered = false
+            showLook(animated: false)
         }
         log.write(want ? "shown" : "hidden")
         sendSnapshot()
@@ -313,7 +332,8 @@ final class StationController: NSObject, InteractionDelegate, WKNavigationDelega
         selfCaptureScheduled = true
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
             guard let self else { return }
-            self.chrome.setHover(true)
+            self.holdingControls = true
+            self.followPointer()
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [weak self] in
                 guard let self else { return }
                 if writeSelfCapture(of: self.panel, to: path) {
@@ -321,7 +341,8 @@ final class StationController: NSObject, InteractionDelegate, WKNavigationDelega
                 } else {
                     self.log.write("error self-capture failed")
                 }
-                if !self.panel.frame.contains(NSEvent.mouseLocation) { self.chrome.setHover(false) }
+                self.holdingControls = false
+                self.followPointer()
             }
         }
     }
@@ -343,10 +364,56 @@ final class StationController: NSObject, InteractionDelegate, WKNavigationDelega
                 context.duration = 0.2
                 context.timingFunction = CAMediaTimingFunction(name: .easeOut)
                 panel.animator().setFrame(frame, display: true)
-            }, completionHandler: { [panel] in panel.invalidateShadow() })
+            }, completionHandler: { [weak self] in
+                self?.panel.invalidateShadow()
+                // The window may have moved out from under the pointer.
+                self?.followPointer()
+            })
         } else {
             panel.setFrame(frame, display: true)
             panel.invalidateShadow()
+        }
+    }
+
+    // MARK: Hover and Transparent window
+
+    /// Follows options.json: Transparent window, logged as it changes.
+    private func readOptions() {
+        let now = SharedOptions.load(from: paths.options).transparent
+        guard now != transparent else { return }
+        transparent = now
+        log.write(now ? "transparent on" : "transparent off")
+        showLook(animated: isShown == true)
+    }
+
+    /// Whether the window counts as hovered now, from where the pointer is.
+    private func pointerIsOn() -> Bool {
+        holdingControls
+            || isHovered(pointer: NSEvent.mouseLocation, frame: panel.frame, pressing: chrome.interaction.isPressing)
+    }
+
+    /// Looks at the pointer again. As the window comes to count as hovered, the dim and the controls fade in, and
+    /// with Transparent window on the window turns whole with them; as it stops, they fade back.
+    private func followPointer() {
+        let now = isShown == true && pointerIsOn()
+        guard now != hovered else { return }
+        hovered = now
+        showLook(animated: true)
+    }
+
+    /// The controls while hovered, and the window's opacity: in over 0.15 s, out over 0.25 s.
+    private func showLook(animated: Bool) {
+        let alpha = CGFloat(windowAlpha(transparent: transparent, hovered: hovered))
+        guard animated else {
+            chrome.showControls(hovered, animated: false)
+            panel.alphaValue = alpha
+            return
+        }
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = hovered ? 0.15 : 0.25
+            context.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            chrome.showControls(hovered, animated: true)
+            panel.animator().alphaValue = alpha
         }
     }
 

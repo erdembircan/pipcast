@@ -15,13 +15,15 @@ import { FILE_TOOLS, MAX_FOLDERS, NOTHING, agentMetaPath, look, parseAgentMeta, 
 import type { Reading } from '../src/core/ledger.ts'
 import * as record from '../src/core/model.ts'
 import type { SessionModel } from '../src/core/model.ts'
-import { parseRequest } from '../src/core/options.ts'
+import { TRANSPARENT_KEY, needsSharing, parseRequest } from '../src/core/options.ts'
 import type { OptionSpec } from '../src/core/options.ts'
 import { lookAtShells, lookDue, stillWorking } from '../src/core/shells.ts'
 import { waitsOn } from '../src/core/wake.ts'
 import {
   checkIn,
   ensureStation,
+  readSharedOptions,
+  shareOptions,
   tuneIn,
   tuneOut,
   writeRecord,
@@ -38,6 +40,8 @@ const due = atom({ plugin: 'pipcast', key: 'due' } as const, false)
 
 // Tune in every new session, the plugin's option, as this load was given it
 let autoTuneIn = false
+// Transparent window, the plugin's option, as this load was given it
+let transparentWindow = false
 // Tuning in by itself runs one at a time, so a session never tunes in twice
 let autoQueue: Promise<void> = Promise.resolve()
 // Where Claude Code keeps this plugin's options, once found this load
@@ -131,15 +135,15 @@ function ioFor($: EngineInterface): Io {
         return null
       }
     },
-    async write(path, text) {
+    async write(path, text, temp = `${path}.tmp`) {
       const dir = path.slice(0, path.lastIndexOf('/'))
       if (!(await $.fs.exists(dir))) {
         // The store is private to the user
         await $.process.run(['/bin/mkdir', '-p', '-m', '700', dir.slice(0, dir.lastIndexOf('/'))])
         await $.process.run(['/bin/mkdir', '-m', '700', dir])
       }
-      await $.fs.write(`${path}.tmp`, text)
-      const moved = await $.process.run(['/bin/mv', '-f', `${path}.tmp`, path])
+      await $.fs.write(temp, text)
+      const moved = await $.process.run(['/bin/mv', '-f', temp, path])
       if (moved.exitCode !== 0) {
         throw new Error(moved.stderr)
       }
@@ -232,6 +236,29 @@ function stopTimers(): void {
   activityTimer = undefined
   titleTimer?.cancel()
   titleTimer = undefined
+}
+
+// Tells the station what Transparent window is now: options.json
+async function shareTransparency($: EngineInterface, transparent: boolean): Promise<void> {
+  try {
+    const io = ioFor($)
+    await shareOptions(io, await io.storeHome(), { v: 1, transparent }, await $.session.id())
+  } catch (error) {
+    failure($, 'telling the station', error)
+  }
+}
+
+// As the session tunes in, or reloads while tuned in: this load's value, when
+// options.json is missing, cannot be read or says otherwise
+async function shareOwnTransparency($: EngineInterface): Promise<void> {
+  try {
+    const io = ioFor($)
+    if (needsSharing(await readSharedOptions(io, await io.storeHome()), transparentWindow)) {
+      await shareTransparency($, transparentWindow)
+    }
+  } catch (error) {
+    failure($, 'telling the station', error)
+  }
 }
 
 // Where the engine keeps the session's files, from a classic hook's input
@@ -577,6 +604,8 @@ async function startSession($: EngineInterface): Promise<void> {
       await checkTitle($)
       tunedInAt = own.tunedInAt
       await save($)
+      // A reload after a change brings the new value; the station follows it
+      await shareOwnTransparency($)
       await ensureStation(io, home)
       startTitleChecks($)
     }
@@ -609,6 +638,8 @@ async function tuneInNow($: EngineInterface): Promise<TuneInResult['status']> {
   const built = await ensureSession($)
   // The record's first write carries the title the engine has now
   await checkTitle($)
+  // The station reads Transparent window as it starts
+  await shareOwnTransparency($)
   const m = model ?? built
   const io = ioFor($)
   let result = { status: 'cannot-start' } as TuneInResult
@@ -745,12 +776,19 @@ async function showOption($: EngineInterface, option: OptionSpec): Promise<strin
 }
 
 // /pipcast <option> on|off: saved with Claude Code's own command, after which
-// every session reloads the mod with the new value
+// every session reloads the mod with the new value. Transparent window also
+// reaches the station at once, through options.json.
 async function setOption($: EngineInterface, option: OptionSpec, on: boolean): Promise<string> {
   try {
     const home = await optionsHomeOf($)
     const saved = home !== null && (await writeOption(ioFor($), home, option.key, on))
-    return saved ? optionState(option.word, on) : OPTION_REPLY.cannotSave(option.word, on)
+    if (!saved) {
+      return OPTION_REPLY.cannotSave(option.word, on)
+    }
+    if (option.key === TRANSPARENT_KEY) {
+      await shareTransparency($, on)
+    }
+    return optionState(option.word, on)
   } catch (error) {
     failure($, 'saving an option', error)
     return OPTION_REPLY.cannotSave(option.word, on)
@@ -860,6 +898,7 @@ async function onComplete($: EngineInterface, isAborted: boolean, reason: string
 export const register: Register = (on, options) => {
   // The plugin's options, fixed for this load: a change reloads the module
   autoTuneIn = options.autoTuneIn === true
+  transparentWindow = options.transparentWindow === true
   optionsAt = null
 
   on('session.start', async ($, e, next) => {
