@@ -611,7 +611,7 @@ async function tuneOutNow($: EngineInterface): Promise<void> {
   await setState($, false)
 }
 
-// The band's tab and /pipcast do the same: tune in, or tune out
+// The band's plate and /pipcast do the same: tune in, or tune out
 async function toggle($: EngineInterface): Promise<'in' | 'out' | 'cannot-start'> {
   try {
     if ((await read($, tuned)) === true) {

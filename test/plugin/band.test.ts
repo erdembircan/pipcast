@@ -88,7 +88,7 @@ describe('blankLabel', () => {
     }
   })
 
-  it('reaches two columns past the tab on each side', () => {
+  it('reaches two columns past the plate on each side', () => {
     expect(REACH).toBe(2)
   })
 
