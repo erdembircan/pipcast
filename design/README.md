@@ -1,4 +1,4 @@
-PiP Newsroom turns a picture-in-picture window into a local TV news channel about your tracked Claude Code sessions. The window is our own, the proof of concept's always-on-top panel, drawn to look like macOS's video picture-in-picture; it is not the system's PiP. The channel is **KLWD**. Most of the time it airs the **live board**, a listing of the sessions and their state. When a session needs your input or is ready for review, it cuts to a **news flash**: a stinger, then the anchor desk, where Clawd, the Claude Code mascot, anchors the story in front of the city at dusk. Every hour on the hour it airs a short scheduled report, **On the hour**: the station clock strikes the hour, Clawd reads the hour's headlines at the desk, and THE HOUR IN REVIEW shows what each session did.
+PiP Newsroom turns a picture-in-picture window into a local TV news channel about your tracked Claude Code sessions. The window is our own, the proof of concept's always-on-top panel, drawn to look like macOS's video picture-in-picture; it is not the system's PiP. The channel is **KLWD**. Most of the time it airs the **live board**, a listing of the sessions, their projects and their state. When a session needs your input or is ready for review, it cuts to a **news flash**: a stinger, then the anchor desk, where Clawd, the Claude Code mascot, anchors the story in front of the city at dusk. Every hour on the hour it airs a short scheduled report, **On the hour**: the station clock strikes the hour, Clawd reads the hour's headlines at the desk, and THE HOUR IN REVIEW shows what each session did.
 
 The look is **Local at Six**: a 1990s local-station package of glossy blue bars, gold trims, chrome lettering and slanted tabs. The production designs are on the station canvas, one page per part of the broadcast; the **Review sequence** section says what each page decides and where it stands.
 
@@ -16,7 +16,7 @@ The current design is this system and three canvases, and nothing else: PiP News
 Write like a local newsroom: present tense, active voice, four words or fewer in a headline.
 
 - **The event is the headline; the session is the strap.** Headlines come from a fixed vocabulary: `NEEDS YOUR INPUT`, `READY FOR REVIEW`, `WORK COMPLETE` and `STOPPED ON AN ERROR` for the stories, and `2 STORIES` or `A QUIET HOUR` on the hour. The session's title and project go on the strap underneath, so a long title never breaks a headline.
-- Set headlines, tabs, labels and the listing's pills in caps. Session titles in the listing appear as they are written; straps, ticker items and monitor copy are in sentence case.
+- Set headlines, tabs, labels, the listing's pills and its project plates in caps. Session titles in the listing appear as they are written; straps, ticker items and monitor copy are in sentence case.
 - Claude is "Claude", the one who asks. The anchor is "Clawd". Never "the AI" or "the bot".
 - Quote Claude on the wall monitor, three lines at most: the command it wants to run in gold with its own description of it (`npm install`, "Install dependencies"), the question it asks, or its last words when it finished with nothing changed. An error is its kind, in plain words. Data sources has where each comes from.
 - Write numbers as "12 min", "4 files", "+182 −40" (a true minus sign). Times are 24-hour: "14:32".
@@ -51,12 +51,12 @@ Write like a local newsroom: present tense, active voice, four words or fewer in
 ### Type
 
 - `display` (Anybody) for everything with station character: the bug, the stinger, headlines, tabs, labels, and the listing's titles and pills. Always italic and heavy, expanded with `font-stretch`: 110–120% for headlines and the bug, 130% in the listing.
-- `text` (Archivo) for what has to be read quickly: straps, ticker items, monitor copy, the clock.
+- `text` (Archivo) for what has to be read quickly: straps, ticker items, monitor copy, the clock, and the projects on the listing's plates.
 - `mono` (IBM Plex Mono) only for captions on the canvas, never on the stage.
 
 ### Shape and finish
 
-- Graphics lean forward by `slant` (−12°): tabs, headline bars, straps, and the ticker's LATEST tab and clock. Text inside is set straight again.
+- Graphics lean forward by `slant` (−12°): tabs, headline bars, straps, the listing's project plates, and the ticker's LATEST tab and clock. Text inside is set straight again.
 - Bars are glossy: a gradient with a `gloss` sheen, or the listing's hard split across the middle, and a light top edge. Headline bars carry a `gold-hi` edge on top and a `gold-lo` edge below.
 - Chrome lettering (`chrome-hi`, `chrome`, `chrome-lo`) is for the bug, the stinger, the ident on the hour (its words, and the station clock's bezel, hands and mark) and the monitor's bezel, and nothing else.
 - Rounded corners: the listing's rows (`radius-row`) and pills (`radius-tag`), other bars (`radius-bar`) and the monitor (`radius-monitor`).
@@ -66,7 +66,7 @@ Write like a local newsroom: present tense, active voice, four words or fewer in
 - The stage has four bands, top to bottom: the top band with the KLWD bug (y 24–68); the content, either the listing from y 92 or the anchor desk; the lower third (y 364–460); and the ticker (y 484–540), with the clock at its right end.
 - The bug sits at the title-safe inset (`safe-inset`, x 40), level with the listing. On hover, the close button sits over its first letters. The right end of the top band stays empty for return.
 - At the desk, Clawd sits at x 138, y 211 at 18px cells, behind the desk top at y 328. The desk runs the full width; its chrome and gold lip follows the front edge (y 348 at the sides, 361 at the centre with the trim), above the lower third. The station mug stands left of Clawd and the script lies in front of Clawd. The wall monitor stands at the right, x 556–920.
-- The listing shows four rows a page, 68 tall with 12 between, sorted needs input, error, ready, working. With more than four sessions a tab under the pills says which page it shows (1 OF 2), on the ticker clock's blue, at y 422–462; four or fewer is one page and no tab.
+- The listing shows four rows a page, 68 tall with 12 between, sorted needs input, error, ready, working. Each row leads with its session's project on a plate, 200 wide and 44 tall, so the titles start in line; a name longer than the plate is cut with an ellipsis, and a session with no project has no plate. With more than four sessions a tab under the pills says which page it shows (1 OF 2), on the ticker clock's blue, at y 422–462; four or fewer is one page and no tab.
 - THE HOUR IN REVIEW keeps the listing's order: its header at y 84, four rows of 72 a page from y 150 to 462, above the ticker. With more than four sessions its page tab sits at the right end of the header, y 90–130.
 - The ident's clock starts at the centre and steps to x 250 at the hour, leaving the right half to ON THE HOUR.
 

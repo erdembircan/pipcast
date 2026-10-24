@@ -21,6 +21,7 @@ export interface Session {
   id: string;
   /** The session's title, shown as it is written in the listing. */
   name: string;
+  /** The session's project, its repository's name or else its folder's: it leads the session's row on a plate. */
   project?: string;
   state: SessionState;
 }
