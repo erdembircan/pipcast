@@ -766,24 +766,6 @@ final class StationController: NSObject, InteractionDelegate, WKNavigationDelega
 
     func dragDidMove() {
         let screen = currentScreen()
-        // Dropped with its centre past the screen's left or right edge, the window goes into that side.
-        if let side = Minimize.side(droppedAt: panel.frame, visible: screen.visibleFrame) {
-            let top = panel.frame.midY >= screen.visibleFrame.midY
-            let landed: Quadrant = switch (side, top) {
-            case (.right, true): .topRight
-            case (.right, false): .bottomRight
-            case (.left, true): .topLeft
-            case (.left, false): .bottomLeft
-            }
-            if landed != quadrant {
-                quadrant = landed
-                prefs.quadrant = landed
-                savePrefs()
-                log.write("quadrant \(landed.rawValue)")
-            }
-            act(.minimize)
-            return
-        }
         let centre = CGPoint(x: panel.frame.midX, y: panel.frame.midY)
         let landed = Geometry.quadrant(containing: centre, visible: screen.visibleFrame)
         if landed != quadrant {
@@ -805,6 +787,34 @@ final class StationController: NSObject, InteractionDelegate, WKNavigationDelega
 
     func dragIsMoving() {
         placeHandle()
+        // A quarter of the window past the screen's left or right edge sends it into that side, with the button still
+        // down. During a drag the window's centre stays on the screen it left until it is half over, so that is the
+        // screen whose edge counts.
+        let screen = currentScreen()
+        let others = NSScreen.screens.filter { $0 != screen }.map(\.frame)
+        guard let side = Minimize.side(dragged: panel.frame, visible: screen.visibleFrame, screen: screen.frame,
+                                       others: others) else { return }
+        chrome.interaction.endDrag()
+        minimize(into: side, on: screen)
+    }
+
+    /// Minimizes the window into `side` of `screen` from wherever a drag left it; the quadrant on that side, top or
+    /// bottom as the window's centre is, is kept for it.
+    private func minimize(into side: Side, on screen: NSScreen) {
+        let top = panel.frame.midY >= screen.visibleFrame.midY
+        let landed: Quadrant = switch (side, top) {
+        case (.right, true): .topRight
+        case (.right, false): .bottomRight
+        case (.left, true): .topLeft
+        case (.left, false): .bottomLeft
+        }
+        if landed != quadrant {
+            quadrant = landed
+            prefs.quadrant = landed
+            savePrefs()
+            log.write("quadrant \(landed.rawValue)")
+        }
+        act(.minimize)
     }
 
     func dragIsResizing() {

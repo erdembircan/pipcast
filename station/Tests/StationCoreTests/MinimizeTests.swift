@@ -82,11 +82,30 @@ private func near(_ a: CGRect, _ b: CGRect, _ tolerance: CGFloat = 0.05) -> Bool
         #expect(Minimize.shown(window: CGRect(x: 1512, y: 20, width: 716, height: 403), visible: visible) == .zero)
     }
 
-    @Test func aWindowDroppedWithItsCentrePastASideEdgeGoesIntoIt() {
-        func dropped(midX: CGFloat) -> CGRect { CGRect(x: midX - 358, y: 100, width: 716, height: 403) }
-        #expect(Minimize.side(droppedAt: dropped(midX: 1513), visible: visible) == .right)
-        #expect(Minimize.side(droppedAt: dropped(midX: -1), visible: visible) == .left)
-        #expect(Minimize.side(droppedAt: dropped(midX: 1000), visible: visible) == nil)
+    @Test func aWindowDraggedAQuarterPastASideEdgeGoesIntoIt() {
+        let area = CGRect(x: 0, y: 0, width: 1512, height: 950)
+        let whole = CGRect(x: 0, y: 0, width: 1512, height: 982)
+        func dragged(minX: CGFloat, y: CGFloat = 20) -> CGRect { CGRect(x: minX, y: y, width: 501, height: 282) }
+        func side(_ window: CGRect, _ others: [CGRect] = []) -> Side? {
+            Minimize.side(dragged: window, visible: area, screen: whole, others: others)
+        }
+        // A quarter of 501 pt is 125.25 pt.
+        #expect(side(dragged(minX: 1512 + 125.25 - 501)) == .right)
+        #expect(side(dragged(minX: 1512 + 124 - 501)) == nil)
+        #expect(side(dragged(minX: -125.25)) == .left)
+        #expect(side(dragged(minX: -124)) == nil)
+        // Another display beyond the right edge, level with the window: the window moves onto it instead.
+        let beside = CGRect(x: 1512, y: 0, width: 1920, height: 1080)
+        #expect(side(dragged(minX: 1512 + 200 - 501), [beside]) == nil)
+        // One beyond the right edge but above the window does not count.
+        let above = CGRect(x: 1512, y: 2000, width: 1920, height: 1080)
+        #expect(side(dragged(minX: 1512 + 200 - 501), [above]) == .right)
+        // Another display beyond the left edge, level with the window.
+        let left = CGRect(x: -1920, y: 0, width: 1920, height: 1080)
+        #expect(side(dragged(minX: -200), [left]) == nil)
+        // Past the top or the bottom only: nothing.
+        #expect(side(dragged(minX: 500, y: 900)) == nil)
+        #expect(side(dragged(minX: 500, y: -200)) == nil)
     }
 }
 
