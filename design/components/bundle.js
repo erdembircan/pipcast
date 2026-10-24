@@ -1888,8 +1888,9 @@
      a button (PlayWithSound); the product plays it as the stinger starts.
      ------------------------------------------------------------------ */
   var HZ = {
-    D2: 73.42, F2: 87.31, A2: 110.0, D3: 146.83, F3: 174.61, Fs3: 185.0, A3: 220.0, C4: 261.63, Cs4: 277.18,
-    D4: 293.66, E4: 329.63, F4: 349.23, Fs4: 369.99, A4: 440.0, C5: 523.25, D5: 587.33, A5: 880.0, D6: 1174.66
+    D2: 73.42, F2: 87.31, G2: 98.0, A2: 110.0, D3: 146.83, F3: 174.61, Fs3: 185.0, G3: 196.0, A3: 220.0,
+    Bb3: 233.08, C4: 261.63, Cs4: 277.18, D4: 293.66, E4: 329.63, F4: 349.23, Fs4: 369.99, A4: 440.0,
+    C5: 523.25, D5: 587.33, A5: 880.0, D6: 1174.66
   };
 
   function noise(ctx, seconds) {
@@ -2197,34 +2198,33 @@
     }
   }
 
-  /* BREAKING NEWS, the outro, 3.4 s. Cut to the outro's marks (1.2 s): a
-     short roll as the glint crosses the words, three of the logo's notes on
-     three hits as the words leave (D minor, then the dominant), and the
-     fourth on a closing chord, D major, as the open fades to the board; then
-     it rings out over the board. */
+  /* BREAKING NEWS, the outro, 3.4 s. The logo brought back down: its four
+     notes, A D A D, walk down on the bells over the brass, one on each of
+     the outro's marks (1.2 s), each a little later and softer than the
+     last. D minor as the glint crosses the words, G minor as BREAKING
+     leaves, A major as NEWS leaves, and the low D, home to D major, as the
+     open fades to the board, dying away under it. No riser, no roll, no
+     boom and no crash: those say a story is coming. */
   function scoreBreakingOut(m, t0) {
-    var roll = [0, 0.05, 0.09, 0.125, 0.155];
-    riser(m, t0, 0.2, 0.07);
-    roll.forEach(function (x, i) { timpani(m, t0 + x, HZ.D2, 0.05 + 0.12 * i / (roll.length - 1), 0.28); });
-    var hits = [
-      { at: 0.2, logo: HZ.A4, chord: [HZ.D3, HZ.F3, HZ.A3, HZ.D4], drum: HZ.D2 },
-      { at: 0.38, logo: HZ.D5, chord: [HZ.F3, HZ.A3, HZ.D4], drum: HZ.A2 },
-      { at: 0.56, logo: HZ.A5, chord: [HZ.A3, HZ.Cs4, HZ.E4], drum: HZ.A2 }
+    var steps = [
+      { at: 0.1, logo: HZ.A5, chord: [HZ.D3, HZ.F3, HZ.A3, HZ.D4], bass: HZ.D2, drum: HZ.D2, vel: 0.15 },
+      { at: 0.34, logo: HZ.D5, chord: [HZ.G3, HZ.Bb3, HZ.D4], bass: HZ.G2, drum: 0, vel: 0.13 },
+      { at: 0.62, logo: HZ.A4, chord: [HZ.A3, HZ.Cs4, HZ.E4], bass: HZ.A2, drum: HZ.A2, vel: 0.12 }
     ];
-    hits.forEach(function (x, i) {
-      x.chord.forEach(function (f) { brass(m, t0 + x.at, f, 0.1, 0.06); });
-      timpani(m, t0 + x.at, x.drum, i === 0 ? 0.32 : 0.28, 0.5);
-      bell(m, t0 + x.at, x.logo, 0.5, 0.16);
+    steps.forEach(function (x, i) {
+      var t = t0 + x.at;
+      x.chord.forEach(function (f) { brass(m, t, f, 0.18, 0.05 - 0.005 * i); });
+      brass(m, t, x.bass, 0.18, 0.04);
+      bell(m, t, x.logo, 0.8, x.vel);
+      if (x.drum) { timpani(m, t, x.drum, 0.24 - 0.04 * i, 0.5); }
     });
-    var end = t0 + 0.84;
-    [HZ.D3, HZ.Fs3, HZ.A3, HZ.D4, HZ.Fs4].forEach(function (f) { brass(m, end, f, 0.9, 0.15); });
-    brass(m, end, HZ.D2, 0.9, 0.1);
-    timpani(m, end, HZ.D2, 1, 1.3);
-    boom(m, end, 0.85);
-    crash(m, end, 0.42);
-    bell(m, end, HZ.D6, 1.9, 0.28);
-    tremolo(m, end, HZ.D5, 1.8, 0.045);
-    tremolo(m, end, HZ.A5, 1.8, 0.03);
+    var end = t0 + 0.96;
+    [HZ.D3, HZ.Fs3, HZ.A3, HZ.D4].forEach(function (f) { brass(m, end, f, 0.3, 0.1, 1.4); });
+    brass(m, end, HZ.D2, 0.3, 0.06, 1.4);
+    timpani(m, end, HZ.D2, 0.45, 1.3);
+    bell(m, end, HZ.D4, 1.8, 0.2);
+    tremolo(m, end, HZ.A3, 1.8, 0.025);
+    tremolo(m, end, HZ.D4, 1.8, 0.02);
   }
 
   /* The station's time signal: a short pure tone on the logo's top note */

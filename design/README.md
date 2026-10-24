@@ -95,12 +95,12 @@ With reduced motion, all of it stops; the intro and the ident show their last fr
 
 ### Sound
 
-BREAKING NEWS gets two jingles, one for its intro and one for its outro, and so does the hour, all built on the station's four-note logo: one note per call letter, K-L-W-D, up a fourth, a fifth and a fourth (A, D, A, D in D). BREAKING NEWS sets it over D minor and plays the same for every story. The jingles are synthesised with Web Audio from a short score (`PipNews.playJingle`), so the window and the review boards play the same thing.
+BREAKING NEWS gets two jingles, one for its intro and one for its outro, and so does the hour, all built on the station's four-note logo: one note per call letter, K-L-W-D, up a fourth, a fifth and a fourth (A, D, A, D in D). BREAKING NEWS sets it over D minor and plays the same for every story. An intro takes the logo up and an outro brings it back down, so the ear knows whether a segment is starting or over: no outro has a riser or a drum roll. The jingles are synthesised with Web Audio from a short score (`PipNews.playJingle`), so the window and the review boards play the same thing.
 
 | Jingle | What it plays | Length |
 | --- | --- | --- |
 | BREAKING NEWS, intro | A drum roll and a riser before the words; the logo's four notes on four brass hits as BREAKING and NEWS slam in, the last and biggest as NEWS lands; then the beat runs on through the cut to the desk, holds for two bars and fades out about three seconds into the desk | 5.8 s from the stinger's start |
-| BREAKING NEWS, outro | A short roll as the glint crosses the words; three of the logo's notes on three hits as the words leave, over D minor and then the dominant; the fourth on a closing chord in D major as the open fades to the board, ringing out over it | 3.4 s from the outro's start |
+| BREAKING NEWS, outro | The logo's four notes walk back down, A D A D, on the bells over the brass, one on each of the outro's marks and each a little later and softer than the last: as the glint crosses the words (D minor), as BREAKING leaves (G minor), as NEWS leaves (A major), and the low D as the open fades to the board, on a warm D major chord that dies away under it. No riser, no roll, no boom, no crash | 3.4 s from the outro's start |
 | On the hour | Five short pips on D as the seconds hand steps through the last five seconds, and a long one as the minute hand jumps to the hour; then the logo's four notes on a stately brass fanfare in D major, on the strike, as ON THE lands, as HOUR lands, and the last and biggest as the words settle, ringing out into the desk. Routine, not news: no roll and no riser | 9.6 s from five seconds before the hour |
 | On the hour, outro | The logo's four notes come back down on bells, top to bottom, over a soft pad as the words leave; then a warm D major chord as the clock goes and the ident fades to the board, dying away under it. No pips, no roll | 3.6 s from the outro's start |
 
