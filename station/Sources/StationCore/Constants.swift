@@ -1,4 +1,4 @@
-// The numbers every part agrees on, mirrored from plugin/src/contract/constants.ts
+// The numbers every part agrees on, mirrored from packages/contract/src/constants.ts
 // (and the one clock-skew allowance in validate.ts). A test reads those files and
 // fails when any of these differ. Times are in milliseconds.
 

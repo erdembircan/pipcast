@@ -1,5 +1,5 @@
 #!/bin/bash
-# Writes the band's lettering outlines (plugin/src/core/art.generated.ts).
+# Writes the band's lettering outlines (packages/mod/src/core/art.generated.ts).
 set -euo pipefail
 
 root="$(cd "$(dirname "$0")/../.." && pwd)"

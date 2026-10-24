@@ -35,7 +35,7 @@ id="$(uuidgen | tr '[:upper:]' '[:lower:]')"
 untitled="work-${id:0:2}"
 
 # The time between two title checks, in whole seconds, from the mod
-check_every="$(node -e "import('$root/plugin/src/core/title.ts').then((m) => process.stdout.write(String(Math.ceil(m.TITLE_CHECK_MS / 1000))))")"
+check_every="$(node -e "import('$root/packages/mod/src/core/title.ts').then((m) => process.stdout.write(String(Math.ceil(m.TITLE_CHECK_MS / 1000))))")"
 
 # The title on the session's record, or "none" when there is no record
 title() {

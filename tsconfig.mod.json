@@ -1,0 +1,18 @@
+{
+  "compilerOptions": {
+    "target": "es2023",
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "lib": ["es2023"],
+    "types": [],
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "allowImportingTsExtensions": true,
+    "paths": {
+      "@pipcast/contract": ["./packages/contract/src/index.ts"]
+    }
+  },
+  "include": ["packages/contract/src", "packages/contract/test", "packages/mod/src/core", "packages/mod/test/*.ts"]
+}

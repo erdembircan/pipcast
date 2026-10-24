@@ -10,11 +10,10 @@ export default tseslint.config(
     ignores: [
       'node_modules',
       'design/**',
-      'plugin/station/**',
-      'plugin/.claude-plugin/types/**',
+      'plugin/**',
       'station/.build/**',
       'artifacts/**',
-      'plugin/src/core/*.generated.ts',
+      'packages/mod/src/core/*.generated.ts',
     ],
   },
   {
@@ -30,7 +29,7 @@ export default tseslint.config(
     languageOptions: { globals: globals.browser },
   },
   {
-    files: ['plugin/hooks/**', 'plugin/tests/**'],
+    files: ['packages/mod/src/register.tsx', 'packages/mod/kit/**'],
     languageOptions: { globals: { h: 'readonly', Fragment: 'readonly' } },
   },
   dotignore.configs.recommended,

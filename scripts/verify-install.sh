@@ -3,12 +3,13 @@
 # into a throwaway Claude configuration: CLAUDE_CONFIG_DIR is a new temporary
 # folder, so the user's own configuration is never read or changed. Then it
 # checks that the installed copy holds everything the mod and the station run
-# from, and runs /pipcast auto, /pipcast auto on and /pipcast auto off, then
-# the same for /pipcast transparency, in a headless session on that copy,
-# started without CLAUDE_CODE_EXECPATH as a desktop session is: each value has
-# to land in the throwaway configuration's plugin options, and Transparent
-# window's in the throwaway store's options.json as well. No model call is
-# made. The temporary folder is removed on every exit.
+# from, and exactly the files plugin/ holds, with no TypeScript source, test or
+# tsconfig.json among them. Last, it runs /pipcast auto, /pipcast auto on and
+# /pipcast auto off, then the same for /pipcast transparency, in a headless
+# session on that copy, started without CLAUDE_CODE_EXECPATH as a desktop
+# session is: each value has to land in the throwaway configuration's plugin
+# options, and Transparent window's in the throwaway store's options.json as
+# well. No model call is made. The temporary folder is removed on every exit.
 set -uo pipefail
 
 root="$(cd "$(dirname "$0")/.." && pwd)"
@@ -59,8 +60,23 @@ else
     check "station/sounds/$name.m4a" test -f "$plugin/station/sounds/$name.m4a"
   done
   check "hooks/hooks.json" test -f "$plugin/hooks/hooks.json"
-  check "hooks/register.tsx" test -f "$plugin/hooks/register.tsx"
+  check "hooks/register.js" test -f "$plugin/hooks/register.js"
   check "the installed station runs" "$plugin/station/pipcast-station" --version
+
+  # plugin/ as the build's own check reads it (scripts/build-plugin.mjs): the
+  # files on disk that git tracks or would add, less what .gitignore keeps out
+  shipped="$(git -C "$root" ls-files --cached --others --exclude-standard -- plugin | while IFS= read -r path; do
+    if [[ -e "$root/$path" ]]; then
+      echo "${path#plugin/}"
+    fi
+  done | LC_ALL=C sort)"
+  installed="$(cd "$plugin" && find . -type f ! -name .DS_Store | sed 's|^\./||' | LC_ALL=C sort)"
+  check "the installed copy holds exactly the files plugin/ holds" test "$installed" = "$shipped"
+  if [[ "$installed" != "$shipped" ]]; then
+    diff <(echo "$shipped") <(echo "$installed") | sed 's/^/     /'
+  fi
+  sources="$(find "$plugin" -type f \( -name '*.ts' -o -name '*.tsx' -o -name '*.test.*' -o -name tsconfig.json \) ! -name '*.d.ts')"
+  check "the installed copy holds no TypeScript source, test or tsconfig.json" test -z "$sources"
 fi
 
 step "/pipcast auto and /pipcast transparency, in a headless session on the installed copy"
@@ -71,7 +87,7 @@ mkdir -p "$store"
 : >"$notes"
 
 state() { # <word> <on|off>: one of /pipcast <word>'s replies, from the contract
-  node -e "import('$root/plugin/src/contract/copy.ts').then((m) => process.stdout.write(m.optionState(process.argv[1], process.argv[2] === 'on')))" "$1" "$2"
+  node -e "import('$root/packages/contract/src/copy.ts').then((m) => process.stdout.write(m.optionState(process.argv[1], process.argv[2] === 'on')))" "$1" "$2"
 }
 auto_on="$(state auto on)"
 auto_off="$(state auto off)"

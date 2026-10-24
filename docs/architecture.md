@@ -69,11 +69,11 @@ interface SessionRecord {
 
 ## The mod
 
-`plugin/` is a Claude Code plugin with one hooks module, `hooks/register.tsx`, which only wires hooks to the code in `plugin/src`.
+The mod's sources are in `packages/mod`: one hooks module, `src/register.tsx`, which only wires hooks to the code in `src/core`, and the plugin's manifest, `plugin.json`. The build bundles them into `plugin/hooks/register.js`, the hooks module an install runs (What ships, below).
 
-- `src/contract` holds the types, constants and words that the mod, the station and the broadcast share.
+- `packages/contract` holds the types, constants and words that the mod, the station and the broadcast share.
 - `src/core` holds the mod's logic with no `$` in it: the record reducer, the descriptions of tools and permissions, the diff counter and the ledger that reads git for the lines changed, the band's artwork, what a session's start says about it, the options `/pipcast` sets and how they are saved, and the services that tune in, tune out and check in. The services and the ledger talk to the world through an `Io` port: read, write, list and rename files, look up a file's size and when it last changed, run a command with a time limit, read the clock.
-- `register.tsx` builds that port from `$` and hands it to the services. Only functions at the top of that file take `$`, which is what `claude plugin validate` asks for.
+- `register.tsx` builds that port from `$` and hands it to the services. Only functions at the top of that file take `$`, which is what `claude plugin validate` asks for. `register` itself is declared as a function, so it stays one in the bundle, where the validator looks for it.
 
 What it listens to:
 
@@ -206,17 +206,41 @@ Between segments, the live board. The rules, from the design system's *Event des
 - Under the listing, the board shows the account's usage limits, each from the newest reading of any session on air: a whole percent, rounded as usage-band rounds it, and 0% for a limit past its reset time. They are on the board, under an outro's board too, and nowhere else: not at the desk, not in THE HOUR IN REVIEW.
 - With reduced motion, the openers show their last picture, the outros cut straight to the board, and the listing's pages cut instead of turning.
 
+## What ships
+
+An install copies `plugin/`, the folder the marketplace names, as it is. Claude Code has no ignore file or list of files for a plugin, so `plugin/` holds only what runs, and `scripts/build.sh` writes all of it from the sources:
+
+| In `plugin/` | Built from |
+| --- | --- |
+| `hooks/register.js` | `packages/mod/src` and `packages/contract/src`, bundled into one ES module |
+| `hooks/hooks.json` | Written by the build: it names `register.js` |
+| `.claude-plugin/plugin.json`, `types/index.d.ts` | `packages/mod/plugin.json` and `packages/mod/types/index.d.ts`, copied |
+| `assets/icon.png`, `LICENSE` | `assets/icon-512.png` and `LICENSE`, copied |
+| `station/pipcast-station` | `station/`, built on a Mac |
+| `station/web` | `packages/renderer`, `packages/director`, `packages/contract`, `design/components` and `assets/fonts` |
+| `station/sounds` | The design system's scores in `design/components/bundle.js`, rendered on a Mac |
+
+Everything else stays on the development side of that line: the TypeScript sources, the unit tests in each package's `test/`, the kit tests in `packages/mod/kit`, the type configurations, the scripts, and the stamps in `scripts/build.d` that say which sources the station binary and the jingles were built from.
+
+The bundle is an ES module that imports `claude-code`, with its JSX compiled against the engine's `h` and `Fragment`, and it is never minified: `claude plugin validate` reads a hooks module's source, and it finds the same hooks, calls, environment reads and state keys in the bundle as in the sources. Its paths are relative to the repository, so it builds the same on any machine.
+
+Three checks hold the line:
+
+- The build's last step, `scripts/build-plugin.mjs`, stops when `plugin/` holds a file that is not in `SHIPS`, the one list of what an install gets, or lacks one that is.
+- `scripts/test.d/40-mod.sh` runs the kit tests against the built plugin rather than the sources. `claude plugin test` loads the plugin from the folder it is given and runs every test under that folder, so the kit and the sources it takes its words from are laid beside a copy of `plugin/` in a temporary folder. There an alias resolves to nothing, so the code in `packages/mod/src` and `packages/contract/src` imports with relative paths only.
+- `scripts/verify-install.sh` installs the plugin into a throwaway configuration and checks that the copy holds exactly the files in `plugin/`, with no TypeScript source, test or `tsconfig.json`.
+
 ## Building and checking
 
 | Script | What it does |
 | --- | --- |
-| `scripts/build.sh` | Builds the station binary, the web page, the jingles and the band's artwork into `plugin/station` and `plugin/src/core` |
-| `scripts/test.sh` | Lint, types, the unit tests, the station's Swift tests, the mod's manifest and kit tests on the engine bundled with the desktop app, and `scripts/live.sh` in a throwaway copy of the repository |
-| `scripts/verify.sh` | A real headless session tunes in and out, and a witness asks the window server where the window is, how opaque it shows with **Transparent window** on and off, and whether it ever took the keyboard. Another is renamed on air, off air and after the window's close, and its record has to follow each time. One more, with **Tune in every new session** on, stays off the air until a stand-in for the desktop app shows it, then tunes in by itself, and again after a `/clear`; the sessions that tune in have to write **Transparent window** to `options.json`. An install into a throwaway configuration turns both settings on and off with `/pipcast auto` and `/pipcast transparency`, and each value has to land where Claude Code keeps plugin options, the second in `options.json` too |
+| `scripts/build.sh` | Builds everything an install gets into `plugin/`: the station binary, the web page, the jingles, and the mod's bundle with its manifest, state contract, icon and license. On the way it writes the band's artwork into `packages/mod/src/core`, which the bundle takes in. Its last step checks that `plugin/` holds exactly what ships |
+| `scripts/test.sh` | Lint, types, the unit tests, the station's Swift tests, the built plugin's manifest and the mod's kit tests against it on the engine bundled with the desktop app, and `scripts/live.sh` in a throwaway copy of the repository |
+| `scripts/verify.sh` | A real headless session tunes in and out, and a witness asks the window server where the window is, how opaque it shows with **Transparent window** on and off, and whether it ever took the keyboard. Another is renamed on air, off air and after the window's close, and its record has to follow each time. One more, with **Tune in every new session** on, stays off the air until a stand-in for the desktop app shows it, then tunes in by itself, and again after a `/clear`; the sessions that tune in have to write **Transparent window** to `options.json`. An install into a throwaway configuration has to hold exactly the files in `plugin/`, with no source or test among them. It turns both settings on and off with `/pipcast auto` and `/pipcast transparency`, and each value has to land where Claude Code keeps plugin options, the second in `options.json` too |
 | `scripts/capture-controls.sh` | Shows the real broadcast with the controls on and saves the station's own picture of its window to `artifacts/station/controls.png`, for checking the glass by eye |
 | `scripts/live.sh` | Shows or changes what the desktop app runs: the live checkout beside the clone, which the `pipcast` marketplace points at. `setup` makes it; `pr <number>`, a branch or a commit puts that in the app; `master` puts master back |
 
-CI runs the lint, the types and the unit tests on every pull request and on master, and checks that `plugin/` holds what its sources build: it builds the page and the band's artwork again and fails on any difference, and it fails when the stamp beside the station binary or the jingles names other sources. The binary and the jingles are built on a Mac, so CI checks their stamps, not the files.
+CI runs the lint, the types and the unit tests on every pull request and on master, then runs `scripts/build.sh` and fails when what it builds differs from what is committed, or when `plugin/` holds a file the build does not make. The binary and the jingles are built on a Mac, so on CI their steps only compare the stamps in `scripts/build.d` with the sources, and fail when a stamp names other sources.
 
 ## Decisions
 
@@ -240,3 +264,4 @@ CI runs the lint, the types and the unit tests on every pull request and on mast
 - **The station hears of Transparent window through the store.** It could read Claude Code's settings itself, but it would have to know where they live, which plugin id holds them, and how a `--settings` flag or a policy changes them, all of which the engine already works out for each session and hands to the mod. So the mods pass the one value on, in the store, where the station looks for everything else. A file of its own rather than a field in each record: it is one value for the one window, and `/pipcast transparency` has to reach the station from a session that is not on air.
 - **Transparency is the window's own opacity.** The page cannot show what is under the window: it draws on the window's black ground. The window's `alphaValue` fades all of it at once, the window server blends it with what is beneath at no cost to the page, and `CGWindowListCopyWindowInfo` reports it, so the checks read it as the window server shows it. The 40% came from stills of the board and the desk laid over a light and a dark code editor at 35 to 65%: at 40% the headlines, the figures, the pills and the ticker still read at a glance, and so does the code beneath them, which grows harder to read through the picture from 50% up. It is a first figure, as the 70% a window can shrink to is.
 - **Tuning in by itself waits for the desktop app.** The window and the band belong to the desktop app, and nothing else tells a desktop session from a headless one when it starts: both start with no surface, and a `claude -p` run from a desktop session's terminal inherits the desktop's environment. A session tunes in by itself only once the desktop app shows it, so a script's headless run never opens the window.
+- **A built plugin, apart from its sources.** An install copies the plugin's folder as it is, and the mod used to run from its TypeScript sources in that folder. So every install also got the kit tests, a `tsconfig.json` that pointed at a file no install has, and the stamps the build keeps, and the line between what runs and what builds it was wherever a file happened to be put: generated files sat beside hand-written ones, and the broadcast, the scripts and the tests reached into the plugin's folder for the contract. Now the sources live in `packages/`, `plugin/` is the build's output alone, and the build checks that line every time it runs. The engine loads a hooks module written in JavaScript as readily as one in TypeScript, and the kit tests pass against the bundle, so nothing that runs changed.

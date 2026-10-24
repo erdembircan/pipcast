@@ -1,7 +1,7 @@
 {
-  "extends": "./tsconfig.plugin.json",
+  "extends": "./tsconfig.mod.json",
   "compilerOptions": {
     "types": ["node"]
   },
-  "include": ["test/real"]
+  "include": ["packages/mod/test/real"]
 }

@@ -1,4 +1,4 @@
-// Draws the band's pictures (plugin/src/core/band.ts) beside the design
+// Draws the band's pictures (packages/mod/src/core/band.ts) beside the design
 // system's Band component in the same states, at 4x in headless Chrome, into
 // artifacts/band/compare.png. The two should match closely: the left column
 // is the mod's SVGs drawn as images, as the desktop draws them; the right is
@@ -18,7 +18,7 @@ const SCALE = 4
 
 // band.ts is TypeScript with .ts imports: bundle it, then load the bundle
 const bundled = await build({
-  entryPoints: [`${root}plugin/src/core/band.ts`],
+  entryPoints: [`${root}packages/mod/src/core/band.ts`],
   bundle: true,
   write: false,
   format: 'esm',

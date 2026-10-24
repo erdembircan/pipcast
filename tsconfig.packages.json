@@ -12,10 +12,10 @@
     "skipLibCheck": true,
     "allowImportingTsExtensions": true,
     "paths": {
-      "@pipcast/contract": ["./plugin/src/contract/index.ts"],
+      "@pipcast/contract": ["./packages/contract/src/index.ts"],
       "@pipcast/director": ["./packages/director/src/index.ts"],
       "@pipcast/design": ["./design/components/index.d.ts"]
     }
   },
-  "include": ["plugin/src/contract", "packages/*/src", "packages/*/test"]
+  "include": ["packages/contract/src", "packages/director/src", "packages/director/test", "packages/renderer/src", "packages/renderer/test"]
 }

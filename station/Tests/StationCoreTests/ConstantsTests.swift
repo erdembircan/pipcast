@@ -32,7 +32,7 @@ import Testing
     }
 
     @Test func theMirroredNumbersAndNamesEqualTheContract() throws {
-        let constants = try Self.values(in: "plugin/src/contract/constants.ts")
+        let constants = try Self.values(in: "packages/contract/src/constants.ts")
         let mirrored: [String: String] = [
             "SCHEMA_VERSION": String(Constants.schemaVersion),
             "HEARTBEAT_MS": String(Int(Constants.heartbeatMs)),
@@ -51,7 +51,7 @@ import Testing
     }
 
     @Test func theClockSkewEqualsTheOneInValidate() throws {
-        let validate = try Self.values(in: "plugin/src/contract/validate.ts")
+        let validate = try Self.values(in: "packages/contract/src/validate.ts")
         #expect(validate["CLOCK_SKEW_MS"] == String(Int(Constants.clockSkewMs)))
     }
 
@@ -61,7 +61,7 @@ import Testing
 
     @Test func theReaderFindsTheValuesItChecks() throws {
         // Guards the test itself: a reader that found nothing would pass everything.
-        let constants = try Self.values(in: "plugin/src/contract/constants.ts")
+        let constants = try Self.values(in: "packages/contract/src/constants.ts")
         #expect(constants["STALE_MS"] == "45000")
         #expect(constants["CLAUDE_BUNDLE_ID"] == "com.anthropic.claudefordesktop")
     }

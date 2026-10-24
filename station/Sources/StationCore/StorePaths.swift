@@ -1,6 +1,6 @@
 import Foundation
 
-/// Where the store keeps each file, mirrored from plugin/src/contract/paths.ts.
+/// Where the store keeps each file, mirrored from packages/contract/src/paths.ts.
 /// `root` is the store's folder: ~/Library/Application Support/Pipcast, or the
 /// folder given with --home.
 public struct StorePaths: Equatable {
