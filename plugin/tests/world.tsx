@@ -77,6 +77,8 @@ export interface WorldOptions {
   configureFails?: boolean
   // The plugin's options as Claude Code has saved them, as `configure --json` prints them
   saved?: Record<string, string>
+  // The account's usage limits as the engine reports them; unset, none, as for an account with no plan
+  limits?: { kind: string; percentUsed: number; resetsAt?: string }[]
 }
 
 // The world beneath the mod: a session with an id, an in-memory file system
@@ -100,6 +102,8 @@ export function world(on: On, options: WorldOptions = {}) {
   const engine = options.env?.CLAUDE_CODE_EXECPATH ?? (options.engine === null ? null : (options.engine ?? ENGINE))
   const saved: Record<string, string> = { autoTuneIn: 'false', transparentWindow: 'false', ...options.saved }
   const engineCalls: { argv: readonly string[]; stdin: string | undefined }[] = []
+  // What the engine reports of the account's usage limits when asked; a test can change it as it goes
+  const engineLimits = { reported: [...(options.limits ?? [])] }
   // The session's own tree at ROOT, and other trees by their top folder
   const git = {
     head: 'c0ffee1',
@@ -162,6 +166,10 @@ export function world(on: On, options: WorldOptions = {}) {
   on('session.start', (_, e) => ({ cwd: e.cwd }))
   on('session.end', (_, e) => ({ sessionId: e.sessionId }))
   on('session.surfaces', () => ({ value: [...surfaces] }))
+  on('session.usage', () => ({
+    value: { startedAt: T0, context: { window: 200_000 }, rateLimits: [...engineLimits.reported] },
+  }))
+  on('session.measure', (_, e) => ({ changed: e.changed }))
   on('session.attach', (_, e) => {
     if (!surfaces.includes(e.surface)) {
       surfaces.push(e.surface)
@@ -321,6 +329,7 @@ export function world(on: On, options: WorldOptions = {}) {
     toasts,
     surfaces,
     engineCalls,
+    engineLimits,
     saved,
     atTool,
     reads,

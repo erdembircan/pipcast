@@ -30,6 +30,7 @@ describe('newModel', () => {
       stories: [],
       activity: [],
       hours: [],
+      limits: [],
     })
     expect(model.seq).toBe(0)
     expect(model.turn.ended).toBe(true)
@@ -457,5 +458,36 @@ describe('restored', () => {
     const model = m.restored(m.askedQuestion(working(), T + 2000, 'q'), fresh().record)
     expect(model.seq).toBe(1)
     expect(model.record.stories).toEqual([])
+  })
+
+  it('carries the usage limits the session\'s own record kept', () => {
+    const limits = [
+      { kind: 'session' as const, percentUsed: 42, resetsAt: T + 3_600_000, at: T },
+      { kind: 'week' as const, percentUsed: 61, resetsAt: null, at: T },
+    ]
+    expect(m.restored(fresh(), { ...fresh().record, limits }).record.limits).toEqual(limits)
+    expect(m.restored(fresh(), { ...fresh().record, limits: undefined }).record.limits).toEqual([])
+  })
+})
+
+describe('measured', () => {
+  const session = { kind: 'session' as const, percentUsed: 42, resetsAt: T + 3_600_000, at: T }
+  const week = { kind: 'week' as const, percentUsed: 61, resetsAt: T + 86_400_000, at: T }
+
+  it('puts a reading of the usage limits on the record', () => {
+    const model = m.measured(fresh(), [session, week])
+    expect(model.record.limits).toEqual([session, week])
+    const later = m.measured(model, [{ ...session, percentUsed: 43, at: T + 1000 }])
+    expect(later.record.limits?.[0]).toEqual({ ...session, percentUsed: 43, at: T + 1000 })
+  })
+
+  it('keeps a limit the reading leaves out', () => {
+    const model = m.measured(m.measured(fresh(), [session, week]), [{ ...week, percentUsed: 62, at: T + 1000 }])
+    expect(model.record.limits).toEqual([session, { ...week, percentUsed: 62, at: T + 1000 }])
+  })
+
+  it('returns the model it was given for a reading with no limits', () => {
+    const model = fresh()
+    expect(m.measured(model, [])).toBe(model)
   })
 })

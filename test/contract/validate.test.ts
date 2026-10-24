@@ -44,6 +44,10 @@ function record(overrides: Partial<SessionRecord> = {}): SessionRecord {
     ],
     activity: [{ at: NOW - 1000, text: 'editing src/a.ts' }],
     hours: [{ hour: '2026-10-21T14', added: 12, removed: 3, files: 2 }],
+    limits: [
+      { kind: 'session', percentUsed: 42, resetsAt: NOW + 3_600_000, at: NOW - 1000 },
+      { kind: 'week', percentUsed: 61.4, resetsAt: null, at: NOW - 1000 },
+    ],
     ...overrides,
   }
 }
@@ -124,6 +128,52 @@ describe('parseSessionRecord', () => {
     })
     expect(parsed?.activity).toEqual([{ at: 1, text: 'ok' }])
     expect(parsed?.hours).toEqual([{ hour: '2026-10-21T14', added: 1, removed: 2, files: 3 }])
+  })
+
+  it('keeps the well-formed usage limits a record holds', () => {
+    const parsed = parseSessionRecord(JSON.parse(JSON.stringify(record())))
+    expect(parsed?.limits).toEqual([
+      { kind: 'session', percentUsed: 42, resetsAt: NOW + 3_600_000, at: NOW - 1000 },
+      { kind: 'week', percentUsed: 61.4, resetsAt: null, at: NOW - 1000 },
+    ])
+  })
+
+  it('drops a usage limit that is not well formed', () => {
+    const parsed = parseSessionRecord({
+      ...record(),
+      limits: [
+        { kind: 'session', percentUsed: 42, resetsAt: 5, at: 1 },
+        { kind: 'month', percentUsed: 10, resetsAt: 5, at: 1 },
+        { kind: 'week', percentUsed: '10', resetsAt: 5, at: 1 },
+        { kind: 'week', percentUsed: Number.POSITIVE_INFINITY, resetsAt: 5, at: 1 },
+        { kind: 'week', percentUsed: 10, resetsAt: 5 },
+        'not an object',
+        { kind: 'week', percentUsed: 11, resetsAt: 6, at: 2 },
+      ],
+    })
+    expect(parsed?.limits).toEqual([
+      { kind: 'session', percentUsed: 42, resetsAt: 5, at: 1 },
+      { kind: 'week', percentUsed: 11, resetsAt: 6, at: 2 },
+    ])
+  })
+
+  it('reads a usage limit with no reset time as null', () => {
+    const parsed = parseSessionRecord({
+      ...record(),
+      limits: [
+        { kind: 'session', percentUsed: 42, at: 1 },
+        { kind: 'week', percentUsed: 11, resetsAt: 'soon', at: 2 },
+      ],
+    })
+    expect(parsed?.limits).toEqual([
+      { kind: 'session', percentUsed: 42, resetsAt: null, at: 1 },
+      { kind: 'week', percentUsed: 11, resetsAt: null, at: 2 },
+    ])
+  })
+
+  it('gives a record written before the limits none', () => {
+    expect(parseSessionRecord(without(record(), ['limits']))?.limits).toEqual([])
+    expect(parseSessionRecord({ ...record(), limits: 'none' })?.limits).toEqual([])
   })
 
   it('keeps only the known fields', () => {

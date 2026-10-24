@@ -17,5 +17,6 @@ Where every word and figure on the stage comes from once the mod is built. Check
 | "Waiting 0:12", STILL WAITING · 3 min, "Stopped after 31 min" | Our own clock, from the event | A wait ends when the next event shows it was answered |
 | The ticker's working lines | Each tool call's input: the file being edited, or a command's description | |
 | The board across sessions | Each session's mod writes its state to a store every session on the machine shares | A session that stops checking in leaves the board: a crash isn't documented to send an end |
+| The usage limits under the listing | The usage limits Claude Code reports to a mod: `$.session.usage()` when a session tunes in, `session.measure` after each reply and whenever a limit moves a whole point | The account's, not a session's: the board shows the newest reading any session on air took. SESSION is the five-hour window and WEEK the seven-day one, read as usage-band reads them; a gateway's spend limit is left out. Claude Code stops reporting a window once it resets, so the mod keeps it and the board reads it as 0% until a new one comes. An account with no plan reports none |
 | The report on the hour | Our own log of each session's stories and line counts, hour by hour | Nothing in the engine keeps one |
 | The clock | The machine's | |

@@ -296,6 +296,23 @@
 .pn-anim .pn-turn-leave { animation: pn-turn-leave 420ms cubic-bezier(0.65, 0, 0.35, 1) both; }
 .pn-anim .pn-turn-enter { animation: pn-slide 460ms cubic-bezier(0.2, 0.8, 0.2, 1) both; }
 
+/* The account's usage limits, under the listing on the page tab's line,
+   y 422–462 from x 48, as chosen on PiP Newsroom · Usage limits: each
+   limit's name in the ticker's gold caps, a meter on the project plate's
+   ground and gold rule filled with the listing row's gloss to the share
+   used, and the figure in the clock's type. From 70% the fill and the
+   figure take the lower third's gold, from 90% BREAKING's red. The page tab
+   keeps the right end */
+.pn-board-limits { position: absolute; left: 8px; top: 330px; height: 40px; display: flex; align-items: center; gap: 32px; }
+.pn-limit { display: flex; align-items: center; gap: 16px; height: 40px; white-space: nowrap; }
+.pn-limit-track { position: relative; width: 120px; height: 26px; overflow: hidden; transform: skewX(var(--slant, -12deg)); background: var(--studio-deep, #061233); border-top: 3px solid var(--gold, #f2b630); box-shadow: 0 0 0 1px rgba(143, 176, 255, 0.35); }
+.pn-limit-fill { position: absolute; left: 0; top: 0; bottom: 0; background: linear-gradient(180deg, var(--row-hi, #5b8be8) 0%, var(--row, #2a57bf) 48%, var(--row-lo, #1d449e) 52%, var(--row-base, #2550b0) 100%); }
+.pn-limit--high .pn-limit-fill { background: linear-gradient(180deg, var(--gold-hi, #ffe08a) 0%, var(--gold, #f2b630) 55%, var(--gold-lo, #b97d0c) 100%); }
+.pn-limit--top .pn-limit-fill { background: linear-gradient(180deg, var(--breaking-hi, #ff5a4f) 0%, var(--breaking, #c4170e) 55%, var(--breaking-deep, #5c070c) 100%); }
+.pn-limit-figure { font: 800 28px/1 var(--font-text, "Archivo", "Helvetica Neue", Arial, sans-serif); font-variant-numeric: tabular-nums; color: var(--on-air, #ffffff); }
+.pn-limit--high .pn-limit-figure { color: var(--gold-hi, #ffe08a); }
+.pn-limit--top .pn-limit-figure { color: var(--breaking-text, #ff8a80); }
+
 /* State pill: the state as one word, INPUT, READY or LIVE */
 .pn-pill {
   flex: none;

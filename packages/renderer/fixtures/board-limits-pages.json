@@ -1,0 +1,21 @@
+{
+  "scene": {
+    "mode": "board",
+    "clock": "14:38",
+    "sessions": [
+      { "id": "checkout", "name": "Fix flaky checkout test", "project": "web-shop", "state": "needs-input" },
+      { "id": "notes", "name": "Write release notes for 2.4", "project": "docs-site", "state": "ready" },
+      { "id": "auth", "name": "Refactor auth middleware", "project": "api-server", "state": "working" },
+      { "id": "sqlite", "name": "Migrate settings to SQLite", "project": "desktop-app", "state": "working" },
+      { "id": "crash", "name": "Check last night’s crash reports", "project": "mobile-app", "state": "working" },
+      { "id": "search", "name": "Speed up product search", "project": "search-api", "state": "working" },
+      { "id": "runners", "name": "Move CI to the new runners", "project": "ci-config", "state": "working" }
+    ],
+    "limits": [{ "kind": "session", "percent": 74 }, { "kind": "week", "percent": 92 }],
+    "ticker": [
+      { "lead": "STILL WAITING", "text": "Fix flaky checkout test needs your input · 5 min" },
+      { "lead": "READY", "text": "Release notes for 2.4 waiting for review" },
+      "api-server: editing src/auth/session.ts"
+    ]
+  }
+}
