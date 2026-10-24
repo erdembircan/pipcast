@@ -10,11 +10,12 @@
   },
   "scripts": {
     "lint": "eslint .",
-    "typecheck": "tsc -p tsconfig.plugin.json && tsc -p tsconfig.packages.json && tsc -p tsconfig.real.json",
+    "typecheck": "tsc -p tsconfig.mod.json && tsc -p tsconfig.packages.json && tsc -p tsconfig.real.json",
     "test": "TZ=UTC vitest run",
     "build:web": "node scripts/build-web.mjs",
     "build:jingles": "node scripts/render-jingles.mjs",
     "build:band-art": "node scripts/build-band-art.mjs",
+    "build:plugin": "node scripts/build-plugin.mjs",
     "render:fixtures": "node scripts/render-fixtures.mjs",
     "render:band": "node scripts/render-band.mjs",
     "render:icon": "bash scripts/render-icon.sh"

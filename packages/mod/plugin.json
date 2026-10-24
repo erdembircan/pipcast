@@ -1,0 +1,30 @@
+{
+  "name": "pipcast",
+  "displayName": "Pipcast",
+  "version": "0.1.0",
+  "description": "KLWD, a local TV news channel for your Claude Code sessions: a window in the corner of your screen that airs BREAKING NEWS when a session needs you or finishes, and a report every hour on the hour",
+  "author": {
+    "name": "Erdem Bircan",
+    "url": "https://github.com/erdembircan"
+  },
+  "homepage": "https://github.com/erdembircan/pipcast",
+  "repository": "https://github.com/erdembircan/pipcast",
+  "license": "MIT",
+  "keywords": ["picture-in-picture", "notifications", "sessions", "macos", "mod"],
+  "icon": "./assets/icon.png",
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "autoTuneIn": {
+      "type": "boolean",
+      "title": "Tune in every new session",
+      "description": "Each new session in the Claude desktop app tunes in to KLWD as it opens, with no TUNE IN to press. TUNE OUT still takes a session off the air.",
+      "default": false
+    },
+    "transparentWindow": {
+      "type": "boolean",
+      "title": "Transparent window",
+      "description": "The KLWD window fades to 40% while the pointer is elsewhere, so what is under it shows through, and turns solid again while the pointer is on it.",
+      "default": false
+    }
+  }
+}

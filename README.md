@@ -82,11 +82,13 @@ While it is on, the window fades to 40% whenever the pointer is elsewhere, so yo
 
 Pipcast has three parts.
 
-- **The mod**, in `plugin/`, runs inside each Claude Code session. It draws the band, answers `/pipcast`, follows the session's events, and writes what it sees to a small file for that session.
+- **The mod**, in `packages/mod`, runs inside each Claude Code session. It draws the band, answers `/pipcast`, follows the session's events, and writes what it sees to a small file for that session.
 - **The station**, in `station/`, is a native macOS app with one always-on-top window. It reads every session's file and plays the broadcast in that window.
-- **The broadcast**, in `packages/`, is what plays in the window: the director that decides what airs and when, and the KLWD graphics from the design system in `design/`.
+- **The broadcast**, in `packages/director` and `packages/renderer`, is what plays in the window: the director that decides what airs and when, and the KLWD graphics from the design system in `design/`.
 
 The sessions and the station talk only through files in `~/Library/Application Support/Pipcast`. [docs/architecture.md](docs/architecture.md) has the details.
+
+An install gets none of this source. It copies `plugin/`, which holds only what runs, all of it built from the source: the mod bundled into one file, the station's binary, the broadcast's page and the jingles, and the plugin's manifest, icon and license.
 
 ## Privacy
 
@@ -104,19 +106,19 @@ npm ci
 scripts/build.sh
 ```
 
-builds the station, the broadcast and the band's artwork into `plugin/`, where the mod runs them. Commit what it builds: an install copies `plugin/` as it is, and CI fails a pull request whose `plugin/` differs from what its sources build.
+builds everything an install gets into `plugin/`: the mod bundled into one file, the station, the broadcast's page and the jingles, with the plugin's manifest, icon and license. `plugin/` belongs to the build. Don't edit it by hand or keep anything else in it: the build stops when it finds a file there that it doesn't make. Commit what it builds, since an install copies `plugin/` as it is, and CI fails a pull request whose `plugin/` differs from what its sources build.
 
 ```bash
 scripts/test.sh
 ```
 
-runs every check: lint, types, the unit tests of each part, the station's Swift tests, the mod's manifest and kit tests on the engine bundled with the Claude desktop app, and `scripts/live.sh` in a throwaway copy of the repository.
+runs every check: lint, types, the unit tests of each part, the station's Swift tests, the built plugin's manifest and the mod's kit tests against it on the engine bundled with the Claude desktop app, and `scripts/live.sh` in a throwaway copy of the repository.
 
 ```bash
 scripts/verify.sh
 ```
 
-runs the whole thing for real, with no window of yours involved: a headless Claude Code session tunes in, the station starts and shows its window, the session tunes out, and the station quits. With **Transparent window** on, the window server has to show that window at 40%, or whole while the pointer is on it, and whole once it is off. Another session is renamed on air, off air and after the window's close, and its title on air has to follow each time. One more, with **Tune in every new session** on, has to stay off the air until a stand-in for the desktop app shows it, then tune in by itself, and again after a `/clear`. An install into a throwaway configuration then has to turn both settings on and off with `/pipcast auto` and `/pipcast transparency`, each value landing where Claude Code keeps plugin options, and the second in the file the station reads as well.
+runs the whole thing for real, with no window of yours involved: a headless Claude Code session tunes in, the station starts and shows its window, the session tunes out, and the station quits. With **Transparent window** on, the window server has to show that window at 40%, or whole while the pointer is on it, and whole once it is off. Another session is renamed on air, off air and after the window's close, and its title on air has to follow each time. One more, with **Tune in every new session** on, has to stay off the air until a stand-in for the desktop app shows it, then tune in by itself, and again after a `/clear`. An install into a throwaway configuration then has to hold exactly the files in `plugin/`, with no source or test among them. It also has to turn both settings on and off with `/pipcast auto` and `/pipcast transparency`, each value landing where Claude Code keeps plugin options, and the second in the file the station reads as well.
 
 ### Try a change in the desktop app
 

@@ -44,7 +44,7 @@ cleanup() {
 trap cleanup EXIT
 
 words() { # prints one of the command's replies, from the contract
-  node -e "import('$root/plugin/src/contract/copy.ts').then((m) => process.stdout.write(m.REPLY[process.argv[1]]))" "$1"
+  node -e "import('$root/packages/contract/src/copy.ts').then((m) => process.stdout.write(m.REPLY[process.argv[1]]))" "$1"
 }
 tuned_in="$(words tunedIn)"
 tuned_out="$(words tunedOut)"

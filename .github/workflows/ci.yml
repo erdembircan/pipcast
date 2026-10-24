@@ -18,23 +18,14 @@ jobs:
       - run: npm run lint
       - run: npm run typecheck
       - run: npm test
-      - if: hashFiles('scripts/build-web.mjs') != ''
-        run: npm run build:web
-      - run: npm run build:band-art
+      - name: Build what ships
+        run: bash scripts/build.sh
       - name: plugin/ holds what its sources build
         run: |
-          changed="$(git status --porcelain -- plugin/station/web plugin/src/core/art.generated.ts)"
+          changed="$(git status --porcelain)"
           if [ -n "$changed" ]; then
-            echo "plugin/ differs from what its sources build. Run scripts/build.sh and commit what it builds:"
+            echo "The build changed what is committed. Run scripts/build.sh and commit what it builds:"
             echo "$changed"
-            exit 1
-          fi
-          if [ "$(cat plugin/station/pipcast-station.SOURCE)" != "$(bash scripts/station-source.sh)" ]; then
-            echo "plugin/station/pipcast-station was built from other sources. Run scripts/build.sh on a Mac and commit what it builds."
-            exit 1
-          fi
-          if [ "$(cat plugin/station/sounds/SOURCE)" != "$(shasum -a 256 design/components/bundle.js | cut -d ' ' -f 1)" ]; then
-            echo "The jingles in plugin/station/sounds were rendered from another design/components/bundle.js. Run scripts/build.sh on a Mac and commit what it builds."
             exit 1
           fi
       - run: npx license-wizard --verify --strict

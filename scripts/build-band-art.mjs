@@ -1,4 +1,4 @@
-// Writes plugin/src/core/art.generated.ts: the outlines of the band's lettering
+// Writes packages/mod/src/core/art.generated.ts: the outlines of the band's lettering
 // (KLWD, TUNE IN, TUNE OUT) from the station's italic Anybody. A picture the
 // desktop draws loads no fonts, so the letters travel as path data.
 
@@ -9,7 +9,7 @@ import subsetFont from 'subset-font'
 
 const root = fileURLToPath(new URL('..', import.meta.url))
 const fontFile = `${root}assets/fonts/anybody-italic.ttf`
-const outFile = `${root}plugin/src/core/art.generated.ts`
+const outFile = `${root}packages/mod/src/core/art.generated.ts`
 
 const WORDS = [
   { name: 'KLWD', text: 'KLWD', axes: { wght: 900, wdth: 120 }, size: 13, spacing: 0.01 },

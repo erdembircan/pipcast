@@ -23,7 +23,7 @@ await build({
   jsx: 'automatic',
   tsconfig: join(root, 'tsconfig.packages.json'),
   alias: {
-    '@pipcast/contract': join(root, 'plugin/src/contract/index.ts'),
+    '@pipcast/contract': join(root, 'packages/contract/src/index.ts'),
     '@pipcast/director': join(root, 'packages/director/src/index.ts'),
   },
   define: { 'process.env.NODE_ENV': '"production"' },

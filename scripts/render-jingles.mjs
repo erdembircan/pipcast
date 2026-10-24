@@ -144,10 +144,10 @@ try {
     execFileSync('afconvert', ['-f', 'm4af', '-d', 'aac', '-b', '160000', wavPath, join(out, `${name}.m4a`)])
     console.log(`${name}.m4a`)
   }
-  // The hash of the scores these files were rendered from: build.d/30-jingles.sh
-  // renders again only when it changes
+  // The hash of the scores these files were rendered from, kept out of plugin/:
+  // build.d/30-jingles.sh renders again only when it changes
   const hash = createHash('sha256').update(readFileSync(join(root, 'design/components/bundle.js'))).digest('hex')
-  writeFileSync(join(out, 'SOURCE'), `${hash}\n`)
+  writeFileSync(join(root, 'scripts/build.d/jingles.SOURCE'), `${hash}\n`)
 } finally {
   stop()
   await new Promise((done) => (browser?.pid !== undefined && browser.exitCode === null && browser.signalCode === null ? browser.once('exit', done) : done()))

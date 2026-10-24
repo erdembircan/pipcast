@@ -1,7 +1,7 @@
 import AppKit
 import WebKit
 
-/// The messages the page posts to the station, as plugin/src/contract/types.ts
+/// The messages the page posts to the station, as packages/contract/src/types.ts
 /// defines them. Anything else is ignored.
 enum PageMessage {
     case ready
