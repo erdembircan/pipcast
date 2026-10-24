@@ -1,4 +1,4 @@
-import type { On } from 'claude-code'
+import type { On, RenderElement } from 'claude-code'
 import type { Engine } from 'claude-code/testing'
 import { expect, test } from 'claude-code/testing'
 
@@ -11,6 +11,10 @@ import type { FakeTree, WorldOptions } from './world.tsx'
 
 const START = { cwd: ROOT, surface: 'desktop', isInteractive: true } as const
 
+// What the engine answers a band hook with when no other mod draws there: its
+// own drawing
+const OWN_DRAWING: RenderElement = { type: 'engine', ref: 0 }
+
 type Run = ($: Engine, on: On) => Promise<void>
 
 // A test in the world above: the session starts first and ends last, so one
@@ -20,7 +24,10 @@ function scenario(name: string, options: WorldOptions, body: (w: ReturnType<type
     const w = world(on, options)
     on('ui.render', { component: 'AbovePrompt' }, ($ui, e) => {
       const { Box, Text } = $ui.ui.resolve(e)
-      if (options.hasOtherBand === false) {
+      if (options.otherBand === 'nothing') {
+        return OWN_DRAWING
+      }
+      if (options.otherBand === 'empty') {
         return <Box />
       }
       if (options.otherBand === 'row') {
@@ -144,7 +151,18 @@ scenario('the band leaves the terminal and a survey to what was beneath', {}, as
   await survey.unmount()
 })
 
-scenario('the band draws alone when nothing else is in the band', { hasOtherBand: false }, async (_w, $) => {
+scenario('the band draws alone when nothing else is in the band', { otherBand: 'nothing' }, async (_w, $) => {
+  const ui = await mounted($)
+  const drawn = await ui.drawn()
+  expect(drawn.type).toBe('Box')
+  expect(drawn.props).toEqual({ alignItems: 'center' })
+  expect(drawn.children?.map((child) => child.type)).toEqual(['Box'])
+  expect(drawn.children?.[0]?.children?.map((child) => child.type)).toEqual(['Svg', 'Box'])
+  expect(JSON.stringify(drawn)).not.toContain('"type":"engine"')
+  await ui.unmount()
+})
+
+scenario('the band draws alone over an empty Box', { otherBand: 'empty' }, async (_w, $) => {
   const ui = await mounted($)
   const drawn = await ui.drawn()
   expect(drawn.type).toBe('Box')
@@ -152,6 +170,20 @@ scenario('the band draws alone when nothing else is in the band', { hasOtherBand
   expect(drawn.children?.map((child) => child.type)).toEqual(['Box'])
   expect(drawn.children?.[0]?.children?.map((child) => child.type)).toEqual(['Svg', 'Box'])
   await ui.unmount()
+})
+
+scenario('the band leaves the engine\'s own drawing to the terminal and a survey', { otherBand: 'nothing' }, async (_w, $) => {
+  const terminal = await mounted($, 'terminal')
+  expect((await terminal.drawn()).type).toBe('engine')
+  expect(await terminal.find({ type: 'Svg' })).toBeUndefined()
+  expect(await terminal.find({ type: 'Button' })).toBeUndefined()
+  await terminal.unmount()
+
+  const survey = await mounted($, 'desktop', { hasSurvey: true })
+  expect((await survey.drawn()).type).toBe('engine')
+  expect(await survey.find({ type: 'Svg' })).toBeUndefined()
+  expect(await survey.find({ type: 'Button' })).toBeUndefined()
+  await survey.unmount()
 })
 
 scenario('the plate\'s button stays inside its box', {}, async (_w, $) => {
