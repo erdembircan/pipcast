@@ -48,10 +48,17 @@ describe('the chrome words', () => {
     return Array.from(container.querySelectorAll<HTMLElement>('.pn-stinger-line'))
   }
 
-  // Each line is the word twice: the outline underneath, the chrome on top
+  // Each line is the word three times: the outline and the chrome, which cast its shadow, and the glint's bright copy over them
   function expectLayers(line: HTMLElement, word: string): void {
     expect(line.children).toHaveLength(2)
-    const [ink, face] = Array.from(line.children) as HTMLElement[]
+    const [cast, glint] = Array.from(line.children) as HTMLElement[]
+    expect(cast?.tagName).toBe('DIV')
+    expect(cast?.classList.contains('pn-stinger-cast')).toBe(true)
+    expect(glint?.tagName).toBe('SPAN')
+    expect(glint?.classList.contains('pn-stinger-glint')).toBe(true)
+    expect(glint?.getAttribute('aria-hidden')).toBe('true')
+    expect(cast?.children).toHaveLength(2)
+    const [ink, face] = Array.from(cast?.children ?? []) as HTMLElement[]
     expect(ink?.tagName).toBe('SPAN')
     expect(face?.tagName).toBe('SPAN')
     expect(ink?.classList.contains('pn-stinger-ink')).toBe(true)
@@ -59,9 +66,14 @@ describe('the chrome words', () => {
     expect(ink?.textContent).toBe(word)
     expect(face?.classList.contains('pn-stinger-face')).toBe(true)
     expect(face?.hasAttribute('aria-hidden')).toBe(false)
+    expect(face?.getAttribute('style')).toBeNull()
     expect(face?.textContent).toBe(word)
+    expect(glint?.children).toHaveLength(1)
+    const shine = glint?.children[0] as HTMLElement | undefined
+    expect(shine?.tagName).toBe('SPAN')
+    expect(shine?.classList.contains('pn-stinger-shine')).toBe(true)
+    expect(shine?.textContent).toBe(word)
     expect(line.style.backgroundPosition).toBe('')
-    expect(face?.style.backgroundPosition).not.toBe('')
   }
 
   it('draw BREAKING NEWS as an outline under the chrome', () => {
@@ -85,11 +97,21 @@ describe('the chrome words', () => {
     })
   })
 
-  it('move the glint across the chrome, not the outline', () => {
-    const before = draw(stinger(0.74))[0]?.querySelector<HTMLElement>('.pn-stinger-face')?.style.backgroundPosition
-    const after = draw(stinger(1))[0]?.querySelector<HTMLElement>('.pn-stinger-face')?.style.backgroundPosition
-    expect(before).toBeTruthy()
-    expect(after).toBeTruthy()
-    expect(before).not.toBe(after)
+  it("slide the glint's window across the line and the bright copy back, so the word stays put", () => {
+    const NUMBER = /-?(?:\d+\.?\d*|\.\d+)(?:e[-+]?\d+)?/i
+    const first = (el: HTMLElement | null | undefined): number =>
+      parseFloat(NUMBER.exec(el?.style.transform ?? '')?.[0] ?? 'NaN')
+    const at = (progress: number): { glint: number; shine: number } => {
+      const line = draw(stinger(progress))[0]
+      return {
+        glint: first(line?.querySelector<HTMLElement>('.pn-stinger-glint')),
+        shine: first(line?.querySelector<HTMLElement>('.pn-stinger-shine')),
+      }
+    }
+    const before = at(0.74)
+    const after = at(1)
+    expect(before.glint).not.toBe(after.glint)
+    expect(before.shine).toBeCloseTo(-before.glint, 6)
+    expect(after.shine).toBeCloseTo(-after.glint, 6)
   })
 })
