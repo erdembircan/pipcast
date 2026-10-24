@@ -96,9 +96,4 @@ describe("the listing's project plates", () => {
     draw({ mode: 'outro', clock: '14:40', progress: 1, board: sample('board-seven') })
     expect(texts('.pn-board-under .pn-row-project')).toEqual(FIRST)
   })
-
-  it('leaves THE HOUR IN REVIEW without plates', () => {
-    draw(sample('review-seven'))
-    expect(container.querySelector('.pn-row-project')).toBeNull()
-  })
 })

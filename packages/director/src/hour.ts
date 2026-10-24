@@ -77,8 +77,10 @@ function waitingSince(session: SessionRecord): number {
   return at
 }
 
+// A session's row in THE HOUR IN REVIEW, named as the board names it: its
+// title, and its project on the plate
 function rowFor(session: SessionRecord, from: number, hour: number, now: number): HourRow {
-  const row: HourRow = { id: session.id, project: session.project, state: session.state }
+  const row: HourRow = { id: session.id, project: session.project, name: session.title, state: session.state }
   switch (session.state) {
     case 'needs-input':
       row.detail = reviewDetail({ kind: 'waiting', minutes: wholeMinutes(now - waitingSince(session)) })

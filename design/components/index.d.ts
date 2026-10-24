@@ -78,14 +78,15 @@ export interface Scene {
 }
 
 
-/** One session's hour, as THE HOUR IN REVIEW shows it. */
+/** One session's hour, as THE HOUR IN REVIEW shows it, read as the session's row on the board. */
 export interface HourRow {
   id?: string;
+  /** The session's project, its repository's name or else its folder's: it leads the row on the listing's plate. */
   project?: string;
-  /** Used when there is no project. */
+  /** The session's title, as the listing shows it. A row without one names its project here instead, with no plate. */
   name?: string;
   state: SessionState;
-  /** One short detail after the state word: "4 min", "+182 −40". */
+  /** One short detail under the title: "Waiting 4 min", "+182 −40". */
   detail?: string;
 }
 
