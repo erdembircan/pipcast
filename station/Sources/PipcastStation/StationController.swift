@@ -17,6 +17,9 @@ final class StationController: NSObject, InteractionDelegate, WKNavigationDelega
     private let startedAtMs = nowMilliseconds()
 
     private let panel = StationPanel()
+    /// The window server's Spaces, or nil on a macOS without the private calls.
+    private let spaces = WindowServerSpaces()
+    private var lastSpacesLine: String?
     private let bridge = PageBridge()
     private let web: StationWebView
     private let chrome: ChromeView
@@ -66,6 +69,9 @@ final class StationController: NSObject, InteractionDelegate, WKNavigationDelega
         log.write(panel.hasForcedActiveAppearance
                   ? "glass: active appearance forced"
                   : "error cannot force the window's active appearance; the glass draws flat")
+        log.write(spaces != nil
+                  ? "spaces: off the target's own full-screen Spaces"
+                  : "error cannot keep the window off the target's own full-screen Spaces; it can show there as you switch to it")
         jingles = Jingles(folder: "\(options.assets)/sounds", onProblem: { [log] in log.write("error \($0)") })
         place(on: NSScreen.main ?? NSScreen.screens[0], animated: false)
 
@@ -78,6 +84,12 @@ final class StationController: NSObject, InteractionDelegate, WKNavigationDelega
         ) { [weak self] notification in
             let app = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
             self?.frontmostID = app?.bundleIdentifier
+            self?.updateVisibility()
+        }
+        NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.activeSpaceDidChangeNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            self?.keepOffOwnSpaces()
             self?.updateVisibility()
         }
         NotificationCenter.default.addObserver(
@@ -140,6 +152,7 @@ final class StationController: NSObject, InteractionDelegate, WKNavigationDelega
     }
 
     private func tick() {
+        keepOffOwnSpaces()
         refreshStore()
         if shouldQuit() {
             // Look once more before giving up on the air.
@@ -230,19 +243,66 @@ final class StationController: NSObject, InteractionDelegate, WKNavigationDelega
     // MARK: Visibility and place
 
     private func updateVisibility() {
-        let want = shouldShow(frontmost: frontmostID, target: options.targetBundleID) && !onAirRecords.isEmpty
+        let target = options.targetBundleID
+        // Only worth asking the window server while another app is in front.
+        let onOwnSpace = frontmostID != target && isOnOwnSpace()
+        let want = shouldShow(frontmost: frontmostID, target: target, onTargetsOwnSpace: onOwnSpace)
+            && !onAirRecords.isEmpty
         guard want != isShown else { return }
         isShown = want
         if want {
             // Never makeKeyAndOrderFront or activate: the station must not take the keyboard.
             panel.forceActiveAppearance()
+            panel.animationBehavior = .default
             panel.orderFrontRegardless()
+            keepOffOwnSpaces()
+            // The window server puts a window that has just come on screen on its Spaces a moment later.
+            DispatchQueue.main.async { [weak self] in self?.keepOffOwnSpaces() }
             scheduleSelfCaptureOnce()
         } else {
+            // At once: AppKit's fade would leave the window on screen for a quarter of a second more.
+            panel.animationBehavior = .none
             panel.orderOut(nil)
         }
         log.write(want ? "shown" : "hidden")
         sendSnapshot()
+    }
+
+    /// The target's own full-screen Spaces now: the ones it fills alone.
+    private func ownSpaces() -> [UInt64] {
+        guard let spaces else { return [] }
+        let pids = NSRunningApplication.runningApplications(withBundleIdentifier: options.targetBundleID)
+            .map { Int($0.processIdentifier) }
+        return Spaces.ownFullScreen(in: spaces.displays(), pids: Set(pids))
+    }
+
+    /// Whether you are on one of the target's own full-screen Spaces.
+    private func isOnOwnSpace() -> Bool {
+        guard let spaces else { return false }
+        return ownSpaces().contains(spaces.active())
+    }
+
+    /// Takes the window off the target's own full-screen Spaces it is on. The window server puts a window that
+    /// shows on every Space on those too, and draws it there all through a switch to the target, before macOS
+    /// says the target is in front. Off a Space, the window stays off it; a new one, from the target going full
+    /// screen again, is caught here within a second.
+    private func keepOffOwnSpaces() {
+        guard let spaces, panel.windowNumber > 0 else { return }
+        let own = ownSpaces()
+        guard !own.isEmpty else { return }
+        let window = CGWindowID(panel.windowNumber)
+        let on = spaces.spaces(of: window).filter(own.contains)
+        guard !on.isEmpty else { return }
+        spaces.remove(window, from: on)
+        let still = spaces.spaces(of: window).filter(own.contains)
+        let line = still.isEmpty
+            ? "off the target's full-screen Space \(on.map(String.init).joined(separator: ", "))"
+            : "error the window is still on the target's full-screen Space \(still.map(String.init).joined(separator: ", "))"
+        // Once for each change, not once a second.
+        if line != lastSpacesLine {
+            log.write(line)
+            lastSpacesLine = line
+        }
     }
 
     /// With `PIPCAST_SELF_CAPTURE` set to a file path: once, 1.5 s after the window is first shown, shows the controls

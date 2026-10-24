@@ -90,6 +90,26 @@ if wait_for 5 "the page to report its visibility" grep -q 'visibilityState' "$ho
   echo "info the page's document.visibilityState while the window is on screen (screen $("$inspect" locked)): $(grep 'visibilityState' "$home/station.log" | tail -n 1 | sed 's/.*visibilityState //')"
 fi
 
+step "the window hides at once"
+# With nothing on air the station hides the window, then quits 5 s later. The window has to leave the screen as
+# the station logs that it hid it, not at the end of a fade a quarter of a second later.
+"$inspect" expect "$pid" gone-within 100 "$home/station.log" &
+watcher=$!
+sleep 0.3
+kill "$keeper" 2>/dev/null || true
+wait "$keeper" 2>/dev/null || true
+keeper=""
+rm -f "$home/sessions/verify.json"
+wait "$watcher" || die "the window lingered after the station hid it"
+# Back on air before the station's 5 s are up.
+tuned="$(now_ms)"
+write_record "$tuned"
+( while true; do sleep 5; write_record "$tuned"; done ) &
+keeper=$!
+"$inspect" expect "$pid" shown bottom-right 1
+grep -q ' spaces: off the target' "$home/station.log" || die "the station cannot reach the window server's Spaces"
+echo "ok   the station can keep its window off the target's own full-screen Spaces"
+
 step "stop, then launch again"
 out="$("$station" stop --home "$home")"
 [[ "$out" == "stopped $pid" ]] || die "stop printed: $out"
