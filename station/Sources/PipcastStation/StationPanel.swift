@@ -76,6 +76,13 @@ final class InteractionView: NSView {
     /// Whether a press that started here is held, through a drag that carries the pointer off the window.
     var isPressing: Bool { drag != nil }
 
+    /// Ends the drag going on, there and then: the rest of it moves nothing and letting go does nothing.
+    func endDrag() {
+        drag = nil
+        didDrag = false
+        NSCursor.arrow.set()
+    }
+
     private enum Drag {
         case move
         case resize(ResizeEdge)

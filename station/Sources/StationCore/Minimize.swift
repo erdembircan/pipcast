@@ -78,6 +78,8 @@ public enum Minimize {
     public static let handleFadeIn = 0.15                           // the controls' fade in
     public static let reducedDuration = 0.2
     public static let pullDistance: CGFloat = 12
+    /// How much of a dragged window must be past a side edge before it goes into that side: a quarter of its width.
+    public static let dragShare: CGFloat = 0.25
 
     /// The window wholly past `side` of the visible frame, at the height it rests at.
     public static func gone(rest: CGRect, visible: CGRect, side: Side) -> CGRect {
@@ -111,10 +113,18 @@ public enum Minimize {
         return part
     }
 
-    /// Whether a window dropped at `frame` goes into a side: its centre is past the visible frame's left or right edge.
-    public static func side(droppedAt frame: CGRect, visible: CGRect) -> Side? {
-        if frame.midX > visible.maxX { return .right }
-        if frame.midX < visible.minX { return .left }
+    /// The side a dragged window goes into: the left or right edge of `visible` that a quarter of the window is past,
+    /// when no other screen lies beyond that edge of `screen` at the window's height. Nil otherwise. `others` are the
+    /// frames of every other screen.
+    public static func side(dragged window: CGRect, visible: CGRect, screen: CGRect, others: [CGRect]) -> Side? {
+        let need = window.width * dragShare
+        func level(_ frame: CGRect) -> Bool { frame.maxY > window.minY && frame.minY < window.maxY }
+        if window.maxX - visible.maxX >= need, !others.contains(where: { $0.minX >= screen.maxX - 1 && level($0) }) {
+            return .right
+        }
+        if visible.minX - window.minX >= need, !others.contains(where: { $0.maxX <= screen.minX + 1 && level($0) }) {
+            return .left
+        }
         return nil
     }
 
