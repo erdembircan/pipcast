@@ -2,7 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, RenderElement, Timer } from 'claude-code'
 
 import { ACTIVITY_WRITE_MS, HEARTBEAT_MS } from '../src/contract/constants.ts'
-import { COMMAND_DESCRIPTION, COMMAND_NAME, REPLY, TOAST_CANNOT_START, fallbackTitle } from '../src/contract/copy.ts'
+import { COMMAND_ARGUMENT_HINT, COMMAND_DESCRIPTION, COMMAND_NAME, OPTION_REPLY, REPLY, TOAST_CANNOT_START, fallbackTitle, optionState } from '../src/contract/copy.ts'
 import { defaultHome, storePaths } from '../src/contract/paths.ts'
 import { parseSessionRecord } from '../src/contract/validate.ts'
 import { startKind } from '../src/core/auto.ts'
@@ -15,6 +15,8 @@ import { FILE_TOOLS, MAX_FOLDERS, NOTHING, agentMetaPath, look, parseAgentMeta, 
 import type { Reading } from '../src/core/ledger.ts'
 import * as record from '../src/core/model.ts'
 import type { SessionModel } from '../src/core/model.ts'
+import { parseRequest } from '../src/core/options.ts'
+import type { OptionSpec } from '../src/core/options.ts'
 import { lookAtShells, lookDue, stillWorking } from '../src/core/shells.ts'
 import { waitsOn } from '../src/core/wake.ts'
 import {
@@ -25,6 +27,8 @@ import {
   writeRecord,
 } from '../src/core/services.ts'
 import type { Io, TuneInResult } from '../src/core/services.ts'
+import { optionsHome, readOption, writeOption } from '../src/core/settings.ts'
+import type { OptionsHome } from '../src/core/settings.ts'
 import { TITLE_CHECK_MS, findTranscriptDir, readTitleFile, transcriptDirOf } from '../src/core/title.ts'
 
 const tuned = atom({ plugin: 'pipcast', key: 'tuned' } as const, false)
@@ -36,6 +40,8 @@ const due = atom({ plugin: 'pipcast', key: 'due' } as const, false)
 let autoTuneIn = false
 // Tuning in by itself runs one at a time, so a session never tunes in twice
 let autoQueue: Promise<void> = Promise.resolve()
+// Where Claude Code keeps this plugin's options, once found this load
+let optionsAt: OptionsHome | null = null
 
 // What the hooks share. A reload starts the module over, and session.start
 // builds all of this again from $.state and the session's own record.
@@ -148,15 +154,18 @@ function ioFor($: EngineInterface): Io {
         return []
       }
     },
-    async run(argv, cwd, timeoutMs) {
-      const init: { cwd?: string; timeoutMs?: number } = {}
+    async run(argv, cwd, timeoutMs, stdin) {
+      const init: { cwd?: string; timeoutMs?: number; stdin?: string } = {}
       if (cwd !== undefined) {
         init.cwd = cwd
       }
       if (timeoutMs !== undefined) {
         init.timeoutMs = timeoutMs
       }
-      const done = await $.process.run(argv, cwd === undefined && timeoutMs === undefined ? undefined : init)
+      if (stdin !== undefined) {
+        init.stdin = stdin
+      }
+      const done = await $.process.run(argv, Object.keys(init).length === 0 ? undefined : init)
       return { exitCode: done.exitCode, stdout: done.stdout, stderr: done.stderr }
     },
     async stationBinary() {
@@ -702,6 +711,52 @@ function autoTune($: EngineInterface): Promise<void> {
   return autoQueue
 }
 
+// The Claude Code binary this session runs on: CLAUDE_CODE_EXECPATH when it is
+// set, else the parent of a command the mod starts, which is the engine itself
+async function engineBinary($: EngineInterface): Promise<string | null> {
+  const set = await $.env.get('CLAUDE_CODE_EXECPATH')
+  if (set !== undefined && set !== '') {
+    return set
+  }
+  const parent = await $.process.run(['/bin/sh', '-c', '/bin/ps -o comm= -p "$PPID"'])
+  const path = parent.stdout.trim()
+  return parent.exitCode === 0 && path.startsWith('/') ? path : null
+}
+
+// Where Claude Code keeps this plugin's options, found once a load
+async function optionsHomeOf($: EngineInterface): Promise<OptionsHome | null> {
+  if (optionsAt === null) {
+    const engine = await engineBinary($)
+    optionsAt = engine === null ? null : await optionsHome(ioFor($), engine, $.plugin.root, $.plugin.name)
+  }
+  return optionsAt
+}
+
+// /pipcast <option>: what Claude Code has saved for it
+async function showOption($: EngineInterface, option: OptionSpec): Promise<string> {
+  try {
+    const home = await optionsHomeOf($)
+    const value = home === null ? null : await readOption(ioFor($), home, option.key)
+    return value === null ? OPTION_REPLY.cannotRead(option.word) : optionState(option.word, value)
+  } catch (error) {
+    failure($, 'reading an option', error)
+    return OPTION_REPLY.cannotRead(option.word)
+  }
+}
+
+// /pipcast <option> on|off: saved with Claude Code's own command, after which
+// every session reloads the mod with the new value
+async function setOption($: EngineInterface, option: OptionSpec, on: boolean): Promise<string> {
+  try {
+    const home = await optionsHomeOf($)
+    const saved = home !== null && (await writeOption(ioFor($), home, option.key, on))
+    return saved ? optionState(option.word, on) : OPTION_REPLY.cannotSave(option.word, on)
+  } catch (error) {
+    failure($, 'saving an option', error)
+    return OPTION_REPLY.cannotSave(option.word, on)
+  }
+}
+
 async function onTurnStart($: EngineInterface, turnId: string): Promise<void> {
   await ensureSession($)
   if (model === null) {
@@ -805,10 +860,11 @@ async function onComplete($: EngineInterface, isAborted: boolean, reason: string
 export const register: Register = (on, options) => {
   // The plugin's options, fixed for this load: a change reloads the module
   autoTuneIn = options.autoTuneIn === true
+  optionsAt = null
 
   on('session.start', async ($, e, next) => {
     try {
-      await $.command.register({ name: COMMAND_NAME, description: COMMAND_DESCRIPTION })
+      await $.command.register({ name: COMMAND_NAME, description: COMMAND_DESCRIPTION, argumentHint: COMMAND_ARGUMENT_HINT })
       await startSession($)
     } catch (error) {
       failure($, 'session.start', error)
@@ -837,7 +893,20 @@ export const register: Register = (on, options) => {
     return attached
   })
 
-  on('command.run', { command: COMMAND_NAME }, async ($) => {
+  on('command.run', { command: COMMAND_NAME }, async ($, e) => {
+    const request = parseRequest(e.args)
+    switch (request.kind) {
+      case 'show':
+        return { text: await showOption($, request.option) }
+      case 'set':
+        return { text: await setOption($, request.option, request.on) }
+      case 'unknown':
+        return { text: OPTION_REPLY.unknown(request.word) }
+      case 'bad-value':
+        return { text: OPTION_REPLY.badValue(request.option.word) }
+      case 'toggle':
+        break
+    }
     const done = await toggle($)
     switch (done) {
       case 'in':

@@ -3,10 +3,10 @@ import type { Engine } from 'claude-code/testing'
 import { expect, test } from 'claude-code/testing'
 
 import { ACTIVITY_WRITE_MS } from '../src/contract/constants.ts'
-import { BAND_ALT, ERROR_WORDS, REPLY, TOAST_CANNOT_START } from '../src/contract/copy.ts'
+import { BAND_ALT, ERROR_WORDS, OPTION_REPLY, REPLY, TOAST_CANNOT_START, optionState } from '../src/contract/copy.ts'
 import { hourKey } from '../src/contract/format.ts'
 import { TITLE_CHECK_MS } from '../src/core/title.ts'
-import { BAND, HOME, ID, PROJECT_DIR, ROOT, RECORD, RUN, STATION, T0, TITLE_FILE, TRANSCRIPT, WORKTREE, world } from './world.tsx'
+import { BAND, ENGINE, HOME, ID, PROJECT_DIR, ROOT, RECORD, RUN, STATION, T0, TITLE_FILE, TRANSCRIPT, WORKTREE, world } from './world.tsx'
 import type { FakeTree, WorldOptions } from './world.tsx'
 
 const START = { cwd: ROOT, surface: 'desktop', isInteractive: true } as const
@@ -78,6 +78,9 @@ const started = ($: Engine, source: 'startup' | 'resume' | 'clear' | 'compact' |
 // The desktop app showing the session; each window is a client of its own
 const shown = ($: Engine, clientId = 'window-1', surface: 'desktop' | 'mobile' = 'desktop') =>
   $.session.attach({ surface, clientId })
+
+// /pipcast with words after it
+const option = ($: Engine, args: string) => $.command.run({ ...RUN, args })
 
 scenario('the band on the desktop: our own line under another mod\'s', {}, async (_w, $) => {
   const ui = await mounted($)
@@ -1051,3 +1054,64 @@ scenario("the window's close takes a session that tuned in by itself off the air
   expect(w.record()).toBeNull()
 })
 
+
+scenario('/pipcast auto says what Tune in every new session is set to', {}, async (w, $) => {
+  expect((await option($, 'auto')).text).toBe(optionState('auto', false))
+  w.saved.autoTuneIn = 'true'
+  expect((await option($, 'auto')).text).toBe(optionState('auto', true))
+  expect(w.record()).toBeNull()
+})
+
+scenario("/pipcast auto on and off save the setting with Claude Code's own command", {}, async (w, $) => {
+  expect((await option($, 'auto on')).text).toBe(optionState('auto', true))
+  expect(w.saved.autoTuneIn).toBe('true')
+  expect(w.engineCalls.find((call) => call.argv.includes('--values-stdin'))?.stdin).toBe(JSON.stringify({ autoTuneIn: 'true' }))
+  expect((await option($, 'auto off')).text).toBe(optionState('auto', false))
+  expect(w.saved.autoTuneIn).toBe('false')
+  // Neither tunes the session in or out
+  expect(w.record()).toBeNull()
+  expect(w.launched.length).toBe(0)
+})
+
+scenario('a copy Claude Code did not install keeps its options as pipcast@inline', {}, async (w, $) => {
+  await option($, 'auto on')
+  const save = w.engineCalls.find((call) => call.argv.includes('--values-stdin'))
+  expect(save?.argv[0]).toBe(ENGINE)
+  expect(save?.argv[1]).toBe('--plugin-dir')
+  expect(save?.argv.slice(3)).toEqual(['plugin', 'configure', '--json', '--values-stdin', '--', 'pipcast@inline'])
+})
+
+scenario('the words after /pipcast are read in any case and spacing', {}, async (w, $) => {
+  expect((await option($, '  AUTO   On ')).text).toBe(optionState('auto', true))
+  expect(w.saved.autoTuneIn).toBe('true')
+})
+
+scenario('an option /pipcast does not know, or a value that is not on or off, saves nothing', {}, async (w, $) => {
+  expect((await option($, 'volume on')).text).toBe(OPTION_REPLY.unknown('volume'))
+  expect((await option($, 'auto maybe')).text).toBe(OPTION_REPLY.badValue('auto'))
+  expect((await option($, 'auto on now')).text).toBe(OPTION_REPLY.badValue('auto'))
+  expect(w.engineCalls).toEqual([])
+  expect(w.record()).toBeNull()
+})
+
+scenario('a save or a read Claude Code refuses says so', { configureFails: true }, async (_w, $) => {
+  expect((await option($, 'auto on')).text).toBe(OPTION_REPLY.cannotSave('auto', true))
+  expect((await option($, 'auto')).text).toBe(OPTION_REPLY.cannotRead('auto'))
+})
+
+scenario('the engine is the parent of a command the mod starts', {}, async (w, $) => {
+  await option($, 'auto')
+  expect(w.ran.some((argv) => argv[0] === '/bin/sh')).toBe(true)
+  expect(w.engineCalls[0]?.argv[0]).toBe(ENGINE)
+})
+
+scenario('CLAUDE_CODE_EXECPATH names the engine when it is set', { env: { CLAUDE_CODE_EXECPATH: '/pip/env/claude' } }, async (w, $) => {
+  await option($, 'auto')
+  expect(w.ran.some((argv) => argv[0] === '/bin/sh')).toBe(false)
+  expect(w.engineCalls[0]?.argv[0]).toBe('/pip/env/claude')
+})
+
+scenario('with no engine to be found, /pipcast auto says it could not read or save', { engine: null }, async (_w, $) => {
+  expect((await option($, 'auto')).text).toBe(OPTION_REPLY.cannotRead('auto'))
+  expect((await option($, 'auto on')).text).toBe(OPTION_REPLY.cannotSave('auto', true))
+})
