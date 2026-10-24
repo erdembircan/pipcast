@@ -2,8 +2,7 @@ import AppKit
 import StationCore
 
 /// The minimize handle and the tab it becomes at the screen's edge: one small panel of its own, the same recipe as
-/// the window's. It is a child of the window while the window is out, so it rides drags, and on its own while the
-/// window is minimized.
+/// the window's. It is attached to nothing: the station moves it with the window.
 final class TabPanel: NSPanel {
     let handle = HandleView()
 
@@ -12,7 +11,8 @@ final class TabPanel: NSPanel {
                    styleMask: [.borderless, .nonactivatingPanel],
                    backing: .buffered,
                    defer: false)
-        level = NSWindow.Level(rawValue: stationLevel)
+        // One level above the window, so the handle shows over it without being attached to it.
+        level = NSWindow.Level(rawValue: stationLevel + 1)
         collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary, .ignoresCycle]
         hidesOnDeactivate = false
         isOpaque = false
