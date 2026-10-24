@@ -1,0 +1,433 @@
+{
+  "name": "Pipcast icon",
+  "canvas": [
+    1024,
+    1024
+  ],
+  "png": [
+    2048,
+    2048
+  ],
+  "points": {
+    "beacon": [
+      512,
+      236
+    ],
+    "mastFoot": [
+      512,
+      650
+    ]
+  },
+  "mask": {
+    "name": "tile-mask",
+    "svg": "tile-mask.svg",
+    "png": "png/tile-mask.png"
+  },
+  "layers": [
+    {
+      "name": "sky",
+      "svg": "sky.svg",
+      "png": "png/sky.png",
+      "bounds": [
+        0,
+        0,
+        1024,
+        1024
+      ],
+      "anchor": [
+        512,
+        512
+      ],
+      "with": null
+    },
+    {
+      "name": "ring-1",
+      "svg": "ring-1.svg",
+      "png": "png/ring-1.png",
+      "bounds": [
+        354,
+        78,
+        670,
+        394
+      ],
+      "anchor": [
+        512,
+        236
+      ],
+      "with": null,
+      "ring": {
+        "cx": 512,
+        "cy": 236,
+        "r": 150,
+        "strokeWidth": 16,
+        "opacity": 0.62
+      }
+    },
+    {
+      "name": "ring-2",
+      "svg": "ring-2.svg",
+      "png": "png/ring-2.png",
+      "bounds": [
+        233.5,
+        -42.5,
+        790.5,
+        514.5
+      ],
+      "anchor": [
+        512,
+        236
+      ],
+      "with": null,
+      "ring": {
+        "cx": 512,
+        "cy": 236,
+        "r": 272,
+        "strokeWidth": 13,
+        "opacity": 0.38
+      }
+    },
+    {
+      "name": "ring-3",
+      "svg": "ring-3.svg",
+      "png": "png/ring-3.png",
+      "bounds": [
+        103,
+        -173,
+        921,
+        645
+      ],
+      "anchor": [
+        512,
+        236
+      ],
+      "with": null,
+      "ring": {
+        "cx": 512,
+        "cy": 236,
+        "r": 404,
+        "strokeWidth": 10,
+        "opacity": 0.2
+      }
+    },
+    {
+      "name": "tower-l1",
+      "svg": "tower-l1.svg",
+      "png": "png/tower-l1.png",
+      "bounds": [
+        232,
+        864,
+        347,
+        1024
+      ],
+      "anchor": [
+        289.5,
+        1024
+      ],
+      "with": null
+    },
+    {
+      "name": "tower-l1-lights",
+      "svg": "tower-l1-lights.svg",
+      "png": "png/tower-l1-lights.png",
+      "bounds": [
+        232,
+        864,
+        347,
+        1024
+      ],
+      "anchor": [
+        289.5,
+        1024
+      ],
+      "with": "tower-l1"
+    },
+    {
+      "name": "tower-l2",
+      "svg": "tower-l2.svg",
+      "png": "png/tower-l2.png",
+      "bounds": [
+        37,
+        711.5,
+        202,
+        1024
+      ],
+      "anchor": [
+        119.5,
+        1024
+      ],
+      "with": null
+    },
+    {
+      "name": "tower-l2-lights",
+      "svg": "tower-l2-lights.svg",
+      "png": "png/tower-l2-lights.png",
+      "bounds": [
+        37,
+        711.5,
+        202,
+        1024
+      ],
+      "anchor": [
+        119.5,
+        1024
+      ],
+      "with": "tower-l2"
+    },
+    {
+      "name": "tower-l3",
+      "svg": "tower-l3.svg",
+      "png": "png/tower-l3.png",
+      "bounds": [
+        -173,
+        744,
+        17,
+        1024
+      ],
+      "anchor": [
+        -78,
+        1024
+      ],
+      "with": null
+    },
+    {
+      "name": "tower-l3-lights",
+      "svg": "tower-l3-lights.svg",
+      "png": "png/tower-l3-lights.png",
+      "bounds": [
+        -173,
+        744,
+        17,
+        1024
+      ],
+      "anchor": [
+        -78,
+        1024
+      ],
+      "with": "tower-l3"
+    },
+    {
+      "name": "tower-r1",
+      "svg": "tower-r1.svg",
+      "png": "png/tower-r1.png",
+      "bounds": [
+        677,
+        784,
+        842,
+        1024
+      ],
+      "anchor": [
+        759.5,
+        1024
+      ],
+      "with": null
+    },
+    {
+      "name": "tower-r1-lights",
+      "svg": "tower-r1-lights.svg",
+      "png": "png/tower-r1-lights.png",
+      "bounds": [
+        677,
+        784,
+        842,
+        1024
+      ],
+      "anchor": [
+        759.5,
+        1024
+      ],
+      "with": "tower-r1"
+    },
+    {
+      "name": "tower-r2",
+      "svg": "tower-r2.svg",
+      "png": "png/tower-r2.png",
+      "bounds": [
+        862,
+        824,
+        1002,
+        1024
+      ],
+      "anchor": [
+        932,
+        1024
+      ],
+      "with": null
+    },
+    {
+      "name": "tower-r2-lights",
+      "svg": "tower-r2-lights.svg",
+      "png": "png/tower-r2-lights.png",
+      "bounds": [
+        862,
+        824,
+        1002,
+        1024
+      ],
+      "anchor": [
+        932,
+        1024
+      ],
+      "with": "tower-r2"
+    },
+    {
+      "name": "tower-r3",
+      "svg": "tower-r3.svg",
+      "png": "png/tower-r3.png",
+      "bounds": [
+        1022,
+        864,
+        1187,
+        1024
+      ],
+      "anchor": [
+        1104.5,
+        1024
+      ],
+      "with": null
+    },
+    {
+      "name": "tower-r3-lights",
+      "svg": "tower-r3-lights.svg",
+      "png": "png/tower-r3-lights.png",
+      "bounds": [
+        1022,
+        864,
+        1187,
+        1024
+      ],
+      "anchor": [
+        1104.5,
+        1024
+      ],
+      "with": "tower-r3"
+    },
+    {
+      "name": "station",
+      "svg": "station.svg",
+      "png": "png/station.png",
+      "bounds": [
+        362,
+        650,
+        662,
+        1024
+      ],
+      "anchor": [
+        512,
+        1024
+      ],
+      "with": null
+    },
+    {
+      "name": "station-lights",
+      "svg": "station-lights.svg",
+      "png": "png/station-lights.png",
+      "bounds": [
+        362,
+        650,
+        662,
+        1024
+      ],
+      "anchor": [
+        512,
+        1024
+      ],
+      "with": "station"
+    },
+    {
+      "name": "station-sign",
+      "svg": "station-sign.svg",
+      "png": "png/station-sign.png",
+      "bounds": [
+        362,
+        650,
+        662,
+        1024
+      ],
+      "anchor": [
+        512,
+        1024
+      ],
+      "with": "station"
+    },
+    {
+      "name": "mast",
+      "svg": "mast.svg",
+      "png": "png/mast.png",
+      "bounds": [
+        464.5,
+        256,
+        559.5,
+        651.5
+      ],
+      "anchor": [
+        512,
+        650
+      ],
+      "with": "station"
+    },
+    {
+      "name": "beacon-glow",
+      "svg": "beacon-glow.svg",
+      "png": "png/beacon-glow.png",
+      "bounds": [
+        342,
+        66,
+        682,
+        406
+      ],
+      "anchor": [
+        512,
+        236
+      ],
+      "with": "mast"
+    },
+    {
+      "name": "beacon",
+      "svg": "beacon.svg",
+      "png": "png/beacon.png",
+      "bounds": [
+        489,
+        213,
+        535,
+        259
+      ],
+      "anchor": [
+        512,
+        236
+      ],
+      "with": "mast"
+    },
+    {
+      "name": "gloss",
+      "svg": "gloss.svg",
+      "png": "png/gloss.png",
+      "bounds": [
+        0,
+        0,
+        1024,
+        560
+      ],
+      "anchor": [
+        512,
+        0
+      ],
+      "with": null
+    },
+    {
+      "name": "rim",
+      "svg": "rim.svg",
+      "png": "png/rim.png",
+      "bounds": [
+        0,
+        0,
+        1024,
+        1024
+      ],
+      "anchor": [
+        512,
+        512
+      ],
+      "with": null
+    }
+  ]
+}

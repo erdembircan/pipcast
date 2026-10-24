@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <title>Pipcast icon: beacon-glow</title>
+  <defs>
+    <radialGradient id="glow-fill" cx="512" cy="236" r="170" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ff4a3d" stop-opacity="0.8"/><stop offset="0.3" stop-color="#ff4a3d" stop-opacity="0.28"/><stop offset="1" stop-color="#ff4a3d" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <g id="beacon-glow">
+    <circle cx="512" cy="236" r="170" fill="url(#glow-fill)"/>
+  </g>
+</svg>
