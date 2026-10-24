@@ -224,7 +224,8 @@
 }
 .pn-anim .pn-signal > i { animation: pn-signal 9s cubic-bezier(0.2, 0.6, 0.4, 1) infinite; }
 /* The listing, as the first station sketch drew it: a glossy row per session
-   with a hard split across the middle, the title, and the state on a pill */
+   with a hard split across the middle, the project on a plate, the title,
+   and the state on a pill */
 .pn-board { position: absolute; left: var(--space-10, 40px); top: 92px; width: 880px; display: flex; flex-direction: column; gap: 12px; }
 .pn-row {
   height: 68px;
@@ -241,6 +242,37 @@
   min-width: 0;
   font: italic 800 30px/1 var(--font-display, "Anybody", "Arial Black", sans-serif);
   font-stretch: 130%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--on-air, #ffffff);
+}
+
+/* The session's project leads its row on a plate, as chosen on PiP
+   Newsroom · Project in the listing: the strap's ground under its gold
+   rule, leaning forward like every tab, the name in caps as on tabs. 200
+   wide whatever the name, so the titles start in line; a longer name is
+   cut with an ellipsis */
+.pn-row-project {
+  flex: none;
+  width: 200px;
+  height: 44px;
+  margin-left: -8px;
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  overflow: hidden;
+  transform: skewX(var(--slant, -12deg));
+  background: var(--studio-deep, #061233);
+  border-top: 3px solid var(--gold, #f2b630);
+}
+.pn-row-project > span {
+  display: block;
+  min-width: 0;
+  transform: skewX(calc(var(--slant, -12deg) * -1));
+  font: 800 28px/1 var(--font-text, "Archivo", "Helvetica Neue", Arial, sans-serif);
+  font-stretch: 88%;
+  text-transform: uppercase;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;

@@ -638,9 +638,10 @@
   }
 
   /* The listing, as the first station sketch drew it: a glossy row per
-     session, its title, and its state on a pill, four rows a page (Pages,
-     above). `animate` turns the pages; without it the board holds its
-     first page. `sample` takes the sessions from a scene. */
+     session, its project on a plate, its title, and its state on a pill,
+     four rows a page (Pages, above). `animate` turns the pages; without it
+     the board holds its first page. `sample` takes the sessions from a
+     scene. */
   function SessionBoard(props) {
     var scene = (props.sample && SAMPLES[props.sample]) || {};
     var list = (props.sessions || scene.sessions || []).slice();
@@ -653,6 +654,10 @@
     return h('div', { className: cx('pn-board', props.inline && 'pn-inline') },
       pageSlots(view, 'pn-board-slot', 'pn-row', function (s) {
         return [
+          /* The project leads the row on a plate, as chosen on PiP
+             Newsroom · Project in the listing; a session without one has
+             no plate */
+          s.project ? h('span', { key: 'project', className: 'pn-row-project' }, h('span', null, s.project)) : null,
           h('span', { key: 'name', className: 'pn-row-name' }, s.name),
           h(StatePill, { key: 'pill', state: s.state })
         ];
