@@ -21,6 +21,40 @@ export const REPLY = {
 
 export const TOAST_CANNOT_START = 'Pipcast: KLWD could not start.'
 
+// The options /pipcast sets: `/pipcast <option> on` or `off` saves one, and
+// `/pipcast <option>` says what it is. Each is named as Claude Code's plugin
+// options show it, with what on and off mean.
+export interface OptionWords {
+  title: string
+  on: string
+  off: string
+}
+
+export const OPTION_WORDS: Record<string, OptionWords> = {
+  auto: {
+    title: 'Tune in every new session',
+    on: 'Each new session in the desktop app tunes in to KLWD as it opens.',
+    off: 'A new session waits for TUNE IN.',
+  },
+}
+
+// What the slash menu shows after /pipcast: "[auto on|off]"
+export const COMMAND_ARGUMENT_HINT = `[${Object.keys(OPTION_WORDS).join('|')} on|off]`
+
+// "Tune in every new session is on. Each new session in the desktop app tunes in to KLWD as it opens."
+export function optionState(word: string, on: boolean): string {
+  const words = OPTION_WORDS[word]
+  const state = `${words?.title ?? word} is ${on ? 'on' : 'off'}.`
+  return words === undefined ? state : `${state} ${on ? words.on : words.off}`
+}
+
+export const OPTION_REPLY = {
+  unknown: (word: string) => `/pipcast has no option called ${word}. Options: ${Object.keys(OPTION_WORDS).join(', ')}.`,
+  badValue: (word: string) => `/pipcast ${word} takes on or off.`,
+  cannotRead: (word: string) => `Pipcast could not read the ${word} setting. Run /pipcast ${word} to try again.`,
+  cannotSave: (word: string, on: boolean) => `Pipcast could not save the ${word} setting. Run /pipcast ${word} ${on ? 'on' : 'off'} to try again.`,
+} as const
+
 // The band draws one picture; this is what a screen reader reads for it
 export const BAND_ALT = {
   in: 'KLWD, Tune in',

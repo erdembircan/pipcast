@@ -12,7 +12,7 @@ The window shows only while you're in another app. Switch back to Claude and it 
 
 ## What it does
 
-- **Tune in from Claude.** Press **TUNE IN** in the band above the prompt box, or run `/pipcast`. There is no limit on how many sessions can be on air.
+- **Tune in from Claude.** Press **TUNE IN** in the band above the prompt box, or run `/pipcast`. Run `/pipcast auto on` and each new session tunes in by itself. There is no limit on how many sessions can be on air.
 - **The live board.** Each session on air gets a row with its project on a plate, its title, and its state on a pill: INPUT when it needs you, ERROR when it stopped on an error, READY when it finished, LIVE while it works. With more than four on air, the board shows four at a time and turns to the next four every 8 seconds.
 - **BREAKING NEWS for every story.** A session that needs your input, that is ready for review, whose work is complete, or that stopped on an error airs as its own segment. Stories air one after another, in the order they land. Nothing cuts in, and KLWD airs only what happens while you're away from Claude: switch to Claude and the stories still waiting are dropped, along with any that land while you're there.
 - **On the hour.** The station clock strikes the hour, Clawd reads the headlines, and THE HOUR IN REVIEW shows what each session did. If you're in Claude as the hour strikes, that hour is skipped, and the next report covers it.
@@ -49,6 +49,22 @@ New sessions load it.
 5. Press **TUNE OUT**, or run `/pipcast` again, to take the session off the air.
 
 The band shows KLWD and what pressing it does: **TUNE IN** in gold while this session is off the air, **TUNE OUT** in blue while it is on.
+
+### Tune in every new session
+
+Pipcast has one setting, **Tune in every new session**, kept with Claude Code's other plugin options. It is off until you turn it on. While it is on, each new session in the desktop app tunes in by itself as it opens, so there is no **TUNE IN** to press, and a `/clear` starts a new session that tunes in again. A session that resumes, such as an older one you open again, waits for **TUNE IN** as before, and **TUNE OUT** still takes any session off the air. The setting changes the sessions that start after it, not the ones already open.
+
+Turn it on or off from any session, in the desktop app or in a terminal:
+
+```text
+/pipcast auto on
+```
+
+```text
+/pipcast auto off
+```
+
+`/pipcast auto` says whether it is on, and `/pipcast` on its own still tunes the session in or out. The desktop app's plugin page doesn't list the setting, so `/pipcast` is the way to change it there. In Claude Code in a terminal, `/plugin configure pipcast@pipcast` shows the same setting.
 
 ## How it works
 
@@ -88,7 +104,7 @@ runs every check: lint, types, the unit tests of each part, the station's Swift 
 scripts/verify.sh
 ```
 
-runs the whole thing for real, with no window of yours involved: a headless Claude Code session tunes in, the station starts and shows its window, the session tunes out, and the station quits. Another session is renamed on air, off air and after the window's close, and its title on air has to follow each time.
+runs the whole thing for real, with no window of yours involved: a headless Claude Code session tunes in, the station starts and shows its window, the session tunes out, and the station quits. Another session is renamed on air, off air and after the window's close, and its title on air has to follow each time. One more, with **Tune in every new session** on, has to stay off the air until a stand-in for the desktop app shows it, then tune in by itself, and again after a `/clear`. An install into a throwaway configuration then has to turn the setting on and off with `/pipcast auto`, each value landing where Claude Code keeps plugin options.
 
 ### Try a change in the desktop app
 

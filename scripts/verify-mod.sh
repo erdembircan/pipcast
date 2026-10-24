@@ -1,10 +1,15 @@
 #!/bin/bash
-# Runs the mod in a real, headless Claude Code session on the engine bundled
-# with the desktop app: /pipcast has to tune in (a record in the store, the
-# station launched), a second /pipcast has to tune out (the record gone), and a
-# session that ends while tuned in has to take its record with it. No model call
-# is made and no station is started: PIPCAST_STATION_BIN is a stand-in that logs
-# its arguments. Everything lives in a temporary folder that is removed on exit.
+# Runs the mod in real, headless Claude Code sessions on the engine bundled
+# with the desktop app. In the first, with Tune in every new session off,
+# /pipcast has to tune in (a record in the store, the station launched), a
+# second /pipcast has to tune out (the record gone), and a session that ends
+# while tuned in has to take its record with it. In the second, with the
+# setting on, the session has to stay off the air while nothing shows it, tune
+# in by itself once a stand-in for the desktop app attaches as the app does
+# (ui_attach), stay off the air after /pipcast tunes it out and a second window
+# shows it, and tune in again after /clear. No model call is made and no
+# station is started: PIPCAST_STATION_BIN is a stand-in that logs its
+# arguments. Everything lives in a temporary folder that is removed on exit.
 set -uo pipefail
 
 root="$(cd "$(dirname "$0")/.." && pwd)"
@@ -13,11 +18,13 @@ tmp="$(mktemp -d "${TMPDIR:-/tmp}/pipcast-verify-mod.XXXXXX")"
 trap 'rm -rf "$tmp"' EXIT
 
 home="$tmp/home"
+auto_home="$tmp/home-auto"
 calls="$tmp/station-calls.log"
 notes="$tmp/notes.log"
 out="$tmp/engine-out.jsonl"
+auto_out="$tmp/engine-out-auto.jsonl"
 station="$tmp/stand-in-station"
-mkdir -p "$home"
+mkdir -p "$home" "$auto_home"
 
 cat >"$station" <<EOF
 #!/bin/sh
@@ -32,8 +39,8 @@ words() { # prints one of the command's replies, from the contract
 tuned_in="$(words tunedIn)"
 tuned_out="$(words tunedOut)"
 
-# "ok" when the session's one record exists and parses, with v 1 and an id
-record_state() {
+# "ok" when the store's one record exists and parses, with v 1 and an id
+record_state() { # <store>
   node -e '
     const fs = require("node:fs")
     const dir = process.argv[1]
@@ -42,32 +49,71 @@ record_state() {
     if (json.length === 0) { process.stdout.write(names.length === 0 ? "none" : "tmp-only"); process.exit(0) }
     const record = JSON.parse(fs.readFileSync(dir + "/" + json[0], "utf8"))
     process.stdout.write(json.length === 1 && record.v === 1 && typeof record.id === "string" && record.id !== "" ? "ok" : "bad")
-  ' "$home/sessions"
+  ' "$1/sessions"
+}
+
+# The settings a session runs with: Tune in every new session on or off, for
+# the plugin as --plugin-dir loads it
+settings() { # <true|false>
+  printf '{"pluginConfigs":{"pipcast@inline":{"options":{"autoTuneIn":%s}}}}' "$1"
 }
 
 command='{"type":"user","message":{"role":"user","content":"/pipcast"}}'
+clear='{"type":"user","message":{"role":"user","content":"/clear"}}'
+
+# The desktop app showing the session, as it says so: each window is a client
+attach() { # <client id>
+  printf '{"type":"control_request","request_id":"attach-%s","request":{"subtype":"ui_attach","surface":"desktop","client_id":"%s"}}\n' "$1" "$1"
+}
 
 (
   echo "$command"
   sleep 3
-  echo "after-in $(record_state)" >>"$notes"
+  echo "after-in $(record_state "$home")" >>"$notes"
   echo "$command"
   sleep 3
-  echo "after-out $(record_state)" >>"$notes"
+  echo "after-out $(record_state "$home")" >>"$notes"
   echo "$command"
   sleep 3
-  echo "after-in-again $(record_state)" >>"$notes"
+  echo "after-in-again $(record_state "$home")" >>"$notes"
 ) | PIPCAST_HOME="$home" \
   PIPCAST_STATION_BIN="$station" \
   PIPCAST_TARGET_BUNDLE_ID=com.example.pipcast.never-frontmost \
   CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1 \
   "$claude" -p \
   --input-format stream-json --output-format stream-json --verbose \
-  --model haiku --no-session-persistence --plugin-dir "$root/plugin" >"$out" 2>&1
+  --model haiku --no-session-persistence --settings "$(settings false)" --plugin-dir "$root/plugin" >"$out" 2>&1
 
 sleep 1
-echo "after-end $(record_state)" >>"$notes"
+echo "after-end $(record_state "$home")" >>"$notes"
 echo "running $(pgrep -f "$tmp" | wc -l | tr -d ' ')" >>"$notes"
+
+(
+  sleep 3
+  echo "auto-unshown $(record_state "$auto_home")" >>"$notes"
+  attach window-1
+  sleep 3
+  echo "auto-shown $(record_state "$auto_home")" >>"$notes"
+  echo "$command"
+  sleep 3
+  echo "auto-out $(record_state "$auto_home")" >>"$notes"
+  attach window-2
+  sleep 3
+  echo "auto-shown-again $(record_state "$auto_home")" >>"$notes"
+  echo "$clear"
+  sleep 3
+  echo "auto-cleared $(record_state "$auto_home")" >>"$notes"
+) | PIPCAST_HOME="$auto_home" \
+  PIPCAST_STATION_BIN="$station" \
+  PIPCAST_TARGET_BUNDLE_ID=com.example.pipcast.never-frontmost \
+  CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1 \
+  "$claude" -p \
+  --input-format stream-json --output-format stream-json --verbose \
+  --model haiku --no-session-persistence --settings "$(settings true)" --plugin-dir "$root/plugin" >"$auto_out" 2>&1
+
+sleep 1
+echo "auto-end $(record_state "$auto_home")" >>"$notes"
+echo "auto-running $(pgrep -f "$tmp" | wc -l | tr -d ' ')" >>"$notes"
 
 failed=0
 
@@ -88,12 +134,22 @@ check "$tuned_out" "$out" "the second /pipcast answered that it tuned out"
 check "after-in-again ok" "$notes" "a third /pipcast wrote the record again"
 check "after-end none" "$notes" "the session ending took the record with it"
 check "running 0" "$notes" "nothing is left running"
+check "auto-unshown none" "$notes" "with Tune in every new session on, a session nothing shows stays off the air"
+check "auto-shown ok" "$notes" "the desktop app showing the new session tuned it in"
+check "launch --home $auto_home --assets $root/plugin/station --target-bundle-id com.example.pipcast.never-frontmost" "$calls" "the station was launched for it"
+check "auto-out none" "$notes" "/pipcast took it off the air"
+check "$tuned_out" "$auto_out" "/pipcast answered that it tuned out"
+check "auto-shown-again none" "$notes" "a second window showing it left it off the air"
+check "auto-cleared ok" "$notes" "after /clear the new session tuned itself in"
+check "auto-end none" "$notes" "the second session ending took its record with it"
+check "auto-running 0" "$notes" "nothing is left running after the second session"
 
 if [[ "$failed" -eq 0 ]]; then
   echo "mod verified"
 else
   echo "mod check failed"
   tail -c 2000 "$out"
+  tail -c 2000 "$auto_out"
 fi
 
 exit "$failed"

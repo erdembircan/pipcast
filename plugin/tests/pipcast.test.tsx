@@ -3,10 +3,10 @@ import type { Engine } from 'claude-code/testing'
 import { expect, test } from 'claude-code/testing'
 
 import { ACTIVITY_WRITE_MS } from '../src/contract/constants.ts'
-import { BAND_ALT, ERROR_WORDS, REPLY, TOAST_CANNOT_START } from '../src/contract/copy.ts'
+import { BAND_ALT, ERROR_WORDS, OPTION_REPLY, REPLY, TOAST_CANNOT_START, optionState } from '../src/contract/copy.ts'
 import { hourKey } from '../src/contract/format.ts'
 import { TITLE_CHECK_MS } from '../src/core/title.ts'
-import { BAND, HOME, ID, PROJECT_DIR, ROOT, RECORD, RUN, STATION, T0, TITLE_FILE, TRANSCRIPT, WORKTREE, world } from './world.tsx'
+import { BAND, ENGINE, HOME, ID, PROJECT_DIR, ROOT, RECORD, RUN, STATION, T0, TITLE_FILE, TRANSCRIPT, WORKTREE, world } from './world.tsx'
 import type { FakeTree, WorldOptions } from './world.tsx'
 
 const START = { cwd: ROOT, surface: 'desktop', isInteractive: true } as const
@@ -44,7 +44,11 @@ function scenario(name: string, options: WorldOptions, body: (w: ReturnType<type
       await $.session.end({ reason: 'other', sessionId: ID, resume: { id: ID } })
     }
   }
-  test(name, run)
+  if (options.settings === undefined) {
+    test(name, run)
+  } else {
+    test(name, { options: options.settings }, run)
+  }
 }
 
 const tuneIn = ($: Engine) => $.command.run(RUN)
@@ -63,6 +67,20 @@ const mounted = ($: Engine, surface: 'desktop' | 'terminal' = 'desktop', props: 
 
 // What a classic hook says about the session: its id and where its transcript is
 const located = { session_id: ID, transcript_path: TRANSCRIPT } as const
+
+// Tune in every new session, on
+const AUTO = { settings: { autoTuneIn: true } } as const
+
+// The engine starting a session, as classic.SessionStart says where it came from
+const started = ($: Engine, source: 'startup' | 'resume' | 'clear' | 'compact' | 'fork') =>
+  $.classic.SessionStart({ source, ...located } as never)
+
+// The desktop app showing the session; each window is a client of its own
+const shown = ($: Engine, clientId = 'window-1', surface: 'desktop' | 'mobile' = 'desktop') =>
+  $.session.attach({ surface, clientId })
+
+// /pipcast with words after it
+const option = ($: Engine, args: string) => $.command.run({ ...RUN, args })
 
 scenario('the band on the desktop: our own line under another mod\'s', {}, async (_w, $) => {
   const ui = await mounted($)
@@ -893,3 +911,207 @@ scenario('a reload carries on from the session own record', {}, async (w, $) => 
   expect(w.record()?.tunedInAt).toBe(before?.tunedInAt)
 })
 
+scenario('with Tune in every new session on, a new session tunes in when the desktop app shows it', AUTO, async (w, $) => {
+  await started($, 'startup')
+  expect(w.record()).toBeNull()
+  expect(w.launched.length).toBe(0)
+
+  await shown($)
+  expect(w.record()?.id).toBe(ID)
+  expect(w.record()?.tunedInAt).toBe(T0)
+  expect(w.launched.length).toBe(1)
+  expect(w.toasts).toEqual([])
+
+  const ui = await mounted($)
+  expect((await ui.findAll({ type: 'Svg' })).map((svg) => svg.props.alt)).toEqual([BAND_ALT.out])
+  expect((await ui.find({ type: 'Button' }))?.key).toBe('tune-out')
+  await ui.unmount()
+})
+
+scenario('a session the desktop app shows before it starts tunes in as it starts', AUTO, async (w, $) => {
+  await shown($)
+  expect(w.record()).toBeNull()
+  await started($, 'startup')
+  expect(w.record()?.id).toBe(ID)
+  expect(w.launched.length).toBe(1)
+})
+
+scenario('after /clear the new session tunes in again', AUTO, async (w, $) => {
+  await started($, 'startup')
+  await shown($)
+  expect(w.record()?.id).toBe(ID)
+
+  await $.session.end({ reason: 'clear', sessionId: ID, resume: { id: ID } })
+  expect(w.record()).toBeNull()
+  await started($, 'clear')
+  expect(w.record()?.id).toBe(ID)
+  expect(w.launched.length).toBe(2)
+})
+
+scenario('a fork tunes in like a new session', AUTO, async (w, $) => {
+  await started($, 'fork')
+  await shown($)
+  expect(w.record()?.id).toBe(ID)
+})
+
+scenario('a resumed session waits for TUNE IN', AUTO, async (w, $) => {
+  await started($, 'resume')
+  await shown($)
+  expect(w.record()).toBeNull()
+  expect(w.launched.length).toBe(0)
+})
+
+scenario('a compaction keeps a new session waiting for the desktop app', AUTO, async (w, $) => {
+  await started($, 'startup')
+  await started($, 'compact')
+  await shown($)
+  expect(w.record()?.id).toBe(ID)
+})
+
+scenario('with Tune in every new session off, a new session waits for TUNE IN', {}, async (w, $) => {
+  await started($, 'startup')
+  await shown($)
+  expect(w.record()).toBeNull()
+  expect(w.launched.length).toBe(0)
+  const ui = await mounted($)
+  expect((await ui.find({ type: 'Button' }))?.key).toBe('tune-in')
+  await ui.unmount()
+})
+
+scenario('a session nothing shows, as in a headless run, never tunes itself in', AUTO, async (w, $) => {
+  await started($, 'startup')
+  await turn($)
+  await w.clock.advance(10_000)
+  expect(w.record()).toBeNull()
+  expect(w.launched.length).toBe(0)
+})
+
+scenario('a session only a phone shows waits for the desktop app', AUTO, async (w, $) => {
+  await started($, 'startup')
+  await shown($, 'phone-1', 'mobile')
+  expect(w.record()).toBeNull()
+  await shown($)
+  expect(w.record()?.id).toBe(ID)
+})
+
+scenario('a session tuned out stays off the air when the desktop app shows it again or the mod reloads', AUTO, async (w, $) => {
+  await started($, 'startup')
+  await shown($)
+  expect((await tuneIn($)).text).toBe(REPLY.tunedOut)
+  expect(w.record()).toBeNull()
+
+  await shown($, 'window-2')
+  expect(w.record()).toBeNull()
+  // The module starts over; $.state says tuned out
+  await $.session.start(START)
+  await shown($, 'window-3')
+  expect(w.record()).toBeNull()
+  expect(w.launched.length).toBe(1)
+})
+
+scenario('/pipcast before the desktop app shows the session settles it', AUTO, async (w, $) => {
+  await started($, 'startup')
+  expect((await tuneIn($)).text).toBe(REPLY.tunedIn)
+  expect((await tuneIn($)).text).toBe(REPLY.tunedOut)
+  await shown($)
+  expect(w.record()).toBeNull()
+  expect(w.launched.length).toBe(1)
+})
+
+scenario('a reload keeps a new session waiting for the desktop app', AUTO, async (w, $) => {
+  await started($, 'startup')
+  // The module starts over; $.state says the session waits
+  await $.session.start(START)
+  await shown($)
+  expect(w.record()?.id).toBe(ID)
+  expect(w.launched.length).toBe(1)
+})
+
+scenario('a new session tunes in once, however many windows show it at once', AUTO, async (w, $) => {
+  await started($, 'startup')
+  await Promise.all([shown($), shown($, 'window-2')])
+  expect(w.record()?.id).toBe(ID)
+  expect(w.launched.length).toBe(1)
+})
+
+scenario('a station that will not start: a new session leaves the toast once and no record', { ...AUTO, launchExit: 1, launchOut: '' }, async (w, $) => {
+  await started($, 'startup')
+  await shown($)
+  expect(w.toasts).toEqual([TOAST_CANNOT_START])
+  expect(w.record()).toBeNull()
+  await shown($, 'window-2')
+  expect(w.toasts).toEqual([TOAST_CANNOT_START])
+})
+
+scenario("the window's close takes a session that tuned in by itself off the air for good", AUTO, async (w, $) => {
+  await started($, 'startup')
+  await shown($)
+  expect(w.record()?.id).toBe(ID)
+  w.files.set(`${HOME}/control.json`, JSON.stringify({ v: 1, closedAt: T0 + 1 }))
+  await w.clock.advance(10_000)
+  expect(w.record()).toBeNull()
+  await shown($, 'window-2')
+  expect(w.record()).toBeNull()
+})
+
+
+scenario('/pipcast auto says what Tune in every new session is set to', {}, async (w, $) => {
+  expect((await option($, 'auto')).text).toBe(optionState('auto', false))
+  w.saved.autoTuneIn = 'true'
+  expect((await option($, 'auto')).text).toBe(optionState('auto', true))
+  expect(w.record()).toBeNull()
+})
+
+scenario("/pipcast auto on and off save the setting with Claude Code's own command", {}, async (w, $) => {
+  expect((await option($, 'auto on')).text).toBe(optionState('auto', true))
+  expect(w.saved.autoTuneIn).toBe('true')
+  expect(w.engineCalls.find((call) => call.argv.includes('--values-stdin'))?.stdin).toBe(JSON.stringify({ autoTuneIn: 'true' }))
+  expect((await option($, 'auto off')).text).toBe(optionState('auto', false))
+  expect(w.saved.autoTuneIn).toBe('false')
+  // Neither tunes the session in or out
+  expect(w.record()).toBeNull()
+  expect(w.launched.length).toBe(0)
+})
+
+scenario('a copy Claude Code did not install keeps its options as pipcast@inline', {}, async (w, $) => {
+  await option($, 'auto on')
+  const save = w.engineCalls.find((call) => call.argv.includes('--values-stdin'))
+  expect(save?.argv[0]).toBe(ENGINE)
+  expect(save?.argv[1]).toBe('--plugin-dir')
+  expect(save?.argv.slice(3)).toEqual(['plugin', 'configure', '--json', '--values-stdin', '--', 'pipcast@inline'])
+})
+
+scenario('the words after /pipcast are read in any case and spacing', {}, async (w, $) => {
+  expect((await option($, '  AUTO   On ')).text).toBe(optionState('auto', true))
+  expect(w.saved.autoTuneIn).toBe('true')
+})
+
+scenario('an option /pipcast does not know, or a value that is not on or off, saves nothing', {}, async (w, $) => {
+  expect((await option($, 'volume on')).text).toBe(OPTION_REPLY.unknown('volume'))
+  expect((await option($, 'auto maybe')).text).toBe(OPTION_REPLY.badValue('auto'))
+  expect((await option($, 'auto on now')).text).toBe(OPTION_REPLY.badValue('auto'))
+  expect(w.engineCalls).toEqual([])
+  expect(w.record()).toBeNull()
+})
+
+scenario('a save or a read Claude Code refuses says so', { configureFails: true }, async (_w, $) => {
+  expect((await option($, 'auto on')).text).toBe(OPTION_REPLY.cannotSave('auto', true))
+  expect((await option($, 'auto')).text).toBe(OPTION_REPLY.cannotRead('auto'))
+})
+
+scenario('the engine is the parent of a command the mod starts', {}, async (w, $) => {
+  await option($, 'auto')
+  expect(w.ran.some((argv) => argv[0] === '/bin/sh')).toBe(true)
+  expect(w.engineCalls[0]?.argv[0]).toBe(ENGINE)
+})
+
+scenario('CLAUDE_CODE_EXECPATH names the engine when it is set', { env: { CLAUDE_CODE_EXECPATH: '/pip/env/claude' } }, async (w, $) => {
+  await option($, 'auto')
+  expect(w.ran.some((argv) => argv[0] === '/bin/sh')).toBe(false)
+  expect(w.engineCalls[0]?.argv[0]).toBe('/pip/env/claude')
+})
+
+scenario('with no engine to be found, /pipcast auto says it could not read or save', { engine: null }, async (_w, $) => {
+  expect((await option($, 'auto')).text).toBe(OPTION_REPLY.cannotRead('auto'))
+  expect((await option($, 'auto on')).text).toBe(OPTION_REPLY.cannotSave('auto', true))
+})

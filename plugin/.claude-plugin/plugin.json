@@ -12,5 +12,13 @@
   "license": "MIT",
   "keywords": ["picture-in-picture", "notifications", "sessions", "macos", "mod"],
   "icon": "./assets/icon.png",
-  "types": "./types/index.d.ts"
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "autoTuneIn": {
+      "type": "boolean",
+      "title": "Tune in every new session",
+      "description": "Each new session in the Claude desktop app tunes in to KLWD as it opens, with no TUNE IN to press. TUNE OUT still takes a session off the air.",
+      "default": false
+    }
+  }
 }

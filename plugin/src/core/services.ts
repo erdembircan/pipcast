@@ -28,8 +28,9 @@ export interface Io {
   remove(path: string): Promise<void>
   // names; [] when missing
   list(dir: string): Promise<string[]>
-  // `timeoutMs` stops a command that runs longer, and the call then rejects
-  run(argv: readonly string[], cwd?: string, timeoutMs?: number): Promise<RunResult>
+  // `timeoutMs` stops a command that runs longer, and the call then rejects;
+  // `stdin` is written to the command's input
+  run(argv: readonly string[], cwd?: string, timeoutMs?: number, stdin?: string): Promise<RunResult>
   // PIPCAST_STATION_BIN, else `${plugin root}/station/pipcast-station`
   stationBinary(): Promise<string>
   // `${plugin root}/station`

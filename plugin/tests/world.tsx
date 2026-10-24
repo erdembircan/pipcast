@@ -1,4 +1,4 @@
-import type { On } from 'claude-code'
+import type { On, PluginOptions, RenderSurface } from 'claude-code'
 import { mock } from 'claude-code/testing'
 
 import type { SessionRecord } from '../src/contract/types.ts'
@@ -8,6 +8,8 @@ export const ID = '8253106f-ce3e-4af6-824a-21845bad3955'
 export const HOME = '/pip/home'
 export const ROOT = '/work/proj'
 export const STATION = '/pip/stand-in-station'
+// The Claude Code binary, as a command the mod starts finds its parent
+export const ENGINE = '/pip/engine/claude'
 export const T0 = 1_792_600_000_000
 export const SESSIONS = `${HOME}/sessions`
 export const RECORD = `${SESSIONS}/${ID}.json`
@@ -61,6 +63,18 @@ export interface WorldOptions {
   hasOtherBand?: boolean
   // The shape of the other mod's band: one plain Box, or a row like usage-band's
   otherBand?: 'plain' | 'row'
+  // The plugin's options, as settings hold them; unset, the manifest's defaults
+  settings?: PluginOptions
+  // What shows the session when it starts; unset, nothing, as in a headless run
+  surfaces?: RenderSurface[]
+  // What the engine's path reads as; null when it cannot be told
+  engine?: string | null
+  // What `claude plugin list --json` prints; unset, no plugins
+  plugins?: string
+  // `claude plugin configure` fails
+  configureFails?: boolean
+  // The plugin's options as Claude Code has saved them, as `configure --json` prints them
+  saved?: Record<string, string>
 }
 
 // The world beneath the mod: a session with an id, an in-memory file system
@@ -77,6 +91,13 @@ export function world(on: On, options: WorldOptions = {}) {
   const written: string[] = []
   const launched: (readonly string[])[] = []
   const toasts: string[] = []
+  // What shows the session, as $.session.surfaces() reads it; an attach adds its surface
+  const surfaces: RenderSurface[] = [...(options.surfaces ?? [])]
+  // The engine the mod finds, the options Claude Code has saved, and every
+  // command the mod gives the engine
+  const engine = options.env?.CLAUDE_CODE_EXECPATH ?? (options.engine === null ? null : (options.engine ?? ENGINE))
+  const saved: Record<string, string> = { autoTuneIn: 'false', ...options.saved }
+  const engineCalls: { argv: readonly string[]; stdin: string | undefined }[] = []
   // The session's own tree at ROOT, and other trees by their top folder
   const git = {
     head: 'c0ffee1',
@@ -105,6 +126,31 @@ export function world(on: On, options: WorldOptions = {}) {
     value: { exitCode, stdout, stderr, isStdoutTruncated: false, isStderrTruncated: false },
   })
 
+  // The engine's own plugin commands, as Claude Code answers them
+  const engineRun = (args: string[], stdin: string | undefined) => {
+    engineCalls.push({ argv: [engine ?? '', ...args], stdin })
+    const rest = args[0] === '--plugin-dir' ? args.slice(2) : args
+    if (rest[0] !== 'plugin') {
+      return done(0)
+    }
+    if (rest[1] === 'list') {
+      return done(0, options.plugins ?? '[]')
+    }
+    if (rest[1] !== 'configure') {
+      return done(0)
+    }
+    if (options.configureFails === true) {
+      return done(1, '', 'configure failed')
+    }
+    const id = rest.at(-1) ?? ''
+    if (rest.includes('--values-stdin')) {
+      const values = JSON.parse(stdin ?? '{}') as Record<string, string>
+      Object.assign(saved, values)
+      return done(0, JSON.stringify({ pluginId: id, saved: Object.keys(values), unconfigured: [] }))
+    }
+    return done(0, JSON.stringify({ pluginId: id, inputs: { ...saved }, configured: [], unconfigured: [] }))
+  }
+
   on('session.id', () => ({ value: ID }))
   on('session.root', () => ({ value: ROOT }))
   on('session.cwd', () => ({ value: ROOT }))
@@ -113,6 +159,13 @@ export function world(on: On, options: WorldOptions = {}) {
   }))
   on('session.start', (_, e) => ({ cwd: e.cwd }))
   on('session.end', (_, e) => ({ sessionId: e.sessionId }))
+  on('session.surfaces', () => ({ value: [...surfaces] }))
+  on('session.attach', (_, e) => {
+    if (!surfaces.includes(e.surface)) {
+      surfaces.push(e.surface)
+    }
+    return { clientId: e.clientId }
+  })
   on('command.register', (_, e) => ({ value: { command: e.name } }))
   on('turn.start', (_, e) => ({ turnId: e.turnId }))
   on('turn.complete', () => ({ text: '' }))
@@ -206,6 +259,9 @@ export function world(on: On, options: WorldOptions = {}) {
   on('process.run', (_, e) => {
     ran.push(e.argv)
     const [program, ...args] = e.argv
+    if (engine !== null && program === engine) {
+      return engineRun(args, (e as { init?: { stdin?: string } }).init?.stdin)
+    }
     switch (program) {
       case '/bin/mv': {
         const [from, to] = args.filter((arg) => arg !== '-f')
@@ -245,6 +301,9 @@ export function world(on: On, options: WorldOptions = {}) {
       case '/usr/bin/head':
       case '/usr/bin/tail':
         return done(0, procs.outputs.get(args.at(-1) ?? '') ?? '')
+      case '/bin/sh':
+        // The engine, as the parent of a command the mod starts
+        return engine === null ? done(1) : done(0, `${engine}\n`)
       default:
         return done(0)
     }
@@ -258,6 +317,9 @@ export function world(on: On, options: WorldOptions = {}) {
     launched,
     launch,
     toasts,
+    surfaces,
+    engineCalls,
+    saved,
     atTool,
     reads,
     written,
