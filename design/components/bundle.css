@@ -252,7 +252,8 @@
    Newsroom · Project in the listing: the strap's ground under its gold
    rule, leaning forward like every tab, the name in caps as on tabs. 200
    wide whatever the name, so the titles start in line; a longer name is
-   cut with an ellipsis */
+   cut with an ellipsis. THE HOUR IN REVIEW leads its rows with the same
+   plate */
 .pn-row-project {
   flex: none;
   width: 200px;
@@ -558,10 +559,14 @@
 /* One pill width in the review, so the bars start in line */
 .pn-review-row .pn-pill { position: relative; width: 158px; text-align: center; }
 .pn-review-body { position: relative; flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+/* A review row leads with the listing's plate, as chosen on PiP Newsroom ·
+   Session in the review: 16 in from the row's edge and 20 before the
+   title, as on the board (the review's row pads 22 and spaces 14) */
+.pn-review-row > .pn-row-project { margin-left: -6px; margin-right: 6px; }
+/* The session's title, as it is written */
 .pn-review-name {
   font: italic 800 30px/1 var(--font-display, "Anybody", "Arial Black", sans-serif);
   font-stretch: 100%;
-  text-transform: uppercase;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;

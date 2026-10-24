@@ -391,8 +391,8 @@ describe('the hour', () => {
       mode: 'review',
       span: '14:00–15:00',
       rows: [
-        { id: 'a', project: 'project-a', state: 'needs-input', detail: 'Waiting 39 min' },
-        { id: 'b', project: 'project-b', state: 'ready', detail: '+100 −20' },
+        { id: 'a', project: 'project-a', name: 'Title a', state: 'needs-input', detail: 'Waiting 39 min' },
+        { id: 'b', project: 'project-b', name: 'Title b', state: 'ready', detail: '+100 −20' },
       ],
     })
 

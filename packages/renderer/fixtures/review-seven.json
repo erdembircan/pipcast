@@ -4,13 +4,13 @@
     "clock": "15:00",
     "span": "14:00–15:00",
     "rows": [
-      { "id": "checkout", "project": "web-shop", "state": "needs-input", "detail": "Waiting 27 min" },
-      { "id": "notes", "project": "docs-site", "state": "ready", "detail": "+182 −40" },
-      { "id": "auth", "project": "api-server", "state": "working", "detail": "+1,204 −310" },
-      { "id": "sqlite", "project": "desktop-app", "state": "working", "detail": "+64 −12" },
-      { "id": "crash", "project": "mobile-app", "state": "working", "detail": "+18 −3" },
-      { "id": "search", "project": "search-api", "state": "working", "detail": "+240 −88" },
-      { "id": "runners", "project": "ci-config", "state": "working", "detail": "+31 −9" }
+      { "id": "checkout", "project": "web-shop", "name": "Fix flaky checkout test", "state": "needs-input", "detail": "Waiting 27 min" },
+      { "id": "notes", "project": "docs-site", "name": "Write release notes for 2.4", "state": "ready", "detail": "+182 −40" },
+      { "id": "auth", "project": "api-server", "name": "Refactor auth middleware", "state": "working", "detail": "+1,204 −310" },
+      { "id": "sqlite", "project": "desktop-app", "name": "Migrate settings to SQLite", "state": "working", "detail": "+64 −12" },
+      { "id": "crash", "project": "mobile-app", "name": "Check last night’s crash reports", "state": "working", "detail": "+18 −3" },
+      { "id": "search", "project": "search-api", "name": "Speed up product search", "state": "working", "detail": "+240 −88" },
+      { "id": "runners", "project": "ci-config", "name": "Move CI to the new runners", "state": "working", "detail": "+31 −9" }
     ],
     "ticker": [
       { "lead": "ON THE HOUR", "text": "2 stories since 14:00" },

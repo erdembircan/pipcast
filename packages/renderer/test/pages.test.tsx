@@ -205,13 +205,13 @@ describe("the listing's pages", () => {
     const page = (): string | null =>
       container.querySelector('.pn-review-tab .pn-page:not(.pn-turn-leave) .pn-page-tab')?.textContent ?? null
     draw(sample('review-seven'))
-    expect(names()).toEqual(['web-shop', 'docs-site', 'api-server', 'desktop-app'])
+    expect(names()).toEqual(FIRST)
     expect(page()).toBe('1 OF 2')
     advance(8000)
-    expect(names()).toEqual(['web-shop', 'docs-site', 'api-server', 'desktop-app'])
+    expect(names()).toEqual(FIRST)
     expect(turning()).toBe(0)
     advance(2000 + TURN)
-    expect(names()).toEqual(['mobile-app', 'search-api', 'ci-config'])
+    expect(names()).toEqual(LAST)
     expect(page()).toBe('2 OF 2')
   })
 

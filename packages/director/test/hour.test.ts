@@ -112,4 +112,22 @@ describe('hourReport', () => {
     const rows = report.segment.steps[2]?.scene(context).rows
     expect(rows?.map((row) => row.detail)).toEqual(['Waiting 9 min', 'Stopped on an error', 'No changes this hour', '+3 −0'])
   })
+
+  it('names each review row as the board names its session: its title and its project', () => {
+    const report = hourReport(
+      at(15),
+      at(14),
+      snap(
+        session('a', { title: 'Usage limits in the window', project: 'pipcast', stories: [story('a:1', 'complete', at(14, 30))] }),
+        session('b', { title: 'Marketplace plugin distribution', project: 'pipcast' }),
+      ),
+      at(14, 59, 55),
+      false,
+    )
+    const rows = report.segment.steps[2]?.scene(context).rows
+    expect(rows?.map((row) => [row.id, row.project, row.name])).toEqual([
+      ['a', 'pipcast', 'Usage limits in the window'],
+      ['b', 'pipcast', 'Marketplace plugin distribution'],
+    ])
+  })
 })

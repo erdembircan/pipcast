@@ -1042,11 +1042,13 @@
       h('div', { className: 'pn-ident-words' }, lines));
   }
 
-  /* THE HOUR IN REVIEW: what each session did this hour, a row each: its
-     project, one detail and its state pill, four rows a page (Pages,
-     above). Rows keep the listing's order. `animate` turns the pages;
-     without it the review holds its first page. `sample` takes the rows
-     and the span from a scene. */
+  /* THE HOUR IN REVIEW: what each session did this hour, a row each, read
+     as the session's row on the board: its project on the listing's plate,
+     its title over one detail, and its state pill, four rows a page (Pages,
+     above). A row with no title names its project on the title's line,
+     with no plate. Rows keep the listing's order. `animate` turns the
+     pages; without it the review holds its first page. `sample` takes the
+     rows and the span from a scene. */
   function HourReview(props) {
     var scene = (props.sample && SAMPLES[props.sample]) || {};
     var rows = (props.rows || scene.rows || []).slice().sort(function (a, b) {
@@ -1060,8 +1062,9 @@
       h('div', { className: 'pn-review-rows' }, pageSlots(view, 'pn-review-slot', 'pn-review-row', function (r) {
         var st = STATES[r.state] ? r.state : 'working';
         return [
+          r.name && r.project ? h('span', { key: 'project', className: 'pn-row-project' }, h('span', null, r.project)) : null,
           h('div', { key: 'body', className: 'pn-review-body' },
-            h('div', { className: 'pn-review-name' }, r.project || r.name),
+            h('div', { className: 'pn-review-name' }, r.name || r.project),
             r.detail ? h('div', { className: 'pn-review-meta' }, r.detail) : null),
           h(StatePill, { key: 'pill', state: st })
         ];
@@ -1721,10 +1724,10 @@
       clock: '15:00',
       span: '14:00\u201315:00',
       rows: [
-        { id: 'auth', project: 'api-server', state: 'working', detail: '+1,204 \u2212310' },
-        { id: 'checkout', project: 'web-shop', state: 'needs-input', detail: 'Waiting 27 min' },
-        { id: 'notes', project: 'docs-site', state: 'ready', detail: '+182 \u221240' },
-        { id: 'sqlite', project: 'desktop-app', state: 'working', detail: '+64 \u221212' }
+        { id: 'auth', project: 'api-server', name: S.auth.name, state: 'working', detail: '+1,204 −310' },
+        { id: 'checkout', project: 'web-shop', name: S.checkout.name, state: 'needs-input', detail: 'Waiting 27 min' },
+        { id: 'notes', project: 'docs-site', name: S.notes.name, state: 'ready', detail: '+182 −40' },
+        { id: 'sqlite', project: 'desktop-app', name: S.sqlite.name, state: 'working', detail: '+64 −12' }
       ],
       ticker: TICK_HOUR
     },
@@ -1733,13 +1736,13 @@
       clock: '15:00',
       span: '14:00–15:00',
       rows: [
-        { id: 'checkout', project: 'web-shop', state: 'needs-input', detail: 'Waiting 27 min' },
-        { id: 'notes', project: 'docs-site', state: 'ready', detail: '+182 −40' },
-        { id: 'auth', project: 'api-server', state: 'working', detail: '+1,204 −310' },
-        { id: 'sqlite', project: 'desktop-app', state: 'working', detail: '+64 −12' },
-        { id: 'crash', project: 'mobile-app', state: 'working', detail: '+18 −3' },
-        { id: 'search', project: 'search-api', state: 'working', detail: '+240 −88' },
-        { id: 'runners', project: 'ci-config', state: 'working', detail: '+31 −9' }
+        { id: 'checkout', project: 'web-shop', name: S.checkout.name, state: 'needs-input', detail: 'Waiting 27 min' },
+        { id: 'notes', project: 'docs-site', name: S.notes.name, state: 'ready', detail: '+182 −40' },
+        { id: 'auth', project: 'api-server', name: S.auth.name, state: 'working', detail: '+1,204 −310' },
+        { id: 'sqlite', project: 'desktop-app', name: S.sqlite.name, state: 'working', detail: '+64 −12' },
+        { id: 'crash', project: 'mobile-app', name: S.crash.name, state: 'working', detail: '+18 −3' },
+        { id: 'search', project: 'search-api', name: S.search.name, state: 'working', detail: '+240 −88' },
+        { id: 'runners', project: 'ci-config', name: S.runners.name, state: 'working', detail: '+31 −9' }
       ],
       ticker: TICK_HOUR
     },
