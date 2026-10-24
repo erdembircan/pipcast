@@ -77,7 +77,9 @@ export interface WorldOptions {
   plugins?: string
   // `claude plugin configure` fails
   configureFails?: boolean
-  // The plugin's options as Claude Code has saved them, as `configure --json` prints them
+  // The plugin's options as Claude Code has saved them, as `configure --json`
+  // prints them; unset, the manifest's defaults, which it prints for an option
+  // nothing has saved
   saved?: Record<string, string>
   // The account's usage limits as the engine reports them; unset, none, as for an account with no plan
   limits?: { kind: string; percentUsed: number; resetsAt?: string }[]
@@ -102,7 +104,7 @@ export function world(on: On, options: WorldOptions = {}) {
   // The engine the mod finds, the options Claude Code has saved, and every
   // command the mod gives the engine
   const engine = options.env?.CLAUDE_CODE_EXECPATH ?? (options.engine === null ? null : (options.engine ?? ENGINE))
-  const saved: Record<string, string> = { autoTuneIn: 'false', transparentWindow: 'false', ...options.saved }
+  const saved: Record<string, string> = { autoTuneIn: 'true', transparentWindow: 'false', ...options.saved }
   const engineCalls: { argv: readonly string[]; stdin: string | undefined }[] = []
   // What the engine reports of the account's usage limits when asked; a test can change it as it goes
   const engineLimits = { reported: [...(options.limits ?? [])] }

@@ -5,15 +5,16 @@
 # options.json telling the station the window is transparent, the station
 # launched), a second /pipcast has to tune out (the record gone), and a session
 # that ends while tuned in has to take its record with it. In the second, with
-# Tune in every new session on and Transparent window off, the session has to
-# stay off the air while nothing shows it, tune in by itself once a stand-in
-# for the desktop app attaches as the app does (ui_attach), telling the station
-# the window is solid, draw the band as the plate alone when the stand-in asks
-# for it as the app does (ui_render), with no other mod in the band, stay off
-# the air after /pipcast tunes it out and a second window shows it, and tune in
-# again after /clear. No model call is made and no station is started:
-# PIPCAST_STATION_BIN is a stand-in that logs its arguments. Everything lives
-# in a temporary folder that is removed on exit.
+# nothing saved for Tune in every new session, which leaves it on, and
+# Transparent window off, the session has to stay off the air while nothing
+# shows it, tune in by itself once a stand-in for the desktop app attaches as
+# the app does (ui_attach), telling the station the window is solid, draw the
+# band as the plate alone when the stand-in asks for it as the app does
+# (ui_render), with no other mod in the band, stay off the air after /pipcast
+# tunes it out and a second window shows it, and tune in again after /clear.
+# No model call is made and no station is started: PIPCAST_STATION_BIN is a
+# stand-in that logs its arguments. Everything lives in a temporary folder that
+# is removed on exit.
 set -uo pipefail
 
 root="$(cd "$(dirname "$0")/.." && pwd)"
@@ -90,10 +91,11 @@ band_state() { # <engine output> <request id>
   ' "$1" "$2"
 }
 
-# The settings a session runs with: Tune in every new session and Transparent
-# window, each on or off, for the plugin as --plugin-dir loads it
-settings() { # <true|false> <true|false>
-  printf '{"pluginConfigs":{"pipcast@inline":{"options":{"autoTuneIn":%s,"transparentWindow":%s}}}}' "$1" "$2"
+# The settings a session runs with: the plugin's options, given as JSON, for
+# the plugin as --plugin-dir loads it. An option left out has the manifest's
+# default.
+settings() { # <options as JSON>
+  printf '{"pluginConfigs":{"pipcast@inline":{"options":%s}}}' "$1"
 }
 
 command='{"type":"user","message":{"role":"user","content":"/pipcast"}}'
@@ -126,7 +128,7 @@ band() { # <request id>
   CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1 \
   "$claude" -p \
   --input-format stream-json --output-format stream-json --verbose \
-  --model haiku --no-session-persistence --settings "$(settings false true)" --plugin-dir "$root/plugin" >"$out" 2>&1
+  --model haiku --no-session-persistence --settings "$(settings '{"autoTuneIn":false,"transparentWindow":true}')" --plugin-dir "$root/plugin" >"$out" 2>&1
 
 sleep 1
 echo "after-end $(record_state "$home")" >>"$notes"
@@ -156,7 +158,7 @@ echo "running $(pgrep -f "$tmp" | wc -l | tr -d ' ')" >>"$notes"
   CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1 \
   "$claude" -p \
   --input-format stream-json --output-format stream-json --verbose \
-  --model haiku --no-session-persistence --settings "$(settings true false)" --plugin-dir "$root/plugin" >"$auto_out" 2>&1
+  --model haiku --no-session-persistence --settings "$(settings '{"transparentWindow":false}')" --plugin-dir "$root/plugin" >"$auto_out" 2>&1
 
 sleep 1
 echo "auto-end $(record_state "$auto_home")" >>"$notes"
@@ -183,8 +185,8 @@ check "$tuned_out" "$out" "the second /pipcast answered that it tuned out"
 check "after-in-again ok" "$notes" "a third /pipcast wrote the record again"
 check "after-end none" "$notes" "the session ending took the record with it"
 check "running 0" "$notes" "nothing is left running"
-check "auto-unshown none" "$notes" "with Tune in every new session on, a session nothing shows stays off the air"
-check "auto-shown ok" "$notes" "the desktop app showing the new session tuned it in"
+check "auto-unshown none" "$notes" "with nothing saved for Tune in every new session, a session nothing shows stays off the air"
+check "auto-shown ok" "$notes" "the desktop app showing the new session tuned it in, on the setting's default"
 check "auto-options off" "$notes" "tuning in by itself told the station the window is solid"
 check "band alone" "$notes" "the band the desktop app asked for is the plate alone, with no line above it"
 check "launch --home $auto_home --assets $root/plugin/station --target-bundle-id com.example.pipcast.never-frontmost" "$calls" "the station was launched for it"

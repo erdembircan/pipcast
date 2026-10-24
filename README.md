@@ -12,7 +12,7 @@ The window shows only while you're in another app. Switch back to Claude and it 
 
 ## What it does
 
-- **Tune in from Claude.** Press **TUNE IN** in the band above the prompt box, or run `/pipcast`. Run `/pipcast auto on` and each new session tunes in by itself. There is no limit on how many sessions can be on air.
+- **Tune in from Claude.** Each new session in the desktop app tunes in by itself as it opens. Any other session tunes in when you press **TUNE IN** in the band above the prompt box, or run `/pipcast`. Run `/pipcast auto off` and new sessions wait for **TUNE IN** too. There is no limit on how many sessions can be on air.
 - **The live board.** Each session on air gets a row with its project on a plate, its title, and its state on a pill: INPUT when it needs you, ERROR when it stopped on an error, READY when it finished, LIVE while it works. With more than four on air, the board shows four at a time and turns to the next four every 8 seconds. Under the listing, two meters show your account's usage limits, the current session's and the week's, from the newest reading any session on air took: gold from 70%, red from 90%.
 - **BREAKING NEWS for every story.** A session that needs your input, that is ready for review, whose work is complete, or that stopped on an error airs as its own segment. Stories air one after another, in the order they land. Nothing cuts in, and KLWD airs only what happens while you're away from Claude: switch to Claude and the stories still waiting are dropped, along with any that land while you're there.
 - **On the hour.** The station clock strikes the hour, Clawd reads the headlines, and THE HOUR IN REVIEW shows what each session did: a row each, named as on the board by its project's plate and its title, with the lines it changed or how long it has waited. If you're in Claude as the hour strikes, that hour is skipped, and the next report covers it.
@@ -42,28 +42,28 @@ New sessions load it.
 
 ## Use it
 
-1. In a Claude Code session in the desktop app, press **TUNE IN** in the band above the prompt box, or run `/pipcast`.
+1. Start a new Claude Code session in the desktop app. It tunes in to KLWD by itself. A session that was already open, or one you resume, tunes in when you press **TUNE IN** in the band above the prompt box, or run `/pipcast`.
 2. Switch to another app. KLWD appears in the bottom-right corner of the screen.
 3. When the session needs you or finishes, KLWD airs it as BREAKING NEWS.
 4. Hover over the window for its controls. Drag it to move it to another corner, drag an edge to make it smaller, or press the handle on its inner edge to minimize it to the side of the screen; dragging a quarter of it past the screen's left or right edge does the same. Click the tab it leaves there to bring it back.
-5. Press **TUNE OUT**, or run `/pipcast` again, to take the session off the air.
+5. Press **TUNE OUT**, or run `/pipcast`, to take the session off the air.
 
 The band shows KLWD and what pressing it does: **TUNE IN** in gold while this session is off the air, **TUNE OUT** in blue while it is on.
 
 ### Settings
 
-Pipcast has two settings, kept with Claude Code's other plugin options. Both are off until you turn them on. Turn either on or off with `/pipcast` from any session, in the desktop app or in a terminal; `/pipcast auto` or `/pipcast transparency` on its own says whether that one is on, and `/pipcast` with nothing after it still tunes the session in or out. The desktop app's plugin page doesn't list the settings, so `/pipcast` is the way to change them there. In Claude Code in a terminal, `/plugin configure pipcast@pipcast` shows the same two.
+Pipcast has two settings, kept with Claude Code's other plugin options. **Tune in every new session** is on until you turn it off, and **Transparent window** is off until you turn it on. Turn either on or off with `/pipcast` from any session, in the desktop app or in a terminal; `/pipcast auto` or `/pipcast transparency` on its own says whether that one is on, and `/pipcast` with nothing after it still tunes the session in or out. The desktop app's plugin page doesn't list the settings, so `/pipcast` is the way to change them there. In Claude Code in a terminal, `/plugin configure pipcast@pipcast` shows the same two.
 
 #### Tune in every new session
 
-While it is on, each new session in the desktop app tunes in by itself as it opens, so there is no **TUNE IN** to press, and a `/clear` starts a new session that tunes in again. A session that resumes, such as an older one you open again, waits for **TUNE IN** as before, and **TUNE OUT** still takes any session off the air. The setting changes the sessions that start after it, not the ones already open.
-
-```text
-/pipcast auto on
-```
+It is on until you turn it off. While it is on, each new session in the desktop app tunes in by itself as it opens, so there is no **TUNE IN** to press, and a `/clear` starts a new session that tunes in again. A session that resumes, such as an older one you open again, waits for **TUNE IN**, and **TUNE OUT** still takes any session off the air. With it off, every session waits for **TUNE IN**. The setting changes the sessions that start after it, not the ones already open.
 
 ```text
 /pipcast auto off
+```
+
+```text
+/pipcast auto on
 ```
 
 #### Transparent window
@@ -118,7 +118,7 @@ runs every check: lint, types, the unit tests of each part, the station's Swift 
 scripts/verify.sh
 ```
 
-runs the whole thing for real, with no window of yours involved: a headless Claude Code session tunes in, the station starts and shows its window, the session tunes out, and the station quits. With **Transparent window** on, the window server has to show that window at 40%, or whole while the pointer is on it, and whole once it is off. Another session is renamed on air, off air and after the window's close, and its title on air has to follow each time. One more, with **Tune in every new session** on, has to stay off the air until a stand-in for the desktop app shows it, then tune in by itself, and again after a `/clear`. An install into a throwaway configuration then has to hold exactly the files in `plugin/`, with no source or test among them. It also has to turn both settings on and off with `/pipcast auto` and `/pipcast transparency`, each value landing where Claude Code keeps plugin options, and the second in the file the station reads as well.
+runs the whole thing for real, with no window of yours involved: a headless Claude Code session tunes in, the station starts and shows its window, the session tunes out, and the station quits. With **Transparent window** on, the window server has to show that window at 40%, or whole while the pointer is on it, and whole once it is off. Another session is renamed on air, off air and after the window's close, and its title on air has to follow each time. One more, with nothing saved for **Tune in every new session**, which leaves it on, has to stay off the air until a stand-in for the desktop app shows it, then tune in by itself, and again after a `/clear`. An install into a throwaway configuration then has to hold exactly the files in `plugin/`, with no source or test among them. There `/pipcast auto` has to say **Tune in every new session** is on before anything is saved, and `/pipcast auto` and `/pipcast transparency` have to turn both settings on and off, each value landing where Claude Code keeps plugin options, and the second in the file the station reads as well.
 
 ### Try a change in the desktop app
 

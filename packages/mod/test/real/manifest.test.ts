@@ -1,5 +1,6 @@
 // The options /pipcast sets, against the plugin's own manifest: each is a
-// boolean userConfig field, off by default, under the title its replies use.
+// boolean userConfig field under the title its replies use. Tune in every new
+// session is on by default, and Transparent window off.
 
 import { readFileSync } from 'node:fs'
 
@@ -17,13 +18,17 @@ interface Field {
 const manifest = JSON.parse(readFileSync(new URL('../../plugin.json', import.meta.url), 'utf8')) as { userConfig?: Record<string, Field> }
 
 describe('the options /pipcast sets', () => {
-  it('are each a boolean field of the manifest, off by default, under the title the replies use', () => {
+  it('are each a boolean field of the manifest, under the title the replies use', () => {
     for (const option of OPTIONS) {
       const field = manifest.userConfig?.[option.key]
       expect(field?.type).toBe('boolean')
-      expect(field?.default).toBe(false)
       expect(field?.title).toBe(OPTION_WORDS[option.word]?.title)
     }
+  })
+
+  it('start with Tune in every new session on and Transparent window off', () => {
+    expect(manifest.userConfig?.autoTuneIn?.default).toBe(true)
+    expect(manifest.userConfig?.transparentWindow?.default).toBe(false)
   })
 
   it('have their words, and no others', () => {

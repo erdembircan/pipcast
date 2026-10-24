@@ -75,8 +75,11 @@ const mounted = ($: Engine, surface: 'desktop' | 'terminal' = 'desktop', props: 
 // What a classic hook says about the session: its id and where its transcript is
 const located = { session_id: ID, transcript_path: TRANSCRIPT } as const
 
-// Tune in every new session, on
-const AUTO = { settings: { autoTuneIn: true } } as const
+// Tune in every new session as it is by default: on
+const AUTO = {} as const
+
+// Tune in every new session, turned off
+const AUTO_OFF = { settings: { autoTuneIn: false } } as const
 
 // Transparent window, on
 const SEE_THROUGH = { settings: { transparentWindow: true } } as const
@@ -1006,7 +1009,7 @@ scenario('a reload carries on from the session own record', {}, async (w, $) => 
   expect(w.record()?.tunedInAt).toBe(before?.tunedInAt)
 })
 
-scenario('with Tune in every new session on, a new session tunes in when the desktop app shows it', AUTO, async (w, $) => {
+scenario('with Tune in every new session on, as it is by default, a new session tunes in when the desktop app shows it', AUTO, async (w, $) => {
   await started($, 'startup')
   expect(w.record()).toBeNull()
   expect(w.launched.length).toBe(0)
@@ -1063,7 +1066,7 @@ scenario('a compaction keeps a new session waiting for the desktop app', AUTO, a
   expect(w.record()?.id).toBe(ID)
 })
 
-scenario('with Tune in every new session off, a new session waits for TUNE IN', {}, async (w, $) => {
+scenario('with Tune in every new session off, a new session waits for TUNE IN', AUTO_OFF, async (w, $) => {
   await started($, 'startup')
   await shown($)
   expect(w.record()).toBeNull()
@@ -1151,18 +1154,18 @@ scenario("the window's close takes a session that tuned in by itself off the air
 
 
 scenario('/pipcast auto says what Tune in every new session is set to', {}, async (w, $) => {
-  expect((await option($, 'auto')).text).toBe(optionState('auto', false))
-  w.saved.autoTuneIn = 'true'
   expect((await option($, 'auto')).text).toBe(optionState('auto', true))
+  w.saved.autoTuneIn = 'false'
+  expect((await option($, 'auto')).text).toBe(optionState('auto', false))
   expect(w.record()).toBeNull()
 })
 
-scenario("/pipcast auto on and off save the setting with Claude Code's own command", {}, async (w, $) => {
-  expect((await option($, 'auto on')).text).toBe(optionState('auto', true))
-  expect(w.saved.autoTuneIn).toBe('true')
-  expect(w.engineCalls.find((call) => call.argv.includes('--values-stdin'))?.stdin).toBe(JSON.stringify({ autoTuneIn: 'true' }))
+scenario("/pipcast auto off and on save the setting with Claude Code's own command", {}, async (w, $) => {
   expect((await option($, 'auto off')).text).toBe(optionState('auto', false))
   expect(w.saved.autoTuneIn).toBe('false')
+  expect(w.engineCalls.find((call) => call.argv.includes('--values-stdin'))?.stdin).toBe(JSON.stringify({ autoTuneIn: 'false' }))
+  expect((await option($, 'auto on')).text).toBe(optionState('auto', true))
+  expect(w.saved.autoTuneIn).toBe('true')
   // Neither tunes the session in or out
   expect(w.record()).toBeNull()
   expect(w.launched.length).toBe(0)
@@ -1177,8 +1180,8 @@ scenario('a copy Claude Code did not install keeps its options as pipcast@inline
 })
 
 scenario('the words after /pipcast are read in any case and spacing', {}, async (w, $) => {
-  expect((await option($, '  AUTO   On ')).text).toBe(optionState('auto', true))
-  expect(w.saved.autoTuneIn).toBe('true')
+  expect((await option($, '  AUTO   Off ')).text).toBe(optionState('auto', false))
+  expect(w.saved.autoTuneIn).toBe('false')
 })
 
 scenario('an option /pipcast does not know, or a value that is not on or off, saves nothing', {}, async (w, $) => {
@@ -1273,7 +1276,7 @@ scenario('tuning in puts its own value over an options.json that says otherwise 
   expect(w.shared()).toEqual({ v: 1, transparent: false })
 })
 
-scenario('a session that tunes in by itself tells the station too', { settings: { autoTuneIn: true, transparentWindow: true } }, async (w, $) => {
+scenario('a session that tunes in by itself tells the station too', SEE_THROUGH, async (w, $) => {
   await started($, 'startup')
   await shown($)
   expect(w.record()?.id).toBe(ID)
