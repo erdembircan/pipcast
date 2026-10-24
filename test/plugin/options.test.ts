@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest'
 
-import { OPTIONS, installedId, parseRequest, readBoolean, wasSaved } from '../../plugin/src/core/options.ts'
+import { OPTIONS, installedId, needsSharing, parseRequest, readBoolean, wasSaved } from '../../plugin/src/core/options.ts'
 
 const auto = OPTIONS.find((option) => option.word === 'auto')
+const transparency = OPTIONS.find((option) => option.word === 'transparency')
 
 describe('parseRequest', () => {
   it('reads /pipcast on its own as tuning in or out', () => {
@@ -14,6 +15,12 @@ describe('parseRequest', () => {
     expect(parseRequest('auto')).toEqual({ kind: 'show', option: auto })
     expect(parseRequest('auto on')).toEqual({ kind: 'set', option: auto, on: true })
     expect(parseRequest('auto off')).toEqual({ kind: 'set', option: auto, on: false })
+  })
+
+  it('reads transparency the same way', () => {
+    expect(parseRequest('transparency')).toEqual({ kind: 'show', option: transparency })
+    expect(parseRequest('Transparency ON')).toEqual({ kind: 'set', option: transparency, on: true })
+    expect(parseRequest('transparency off')).toEqual({ kind: 'set', option: transparency, on: false })
   })
 
   it('reads the words in any case and spacing', () => {
@@ -57,5 +64,14 @@ describe('what claude plugin configure answers', () => {
     expect(wasSaved('{"saved":["autoTuneIn"]}', 'autoTuneIn')).toBe(true)
     expect(wasSaved('{"saved":[]}', 'autoTuneIn')).toBe(false)
     expect(wasSaved('', 'autoTuneIn')).toBe(false)
+  })
+})
+
+describe('needsSharing', () => {
+  it('writes options.json when it is missing or says otherwise, and leaves it when it agrees', () => {
+    expect(needsSharing(null, false)).toBe(true)
+    expect(needsSharing({ v: 1, transparent: true }, false)).toBe(true)
+    expect(needsSharing({ v: 1, transparent: false }, false)).toBe(false)
+    expect(needsSharing({ v: 1, transparent: true }, true)).toBe(false)
   })
 })

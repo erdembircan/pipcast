@@ -1,8 +1,8 @@
 import type { On, PluginOptions, RenderSurface } from 'claude-code'
 import { mock } from 'claude-code/testing'
 
-import type { SessionRecord } from '../src/contract/types.ts'
-import { parseSessionRecord } from '../src/contract/validate.ts'
+import type { SessionRecord, SharedOptions } from '../src/contract/types.ts'
+import { parseSessionRecord, parseSharedOptions } from '../src/contract/validate.ts'
 
 export const ID = '8253106f-ce3e-4af6-824a-21845bad3955'
 export const HOME = '/pip/home'
@@ -13,6 +13,8 @@ export const ENGINE = '/pip/engine/claude'
 export const T0 = 1_792_600_000_000
 export const SESSIONS = `${HOME}/sessions`
 export const RECORD = `${SESSIONS}/${ID}.json`
+// What the station reads of the plugin's options
+export const OPTIONS_FILE = `${HOME}/options.json`
 // Where the engine keeps the session's transcript and its title file
 export const PROJECT_DIR = '/Users/me/.claude/projects/-work-proj'
 export const TRANSCRIPT = `${PROJECT_DIR}/${ID}.jsonl`
@@ -96,7 +98,7 @@ export function world(on: On, options: WorldOptions = {}) {
   // The engine the mod finds, the options Claude Code has saved, and every
   // command the mod gives the engine
   const engine = options.env?.CLAUDE_CODE_EXECPATH ?? (options.engine === null ? null : (options.engine ?? ENGINE))
-  const saved: Record<string, string> = { autoTuneIn: 'false', ...options.saved }
+  const saved: Record<string, string> = { autoTuneIn: 'false', transparentWindow: 'false', ...options.saved }
   const engineCalls: { argv: readonly string[]; stdin: string | undefined }[] = []
   // The session's own tree at ROOT, and other trees by their top folder
   const git = {
@@ -365,6 +367,11 @@ export function world(on: On, options: WorldOptions = {}) {
     record(): SessionRecord | null {
       const text = files.get(RECORD)
       return text === undefined ? null : parseSessionRecord(JSON.parse(text) as unknown)
+    },
+    // What options.json tells the station, as the store has it; null when there is none
+    shared(): SharedOptions | null {
+      const text = files.get(OPTIONS_FILE)
+      return text === undefined ? null : parseSharedOptions(JSON.parse(text) as unknown)
     },
     // The engine's title file for the session: a title, or null to remove the file
     titleFile(title: string | null): void {

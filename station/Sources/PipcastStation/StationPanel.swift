@@ -58,8 +58,12 @@ protocol InteractionDelegate: AnyObject {
 /// above it and win where they are.
 final class InteractionView: NSView {
     weak var delegate: InteractionDelegate?
-    /// Called as the pointer enters and leaves the window.
-    var onHover: ((Bool) -> Void)?
+    /// Called as the pointer enters, leaves or moves over the window, and as a press on it starts and ends: the
+    /// owner looks again at whether the window is hovered.
+    var onPointer: (() -> Void)?
+
+    /// Whether a press that started here is held, through a drag that carries the pointer off the window.
+    var isPressing: Bool { drag != nil }
 
     private enum Drag {
         case move
@@ -100,15 +104,16 @@ final class InteractionView: NSView {
 
     override func mouseMoved(with event: NSEvent) {
         updatePointer(at: convert(event.locationInWindow, from: nil))
+        onPointer?()
     }
 
     override func mouseEntered(with event: NSEvent) {
-        onHover?(true)
+        onPointer?()
         updatePointer(at: convert(event.locationInWindow, from: nil))
     }
 
     override func mouseExited(with event: NSEvent) {
-        onHover?(false)
+        onPointer?()
         // During a drag the pointer may leave the window and keeps the edge's arrows.
         if drag == nil { NSCursor.arrow.set() }
     }
@@ -125,6 +130,7 @@ final class InteractionView: NSView {
         } else {
             drag = .move
         }
+        onPointer?()
     }
 
     override func mouseDragged(with event: NSEvent) {
@@ -156,6 +162,7 @@ final class InteractionView: NSView {
         }
         let point = convert(event.locationInWindow, from: nil)
         if bounds.contains(point) { updatePointer(at: point) } else { NSCursor.arrow.set() }
+        onPointer?()
     }
 }
 
@@ -209,20 +216,16 @@ final class ChromeView: NSView {
             button.alphaValue = 0
             addSubview(button)
         }
-
-        interaction.onHover = { [weak self] hovering in self?.setHover(hovering) }
     }
 
     required init?(coder: NSCoder) { fatalError("not loaded from a nib") }
 
-    /// Fades the dim and the buttons in over 0.15 s, out over 0.25 s.
-    func setHover(_ hovering: Bool) {
-        NSAnimationContext.runAnimationGroup { context in
-            context.duration = hovering ? 0.15 : 0.25
-            context.timingFunction = CAMediaTimingFunction(name: .easeOut)
-            let alpha: CGFloat = hovering ? 1 : 0
-            dim.animator().alphaValue = alpha
-            for button in [close, sound, back] { button.animator().alphaValue = alpha }
+    /// Shows the dim and the buttons, or takes them away. Inside an animation group, pass `animated` and they fade
+    /// with it.
+    func showControls(_ shown: Bool, animated: Bool) {
+        let alpha: CGFloat = shown ? 1 : 0
+        for view in [dim, close, sound, back] {
+            if animated { view.animator().alphaValue = alpha } else { view.alphaValue = alpha }
         }
     }
 

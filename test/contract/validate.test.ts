@@ -11,6 +11,7 @@ import {
   parseControl,
   parsePrefs,
   parseSessionRecord,
+  parseSharedOptions,
   parseStationStatus,
   trimRecord,
 } from '@pipcast/contract'
@@ -249,5 +250,18 @@ describe('the station files', () => {
   it('takes each pref only when it is valid', () => {
     const prefs = parsePrefs({ sound: 'yes', quadrant: 'middle', scale: 'big', lastReportAt: 'x' })
     expect(prefs).toEqual({ v: 1, sound: true, quadrant: 'bottom-right', scale: 1, lastReportAt: null })
+  })
+})
+
+describe('the options the station follows', () => {
+  it('reads options.json, keeping only what it knows', () => {
+    expect(parseSharedOptions({ v: 1, transparent: true })).toEqual({ v: 1, transparent: true })
+    expect(parseSharedOptions({ v: 1, transparent: false, extra: 3 })).toEqual({ v: 1, transparent: false })
+  })
+
+  it('gives null for anything that is not options.json', () => {
+    for (const value of [null, undefined, 'x', 1, [], {}, { v: 2, transparent: true }, { v: 1 }, { v: 1, transparent: 'yes' }, { v: 1, transparent: 1 }]) {
+      expect(parseSharedOptions(value)).toBeNull()
+    }
   })
 })

@@ -36,9 +36,14 @@ export const OPTION_WORDS: Record<string, OptionWords> = {
     on: 'Each new session in the desktop app tunes in to KLWD as it opens.',
     off: 'A new session waits for TUNE IN.',
   },
+  transparency: {
+    title: 'Transparent window',
+    on: 'KLWD fades to 40% while the pointer is elsewhere, so what is under it shows through.',
+    off: 'KLWD stays solid.',
+  },
 }
 
-// What the slash menu shows after /pipcast: "[auto on|off]"
+// What the slash menu shows after /pipcast: "[auto|transparency on|off]"
 export const COMMAND_ARGUMENT_HINT = `[${Object.keys(OPTION_WORDS).join('|')} on|off]`
 
 // "Tune in every new session is on. Each new session in the desktop app tunes in to KLWD as it opens."

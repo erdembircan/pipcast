@@ -4,6 +4,8 @@
 # test page, and a target bundle id that is either never frontmost or is the
 # frontmost app itself. Run it from a terminal; the terminal keeps the keyboard
 # throughout, and station-inspect fails the run if the station ever takes it.
+# Transparent window is checked by the opacity the window server shows, which
+# has to match wherever the pointer happens to be: nothing here moves it.
 set -euo pipefail
 
 root="$(cd "$(dirname "$0")/.." && pwd)"
@@ -53,6 +55,12 @@ write_record() {
   mv "$home/sessions/verify.json.tmp" "$home/sessions/verify.json"
 }
 
+# Transparent window, as the mods write it for the station.
+write_options() { # <true|false>
+  printf '{"v":1,"transparent":%s}\n' "$1" > "$home/options.json.tmp"
+  mv "$home/options.json.tmp" "$home/options.json"
+}
+
 wait_for() { # <seconds> <description> <command...>
   local seconds="$1" what="$2"
   shift 2
@@ -90,6 +98,11 @@ if wait_for 5 "the page to report its visibility" grep -q 'visibilityState' "$ho
   echo "info the page's document.visibilityState while the window is on screen (screen $("$inspect" locked)): $(grep 'visibilityState' "$home/station.log" | tail -n 1 | sed 's/.*visibilityState //')"
 fi
 
+step "Transparent window"
+write_options true
+"$inspect" expect "$pid" alpha on
+grep -q ' transparent on$' "$home/station.log" || die "the station never logged Transparent window on"
+
 step "the window hides at once"
 # With nothing on air the station hides the window, then quits 5 s later. The window has to leave the screen as
 # the station logs that it hid it, not at the end of a fade a quarter of a second later.
@@ -107,6 +120,10 @@ write_record "$tuned"
 ( while true; do sleep 5; write_record "$tuned"; done ) &
 keeper=$!
 "$inspect" expect "$pid" shown bottom-right 1
+# It comes back with Transparent window still on: faded, unless the pointer is on it.
+"$inspect" expect "$pid" alpha on
+write_options false
+"$inspect" expect "$pid" alpha off
 grep -q ' spaces: off the target' "$home/station.log" || die "the station cannot reach the window server's Spaces"
 echo "ok   the station can keep its window off the target's own full-screen Spaces"
 

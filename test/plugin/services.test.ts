@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { defaultHome, storePaths } from '@pipcast/contract'
 import type { SessionRecord } from '@pipcast/contract'
 import * as m from '../../plugin/src/core/model.ts'
-import { checkIn, ensureStation, recordOf, tuneIn, tuneOut } from '../../plugin/src/core/services.ts'
+import { checkIn, ensureStation, readSharedOptions, recordOf, shareOptions, tuneIn, tuneOut } from '../../plugin/src/core/services.ts'
 import type { Io, RunResult } from '../../plugin/src/core/services.ts'
 
 const HOME = '/store'
@@ -19,6 +19,7 @@ interface Fake {
   target: string | null
   launch: RunResult
   onWrite: (path: string) => void
+  temps: string[]
 }
 
 function fake(): Fake {
@@ -30,6 +31,7 @@ function fake(): Fake {
     target: null,
     launch: { exitCode: 0, stdout: 'started 4242\n', stderr: '' },
     onWrite: () => undefined,
+    temps: [],
   }
   state.io = {
     now: async () => state.now,
@@ -40,8 +42,9 @@ function fake(): Fake {
       const text = state.files.get(path)
       return text === undefined ? null : { size: text.length, mtimeMs: 0 }
     },
-    write: async (path, text) => {
+    write: async (path, text, temp) => {
       state.files.set(path, text)
+      state.temps.push(temp ?? `${path}.tmp`)
       state.onWrite(path)
     },
     remove: async (path) => {
@@ -245,5 +248,23 @@ describe('recordOf', () => {
 describe('the store home', () => {
   it('is where the contract puts it', () => {
     expect(defaultHome('/Users/me')).toBe('/Users/me/Library/Application Support/Pipcast')
+  })
+})
+
+describe('the options the station follows', () => {
+  it('writes options.json through a temporary file named after the writer', async () => {
+    const state = fake()
+    await shareOptions(state.io, HOME, { v: 1, transparent: true }, 'session-a')
+    expect(JSON.parse(state.files.get(paths.options) ?? '')).toEqual({ v: 1, transparent: true })
+    expect(state.temps).toEqual([`${paths.options}.session-a.tmp`])
+  })
+
+  it('reads options.json back, or null when it is missing or not one', async () => {
+    const state = fake()
+    expect(await readSharedOptions(state.io, HOME)).toBeNull()
+    state.files.set(paths.options, 'not json')
+    expect(await readSharedOptions(state.io, HOME)).toBeNull()
+    state.files.set(paths.options, JSON.stringify({ v: 1, transparent: false }))
+    expect(await readSharedOptions(state.io, HOME)).toEqual({ v: 1, transparent: false })
   })
 })

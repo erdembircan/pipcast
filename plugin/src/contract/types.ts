@@ -84,6 +84,12 @@ export interface StationPrefs {
   lastReportAt: number | null
 }
 
+// options.json: the plugin options the station follows, written by the mods
+export interface SharedOptions {
+  v: 1
+  transparent: boolean
+}
+
 // The bridge between the station and its web page
 
 export interface Snapshot {

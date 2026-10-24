@@ -2,6 +2,8 @@
 // `/pipcast <option>` says what it is. Each is a boolean field of the plugin
 // manifest's userConfig, which Claude Code keeps with its other plugin options.
 
+import type { SharedOptions } from '../contract/types.ts'
+
 export interface OptionSpec {
   // The word after /pipcast
   word: string
@@ -9,7 +11,19 @@ export interface OptionSpec {
   key: string
 }
 
-export const OPTIONS: readonly OptionSpec[] = [{ word: 'auto', key: 'autoTuneIn' }]
+export const OPTIONS: readonly OptionSpec[] = [
+  { word: 'auto', key: 'autoTuneIn' },
+  { word: 'transparency', key: 'transparentWindow' },
+]
+
+// The one option the station follows, through options.json
+export const TRANSPARENT_KEY = 'transparentWindow'
+
+// Whether a session that tunes in, or reloads while tuned in, writes its own
+// value to options.json: when the file is missing, cannot be read or says otherwise
+export function needsSharing(file: SharedOptions | null, transparent: boolean): boolean {
+  return file === null || file.transparent !== transparent
+}
 
 // What the words after /pipcast ask for
 export type Request =

@@ -16,6 +16,7 @@ The feed plays in our own window, not in macOS's picture-in-picture. The proof o
 | Close stops tracking | Ending the overlay is what stopping tracking does: every session goes off the air at once. The band's TUNE OUT takes one session off (The band) | README, "Stop tracking" |
 | Back to Claude brings Claude forward | The window then hides by itself, because Claude is in front | `Visibility.swift` |
 | Sound on and off | The sound button on hover switches the jingles on and off. Sound starts on and the window remembers the choice; it plays at the Mac's volume | Your rule |
+| Fades while the pointer is elsewhere, with Transparent window on | The whole window shows at 40% (`pip-faded`), so what is under it reads through, and turns solid with the controls as the pointer reaches it; a drag that starts on it keeps it solid. Every segment airs the same way, BREAKING NEWS included | Your rule; 40% is a first figure |
 | Shows only while something is tracked | With no tracked session there is no window at all | Your rule |
 | Tracks every session tuned in | No limit: the listing shows four a page and turns to the next every 8 s | Your rule |
 

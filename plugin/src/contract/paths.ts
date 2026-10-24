@@ -16,6 +16,7 @@ export function storePaths(home: string) {
     station: `${root}/station.json`,
     control: `${root}/control.json`,
     prefs: `${root}/prefs.json`,
+    options: `${root}/options.json`,
     lock: `${root}/station.lock`,
     log: `${root}/station.log`,
   }

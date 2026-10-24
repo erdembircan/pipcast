@@ -24,6 +24,7 @@ func recordJSON(id: String, tunedInAt: Double, checkedInAt: Double, v: Int = 1) 
         #expect(paths.station == "/tmp/h/station.json")
         #expect(paths.control == "/tmp/h/control.json")
         #expect(paths.prefs == "/tmp/h/prefs.json")
+        #expect(paths.options == "/tmp/h/options.json")
         #expect(paths.lock == "/tmp/h/station.lock")
         #expect(paths.log == "/tmp/h/station.log")
     }

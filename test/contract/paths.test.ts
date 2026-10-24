@@ -15,6 +15,7 @@ describe('the store paths', () => {
     expect(paths.station).toBe('/tmp/pipcast/station.json')
     expect(paths.control).toBe('/tmp/pipcast/control.json')
     expect(paths.prefs).toBe('/tmp/pipcast/prefs.json')
+    expect(paths.options).toBe('/tmp/pipcast/options.json')
     expect(paths.lock).toBe('/tmp/pipcast/station.lock')
     expect(paths.log).toBe('/tmp/pipcast/station.log')
   })
