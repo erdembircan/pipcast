@@ -27,6 +27,10 @@ export interface Program {
   cues: Jingle[]
   // The hour (ms) whose report started this tick
   reported: number | null
+  // Whether a segment needs the window out: one is on air, one is due to
+  // start, or one is waiting while the window is out between two segments.
+  // The page posts it to the station whenever it changes
+  wantsWindow: boolean
 }
 
 interface OnAir {
@@ -65,6 +69,17 @@ export function createDirector(options: DirectorOptions = {}): { tick(input: Tic
   function dropWaitingStories(): void {
     for (let index = queue.length - 1; index >= 0; index -= 1) {
       if (queue[index]?.kind === 'story') {
+        queue.splice(index, 1)
+      }
+    }
+  }
+
+  // Takes out the stories waiting their turn whose session has moved on, so
+  // one never brings a minimized window out for nothing. In place, as above
+  function dropMovedOnStories(snapshot: Snapshot | null): void {
+    for (let index = queue.length - 1; index >= 0; index -= 1) {
+      const item = queue[index]
+      if (item?.kind === 'story' && movedOn(snapshot, item.sessionId, item.story)) {
         queue.splice(index, 1)
       }
     }
@@ -115,6 +130,9 @@ export function createDirector(options: DirectorOptions = {}): { tick(input: Tic
     }
 
     const visible = snapshot !== null && snapshot.visible
+    // The window is out in its quadrant unless the station says it is
+    // minimized to the side or on its way out or in
+    const windowOut = snapshot === null || snapshot.windowOut !== false
 
     if (snapshot !== null) {
       // 1. The first tick
@@ -169,8 +187,15 @@ export function createDirector(options: DirectorOptions = {}): { tick(input: Tic
       // waiting their turn are dropped. The report on the hour waits on
       end(now, false)
       dropWaitingStories()
+    } else if (!windowOut) {
+      // 5. Minimized to the side, or on its way out or in: a segment on air
+      // is cut, as when the window hides, and not restarted. What waits
+      // keeps its place, less any story whose session has moved on, and
+      // nothing starts until the window is out
+      end(now, false)
+      dropMovedOnStories(snapshot)
     } else {
-      // 5. Advance
+      // 6. Advance
       while (onAir !== null) {
         const { item, segment, index, stepStartedAt } = onAir
         const step = segment.steps[index]
@@ -198,7 +223,7 @@ export function createDirector(options: DirectorOptions = {}): { tick(input: Tic
         }
       }
 
-      // 6. Start the next
+      // 7. Start the next
       if (onAir === null && (lastEnded === null || now - lastEnded >= GAP_MS)) {
         while (queue.length > 0 && onAir === null) {
           const item = queue.shift()
@@ -226,12 +251,17 @@ export function createDirector(options: DirectorOptions = {}): { tick(input: Tic
       }
     }
 
-    // 7. The scene
+    // 8. Whether a segment needs the window out. False in the tick the last
+    // outro ends with nothing waiting, so a minimized window goes back at once
+    const due = queue.length > 0 && (lastEnded === null || now - lastEnded >= GAP_MS)
+    const wantsWindow = visible && (onAir !== null || due || (windowOut && queue.length > 0))
+
+    // 9. The scene
     const board = boardScene(now, snapshot, boardState())
     const current: OnAir | null = onAir
     const step = current?.segment.steps[current.index]
     if (current === null || step === undefined) {
-      return { scene: board, key: 'board', cues, reported }
+      return { scene: board, key: 'board', cues, reported, wantsWindow }
     }
     // At the desk and the review the ticker also carries the segment's own line
     const extra = current.segment.ticker
@@ -241,7 +271,7 @@ export function createDirector(options: DirectorOptions = {}): { tick(input: Tic
         ? boardTicker(now, snapshot, boardState(), extra(snapshot))
         : (board.ticker ?? [])
     const scene = step.scene({ now, ticker, board })
-    return { scene, key: `${current.segment.id}:${current.index}`, cues, reported }
+    return { scene, key: `${current.segment.id}:${current.index}`, cues, reported, wantsWindow }
   }
 
   return { tick }

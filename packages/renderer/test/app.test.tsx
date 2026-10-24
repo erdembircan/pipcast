@@ -37,8 +37,8 @@ describe('the live page', () => {
     vi.useRealTimers()
   })
 
-  function snapshot(sessions: unknown[]) {
-    return { type: 'snapshot', now: Date.now(), visible: true, sessions, lastReportAt: null }
+  function snapshot(sessions: unknown[], extra: Record<string, unknown> = {}) {
+    return { type: 'snapshot', now: Date.now(), visible: true, sessions, lastReportAt: null, ...extra }
   }
 
   function record(extra: Record<string, unknown>) {
@@ -101,5 +101,30 @@ describe('the live page', () => {
     expect(postMessage).not.toHaveBeenCalledWith({ type: 'cue', jingle: 'breaking' })
     expect(container.querySelector('.pn-mode-stinger')).toBeNull()
     expect(container.querySelector('.pn-mode-board')).not.toBeNull()
+  })
+
+  it('tells the station when a segment needs the window, once for each change', () => {
+    const windowCalls = () => postMessage.mock.calls.filter((call) => (call[0] as { type: string }).type === 'window')
+    act(() => root.render(<App reducedMotion={false} />))
+    const story = { id: 'a:1', kind: 'needs-input', at: NOW, command: 'npm install' }
+    act(() =>
+      receive(
+        snapshot([record({ state: 'needs-input', stateAt: NOW, stories: [story] })], { windowOut: false }),
+      ),
+    )
+    act(() => {
+      vi.advanceTimersByTime(250)
+    })
+    expect(windowCalls()).toEqual([[{ type: 'window', wanted: true }]])
+    act(() => {
+      vi.advanceTimersByTime(1000)
+    })
+    expect(windowCalls()).toHaveLength(1)
+
+    act(() => receive(snapshot([record({ state: 'working', stateAt: NOW, stories: [story] })], { windowOut: false })))
+    act(() => {
+      vi.advanceTimersByTime(250)
+    })
+    expect(windowCalls()).toEqual([[{ type: 'window', wanted: true }], [{ type: 'window', wanted: false }]])
   })
 })

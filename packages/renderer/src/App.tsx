@@ -32,8 +32,15 @@ export function App({ reducedMotion = prefersReducedMotion() }: { reducedMotion?
   }, [])
 
   useEffect(() => {
+    let wanted = false
     const tick = () => {
       const next = director.tick({ now: Date.now(), snapshot: snapshot.current })
+      // Tells the station whether a segment needs the window out, whenever that
+      // changes: it brings a minimized window out and takes it back on this
+      if (next.wantsWindow !== wanted) {
+        wanted = next.wantsWindow
+        post({ type: 'window', wanted: next.wantsWindow })
+      }
       for (const jingle of next.cues) {
         post({ type: 'cue', jingle })
       }

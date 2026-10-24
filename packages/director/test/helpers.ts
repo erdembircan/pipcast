@@ -32,6 +32,7 @@ export function session(id: string, rest: Partial<SessionRecord> = {}): SessionR
 export interface World {
   sessions: SessionRecord[]
   visible: boolean
+  windowOut?: boolean
   lastReportAt: number | null
 }
 
@@ -51,6 +52,7 @@ export function harness(start: number, sessions: SessionRecord[] = [], options: 
     const snapshot: Snapshot = {
       now,
       visible: world.visible,
+      ...(world.windowOut === undefined ? {} : { windowOut: world.windowOut }),
       sessions: world.sessions,
       lastReportAt: world.lastReportAt,
     }

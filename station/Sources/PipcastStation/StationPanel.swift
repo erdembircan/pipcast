@@ -28,8 +28,16 @@ final class StationPanel: NSPanel {
         hasForcedActiveAppearance = forceActiveAppearance()
     }
 
+    override var canBecomeKey: Bool { false }
+    override var canBecomeMain: Bool { false }
+
+    // Placed wherever a slide puts it, partly off a screen included.
+    override func constrainFrameRect(_ frameRect: NSRect, to screen: NSScreen?) -> NSRect { frameRect }
+}
+
+extension NSPanel {
     /// Draws the panel with an active appearance, as a key window would be, without ever making it key or main.
-    /// AppKit draws Liquid Glass flat in a window without one, and this panel can never become key. A private
+    /// AppKit draws Liquid Glass flat in a window without one, and these panels can never become key. A private
     /// interface, looked up at run time; false when this macOS lacks it.
     @discardableResult
     func forceActiveAppearance() -> Bool {
@@ -39,9 +47,6 @@ final class StationPanel: NSPanel {
         unsafeBitCast(method_getImplementation(method), to: Set.self)(self, selector, true)
         return true
     }
-
-    override var canBecomeKey: Bool { false }
-    override var canBecomeMain: Bool { false }
 }
 
 /// What the interaction view asks of the window's owner while a drag runs.
@@ -51,6 +56,10 @@ protocol InteractionDelegate: AnyObject {
     func fullSize() -> CGSize
     func dragDidMove()
     func dragDidResize()
+    /// The window moved under a drag that is still going on.
+    func dragIsMoving()
+    /// The window changed size under a resize drag that is still going on.
+    func dragIsResizing()
 }
 
 /// The transparent view above the web view that takes every click and drag, so
@@ -58,6 +67,8 @@ protocol InteractionDelegate: AnyObject {
 /// above it and win where they are.
 final class InteractionView: NSView {
     weak var delegate: InteractionDelegate?
+    /// False while the window slides into the side or out of it: a press on it does nothing.
+    var isEnabled = true
     /// Called as the pointer enters, leaves or moves over the window, and as a press on it starts and ends: the
     /// owner looks again at whether the window is hovered.
     var onPointer: (() -> Void)?
@@ -119,7 +130,7 @@ final class InteractionView: NSView {
     }
 
     override func mouseDown(with event: NSEvent) {
-        guard let window else { return }
+        guard isEnabled, let window else { return }
         // Screen coordinates: locationInWindow jitters while the window moves.
         startMouse = NSEvent.mouseLocation
         startFrame = window.frame
@@ -141,10 +152,12 @@ final class InteractionView: NSView {
         switch drag {
         case .move:
             window.setFrameOrigin(NSPoint(x: startFrame.origin.x + delta.dx, y: startFrame.origin.y + delta.dy))
+            delegate.dragIsMoving()
         case let .resize(edge):
             let frame = Geometry.resize(start: startFrame, quadrant: delegate.quadrant, edge: edge,
                                         delta: delta, full: delegate.fullSize())
             window.setFrame(frame, display: true)
+            delegate.dragIsResizing()
             window.invalidateShadow()
             // The edge's arrows for the whole drag, even when the pointer leaves the grip.
             resizePointer(for: edge, room: Geometry.room(width: frame.width, full: delegate.fullSize())).set()
@@ -237,5 +250,45 @@ final class ChromeView: NSView {
             if let hit = button.hitTest(local) { return hit }
         }
         return interaction
+    }
+}
+
+/// The panel's content: a transparent root that holds the chrome inside a clip. At rest the clip is the whole root
+/// and the chrome fills it. While the window slides into the side of the screen the chrome keeps its size and the
+/// clip is cut down to the part inside the screen's visible frame, so the picture never reflows and nothing shows
+/// on a display beside it.
+final class PanelContent: NSView {
+    let chrome: ChromeView
+    private let clip = NSView()
+
+    init(chrome: ChromeView) {
+        self.chrome = chrome
+        super.init(frame: NSRect(x: 0, y: 0, width: 320, height: 180))
+        wantsLayer = true
+        clip.wantsLayer = true
+        clip.layer?.masksToBounds = true
+        addSubview(clip)
+        clip.addSubview(chrome)
+        restLayout()
+    }
+
+    required init?(coder: NSCoder) { fatalError("not loaded from a nib") }
+
+    /// The chrome fills the clip and the clip fills the root, resizing with it, so a resize drag behaves as ever.
+    func restLayout() {
+        clip.autoresizingMask = []
+        chrome.autoresizingMask = []
+        clip.frame = bounds
+        chrome.frame = clip.bounds
+        clip.autoresizingMask = [.width, .height]
+        chrome.autoresizingMask = [.width, .height]
+    }
+
+    /// Cuts the window down to `shown`, a rectangle in the panel's own coordinates (empty when none of it shows).
+    func clipLayout(shown: CGRect) {
+        clip.autoresizingMask = []
+        chrome.autoresizingMask = []
+        clip.frame = shown
+        chrome.frame = CGRect(x: -shown.minX, y: -shown.minY, width: bounds.width, height: bounds.height)
     }
 }
