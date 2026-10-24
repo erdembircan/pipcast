@@ -7,6 +7,7 @@ enum PageMessage {
     case ready
     case cue(String)
     case reported(at: Double)
+    case window(wanted: Bool)
     case rendered
     case log(level: String, text: String)
 
@@ -23,6 +24,9 @@ enum PageMessage {
         case "reported":
             guard let at = (object["at"] as? NSNumber)?.doubleValue, at.isFinite else { return nil }
             self = .reported(at: at)
+        case "window":
+            guard let wanted = object["wanted"] as? Bool else { return nil }
+            self = .window(wanted: wanted)
         case "rendered":
             self = .rendered
         case "log":

@@ -100,6 +100,8 @@ export interface StationPrefs {
   quadrant: Quadrant
   scale: number
   lastReportAt: number | null
+  // Whether the window is minimized to the side of the screen
+  minimized: boolean
 }
 
 // options.json: the plugin options the station follows, written by the mods
@@ -113,6 +115,8 @@ export interface SharedOptions {
 export interface Snapshot {
   now: number
   visible: boolean
+  // Whether the window is out in its quadrant and still: false while it is minimized to the side or moving into or out of it. A snapshot without it counts as out
+  windowOut?: boolean
   sessions: SessionRecord[]
   lastReportAt: number | null
 }
@@ -142,5 +146,6 @@ export type PageMessage =
   | { type: 'ready' }
   | { type: 'cue'; jingle: Jingle }
   | { type: 'reported'; at: number }
+  | { type: 'window'; wanted: boolean }
   | { type: 'rendered' }
   | { type: 'log'; level: 'info' | 'error'; text: string }

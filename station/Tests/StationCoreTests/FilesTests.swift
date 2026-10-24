@@ -10,6 +10,7 @@ import Testing
         #expect(prefs.quadrant == .bottomRight)
         #expect(prefs.scale == 1)
         #expect(prefs.lastReportAt == nil)
+        #expect(!prefs.minimized)
     }
 
     @Test func aMissingOrUnparseableFileGivesTheDefaults() throws {
@@ -42,17 +43,32 @@ import Testing
         #expect(StationPrefs.load(from: path).scale == 1)
     }
 
+    @Test func aFileWithoutMinimizedLoadsNotMinimized() throws {
+        let folder = temporaryFolder()
+        defer { try? FileManager.default.removeItem(atPath: folder) }
+        let path = "\(folder)/prefs.json"
+        try #"{"v":1,"sound":true,"quadrant":"bottom-right","scale":1,"lastReportAt":null}"#
+            .write(toFile: path, atomically: true, encoding: .utf8)
+        #expect(!StationPrefs.load(from: path).minimized)
+        try #"{"minimized":true}"#.write(toFile: path, atomically: true, encoding: .utf8)
+        #expect(StationPrefs.load(from: path).minimized)
+        try #"{"minimized":"yes"}"#.write(toFile: path, atomically: true, encoding: .utf8)
+        #expect(!StationPrefs.load(from: path).minimized)
+    }
+
     @Test func savesAndReadsBackWithoutLeavingATemporaryFile() throws {
         let folder = temporaryFolder()
         defer { try? FileManager.default.removeItem(atPath: folder) }
         let path = "\(folder)/prefs.json"
-        let prefs = StationPrefs(sound: false, quadrant: .topRight, scale: 0.8, lastReportAt: 1_792_599_594_000)
+        let prefs = StationPrefs(sound: false, quadrant: .topRight, scale: 0.8, lastReportAt: 1_792_599_594_000,
+                                minimized: true)
         try StationPrefs.save(prefs, to: path)
         #expect(StationPrefs.load(from: path) == prefs)
         #expect(!FileManager.default.fileExists(atPath: path + ".tmp"))
         let text = try String(contentsOfFile: path, encoding: .utf8)
         #expect(text.contains(#""lastReportAt":1792599594000"#))
         #expect(text.contains(#""quadrant":"top-right""#))
+        #expect(text.contains(#""minimized":true"#))
         // A null report time is written as null, as the contract's type has it.
         try StationPrefs.save(StationPrefs(), to: path)
         #expect(try String(contentsOfFile: path, encoding: .utf8).contains(#""lastReportAt":null"#))

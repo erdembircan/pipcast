@@ -282,24 +282,31 @@ describe('the station files', () => {
   })
 
   it('parses the prefs, with defaults', () => {
-    expect(parsePrefs(null)).toEqual({ v: 1, sound: true, quadrant: 'bottom-right', scale: 1, lastReportAt: null })
+    expect(parsePrefs(null)).toEqual({ v: 1, sound: true, quadrant: 'bottom-right', scale: 1, lastReportAt: null, minimized: false })
     expect(parsePrefs({ v: 1, sound: false, quadrant: 'top-left', scale: 0.8, lastReportAt: 99 })).toEqual({
       v: 1,
       sound: false,
       quadrant: 'top-left',
       scale: 0.8,
       lastReportAt: 99,
+      minimized: false,
     })
   })
 
+  it('reads whether the window is minimized, false unless it says so', () => {
+    expect(parsePrefs({ v: 1 }).minimized).toBe(false)
+    expect(parsePrefs({ v: 1, minimized: true }).minimized).toBe(true)
+    expect(parsePrefs({ v: 1, minimized: 'yes' }).minimized).toBe(false)
+  })
+
   it('clamps the scale to 0.7 to 1', () => {
-    expect(parsePrefs({ scale: 0.2 })).toEqual({ v: 1, sound: true, quadrant: 'bottom-right', scale: 0.7, lastReportAt: null })
+    expect(parsePrefs({ scale: 0.2 })).toEqual({ v: 1, sound: true, quadrant: 'bottom-right', scale: 0.7, lastReportAt: null, minimized: false })
     expect(parsePrefs({ scale: 3 }).scale).toBe(1)
   })
 
   it('takes each pref only when it is valid', () => {
     const prefs = parsePrefs({ sound: 'yes', quadrant: 'middle', scale: 'big', lastReportAt: 'x' })
-    expect(prefs).toEqual({ v: 1, sound: true, quadrant: 'bottom-right', scale: 1, lastReportAt: null })
+    expect(prefs).toEqual({ v: 1, sound: true, quadrant: 'bottom-right', scale: 1, lastReportAt: null, minimized: false })
   })
 })
 

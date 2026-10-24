@@ -348,6 +348,125 @@ describe('when the window is hidden', () => {
   })
 })
 
+describe('a window minimized to the side', () => {
+  it('holds a story that lands until the window is out, and wants the window meanwhile', () => {
+    const h = harness(T0, [session('a')])
+    h.world.windowOut = false
+    const landed = h.land([asking('a', T0 + 1000)], T0 + 1000).program
+    expect(landed.key).toBe('board')
+    expect(landed.cues).toEqual([])
+    expect(landed.wantsWindow).toBe(true)
+
+    const waiting = h.until(T0 + 3000).program
+    expect(waiting.key).toBe('board')
+    expect(waiting.cues).toEqual([])
+    expect(waiting.wantsWindow).toBe(true)
+
+    h.world.windowOut = true
+    const out = h.until(T0 + 3250).program
+    expect(out.key).toBe('story:a:1:0')
+    expect(out.cues).toEqual(['breaking'])
+    expect(out.wantsWindow).toBe(true)
+  })
+
+  it('wants the window from the opener to the outro, and lets go in the tick the last outro ends', () => {
+    const h = harness(T0, [session('a')])
+    h.land([asking('a', T0 + 1000)], T0 + 1000)
+    h.until(T0 + 20_000)
+    const first = h.history.findIndex((sample) => sample.program.key === 'story:a:1:0')
+    const end = h.history.findIndex((sample, index) => index > first && sample.program.key === 'board')
+    expect(first).toBeGreaterThanOrEqual(0)
+    expect(end).toBeGreaterThan(first)
+    for (const sample of h.history.slice(first, end)) {
+      expect(sample.program.wantsWindow).toBe(true)
+    }
+    expect(h.history[end]?.program.wantsWindow).toBe(false)
+    expect(h.history.slice(end).every((sample) => !sample.program.wantsWindow)).toBe(true)
+  })
+
+  it('stays wanted between two stories, and lets go after the second', () => {
+    const h = harness(T0, [session('a'), session('b')])
+    h.land([asking('a', T0 + 1000), session('b')], T0 + 1000)
+    h.land([asking('a', T0 + 1000), asking('b', T0 + 1500)], T0 + 1500)
+    h.until(T0 + 40_000)
+    const firstEnd = h.history.findIndex((sample) => sample.program.key === 'board' && sample.now > T0 + 5000)
+    const secondStart = h.history.findIndex((sample) => sample.program.key === 'story:b:1:0')
+    expect(firstEnd).toBeGreaterThan(0)
+    expect(secondStart).toBeGreaterThan(firstEnd)
+    expect(h.history[secondStart]?.program.cues).toEqual(['breaking'])
+    const gap = h.history.slice(firstEnd, secondStart)
+    expect(gap.length).toBeGreaterThan(1)
+    for (const sample of gap) {
+      expect(sample.program.key).toBe('board')
+      expect(sample.program.wantsWindow).toBe(true)
+    }
+    const secondEnd = h.history.findIndex((sample, index) => index > secondStart && sample.program.key === 'board')
+    expect(secondEnd).toBeGreaterThan(secondStart)
+    expect(h.history[secondEnd]?.program.wantsWindow).toBe(false)
+  })
+
+  it('cuts a segment when the window goes into the side, and keeps what waits', () => {
+    const h = harness(T0, [session('a'), session('b')])
+    h.land([asking('a', T0 + 1000), asking('b', T0 + 1000)], T0 + 1000)
+    expect(h.until(T0 + 5000).program.key).toBe('story:a:1:1')
+
+    h.world.windowOut = false
+    const cut = h.until(T0 + 5250)
+    expect(cut.program.key).toBe('board')
+    expect(cut.program.cues).toEqual([])
+    expect(cut.program.wantsWindow).toBe(false)
+    const cutAt = cut.now
+    expect(h.until(cutAt + 1750).program.wantsWindow).toBe(false)
+    expect(h.until(cutAt + 2000).program.wantsWindow).toBe(true)
+    expect(h.until(cutAt + 5000).program.wantsWindow).toBe(true)
+
+    h.world.windowOut = true
+    const back = h.until(cutAt + 5250).program
+    expect(back.key).toBe('story:b:1:0')
+    expect(back.cues).toEqual(['breaking'])
+    h.until(T0 + 60_000)
+    expect(h.cues().filter((cue) => cue.jingle === 'breaking-out').length).toBe(1)
+    expect(h.history.slice(h.history.findIndex((sample) => sample.now === cutAt + 250)).some((sample) => sample.program.key.startsWith('story:a:1'))).toBe(false)
+  })
+
+  it('drops a waiting story whose session moved on, so it does not want the window', () => {
+    const h = harness(T0, [session('a')])
+    h.world.windowOut = false
+    expect(h.land([asking('a', T0 + 1000)], T0 + 1000).program.wantsWindow).toBe(true)
+    expect(h.land([answered('a', T0 + 2000)], T0 + 2000).program.wantsWindow).toBe(false)
+  })
+
+  it('brings the window out for the hour, and starts the countdown as it lands', () => {
+    const h = harness(at(14, 59, 50), [session('a')])
+    h.world.windowOut = false
+    const due = h.until(at(14, 59, 55))
+    expect(due.program.wantsWindow).toBe(true)
+    expect(due.program.reported).toBeNull()
+    expect(due.program.key).toBe('board')
+
+    h.world.windowOut = true
+    const out = h.until(at(14, 59, 55) + 250).program
+    expect(out.reported).toBe(at(15))
+    expect(out.cues).toEqual(['hour'])
+  })
+
+  it('never wants the window while it is hidden', () => {
+    const h = harness(T0, [session('a')])
+    h.world.visible = false
+    h.world.windowOut = false
+    expect(h.land([asking('a', T0 + 1000)], T0 + 1000).program.wantsWindow).toBe(false)
+    expect(h.until(T0 + 3000).program.wantsWindow).toBe(false)
+  })
+
+  it('counts a snapshot without windowOut as out', () => {
+    const h = harness(T0, [session('a')])
+    const start = h.land([asking('a', T0 + 1000)], T0 + 1000).program
+    expect(start.key).toBe('story:a:1:0')
+    expect(start.cues).toEqual(['breaking'])
+    expect(start.wantsWindow).toBe(true)
+  })
+})
+
 describe('the hour', () => {
   function afternoon() {
     const asked = story('a:1', 'needs-input', at(14, 20), { command: 'npm install' })

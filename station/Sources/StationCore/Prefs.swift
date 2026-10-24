@@ -1,6 +1,6 @@
 import Foundation
 
-/// `prefs.json`: `{ v, sound, quadrant, scale, lastReportAt }`. Reading mirrors
+/// `prefs.json`: `{ v, sound, quadrant, scale, lastReportAt, minimized }`. Reading mirrors
 /// the contract's `parsePrefs`: each field that is missing or of the wrong kind
 /// keeps its default, the scale is clamped to 0.7...1, and anything else in the
 /// file is ignored.
@@ -10,16 +10,19 @@ public struct StationPrefs: Codable, Equatable {
     public var quadrant = Quadrant.bottomRight
     public var scale = 1.0
     public var lastReportAt: Double?
+    public var minimized = false
 
-    public init(sound: Bool = true, quadrant: Quadrant = .bottomRight, scale: Double = 1, lastReportAt: Double? = nil) {
+    public init(sound: Bool = true, quadrant: Quadrant = .bottomRight, scale: Double = 1, lastReportAt: Double? = nil,
+                minimized: Bool = false) {
         self.sound = sound
         self.quadrant = quadrant
         self.scale = StationPrefs.clamp(scale)
         self.lastReportAt = lastReportAt
+        self.minimized = minimized
     }
 
     private enum CodingKeys: String, CodingKey {
-        case v, sound, quadrant, scale, lastReportAt
+        case v, sound, quadrant, scale, lastReportAt, minimized
     }
 
     public init(from decoder: Decoder) throws {
@@ -30,6 +33,7 @@ public struct StationPrefs: Codable, Equatable {
             self.scale = StationPrefs.clamp(scale)
         }
         if let at = try? container.decode(Double.self, forKey: .lastReportAt), at.isFinite { lastReportAt = at }
+        if let minimized = try? container.decode(Bool.self, forKey: .minimized) { self.minimized = minimized }
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -40,6 +44,7 @@ public struct StationPrefs: Codable, Equatable {
         try container.encode(scale, forKey: .scale)
         // An explicit null, as the contract's type has it.
         try container.encode(lastReportAt, forKey: .lastReportAt)
+        try container.encode(minimized, forKey: .minimized)
     }
 
     static func clamp(_ scale: Double) -> Double {

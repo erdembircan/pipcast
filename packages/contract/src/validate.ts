@@ -217,7 +217,7 @@ export function parseControl(value: unknown): StationControl {
 }
 
 export function parsePrefs(value: unknown): StationPrefs {
-  const prefs: StationPrefs = { v: 1, sound: true, quadrant: 'bottom-right', scale: 1, lastReportAt: null }
+  const prefs: StationPrefs = { v: 1, sound: true, quadrant: 'bottom-right', scale: 1, lastReportAt: null, minimized: false }
   if (!isObject(value)) {
     return prefs
   }
@@ -232,6 +232,9 @@ export function parsePrefs(value: unknown): StationPrefs {
   }
   if (isNumber(value.lastReportAt)) {
     prefs.lastReportAt = value.lastReportAt
+  }
+  if (typeof value.minimized === 'boolean') {
+    prefs.minimized = value.minimized
   }
   return prefs
 }

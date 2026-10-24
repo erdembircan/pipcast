@@ -16,8 +16,8 @@ The window shows only while you're in another app. Switch back to Claude and it 
 - **The live board.** Each session on air gets a row with its project on a plate, its title, and its state on a pill: INPUT when it needs you, ERROR when it stopped on an error, READY when it finished, LIVE while it works. With more than four on air, the board shows four at a time and turns to the next four every 8 seconds. Under the listing, two meters show your account's usage limits, the current session's and the week's, from the newest reading any session on air took: gold from 70%, red from 90%.
 - **BREAKING NEWS for every story.** A session that needs your input, that is ready for review, whose work is complete, or that stopped on an error airs as its own segment. Stories air one after another, in the order they land. Nothing cuts in, and KLWD airs only what happens while you're away from Claude: switch to Claude and the stories still waiting are dropped, along with any that land while you're there.
 - **On the hour.** The station clock strikes the hour, Clawd reads the headlines, and THE HOUR IN REVIEW shows what each session did: a row each, named as on the board by its project's plate and its title, with the lines it changed or how long it has waited. If you're in Claude as the hour strikes, that hour is skipped, and the next report covers it.
-- **A window that stays out of the way.** It fills its quarter of the screen, resizes down to 70% from its edges, and moves to another corner when you drag it there. It floats above every app and never takes the keyboard. Run `/pipcast transparency on` and it fades to 40% while the pointer is elsewhere, so you can see what is under it.
-- **Controls on hover.** Close stops tracking every session, the speaker turns the jingles on and off, and Back to Claude brings Claude to the front.
+- **A window that stays out of the way.** It fills its quarter of the screen, resizes down to 70% from its edges, and moves to another corner when you drag it there. It floats above every app and never takes the keyboard. Press the handle on its inner edge and it slides into the side of the screen, leaving a small tab; BREAKING NEWS and the report on the hour still bring it out, and it goes back as they end. Run `/pipcast transparency on` and it fades to 40% while the pointer is elsewhere, so you can see what is under it.
+- **Controls on hover.** Close stops tracking every session, the speaker turns the jingles on and off, and Back to Claude brings Claude to the front. The handle on the window's inner edge minimizes it to the side.
 
 ## Requirements
 
@@ -45,7 +45,7 @@ New sessions load it.
 1. In a Claude Code session in the desktop app, press **TUNE IN** in the band above the prompt box, or run `/pipcast`.
 2. Switch to another app. KLWD appears in the bottom-right corner of the screen.
 3. When the session needs you or finishes, KLWD airs it as BREAKING NEWS.
-4. Hover over the window for its controls. Drag it to move it to another corner, or drag an edge to make it smaller.
+4. Hover over the window for its controls. Drag it to move it to another corner, drag an edge to make it smaller, or press the handle on its inner edge to minimize it to the side of the screen. Click the tab it leaves there to bring it back.
 5. Press **TUNE OUT**, or run `/pipcast` again, to take the session off the air.
 
 The band shows KLWD and what pressing it does: **TUNE IN** in gold while this session is off the air, **TUNE OUT** in blue while it is on.

@@ -8,6 +8,7 @@ import StationCore
 let usage = """
 usage: station-inspect window <pid>
        station-inspect expect <pid> shown <top-left|top-right|bottom-left|bottom-right> <scale>
+       station-inspect expect <pid> minimized <top-left|top-right|bottom-left|bottom-right> <scale>
        station-inspect expect <pid> hidden
        station-inspect expect <pid> gone-within <ms> <station.log>
        station-inspect expect <pid> alpha <on|off>
@@ -56,6 +57,17 @@ func windows(options: CGWindowListOption) -> [Window] {
 
 func stationWindows(_ pid: Int32, options: CGWindowListOption = [.optionOnScreenOnly]) -> [Window] {
     windows(options: options).filter { $0.pid == pid && $0.layer == stationLevel }
+}
+
+/// The station's windows that are the window itself: wider than 100 pt. The handle's panel is narrower, and is on
+/// screen during a hover.
+func mainWindows(_ pid: Int32) -> [Window] {
+    stationWindows(pid).filter { $0.appKit.width > 100 }
+}
+
+/// The station's other windows: the handle on the window, or the tab at the screen's edge.
+func tabWindows(_ pid: Int32) -> [Window] {
+    stationWindows(pid).filter { $0.appKit.width <= 100 }
 }
 
 func isRunning(_ pid: Int32) -> Bool { kill(pid, 0) == 0 }
@@ -201,7 +213,7 @@ case "expect" where arguments.count == 5 && arguments[2] == "shown":
         if watch.check(pid) {
             fail("FAIL the station became the frontmost app")
         }
-        let own = stationWindows(pid)
+        let own = mainWindows(pid)
         seen = own
         if own.count == 1, let window = own.first, matches(window.appKit) {
             // Activation, when it happens, lands a moment after the window appears.
@@ -221,6 +233,35 @@ case "expect" where arguments.count == 5 && arguments[2] == "shown":
     guard isRunning(pid) else { fail("FAIL the station (pid \(pid)) is not running") }
     let found = seen.isEmpty ? "no window on screen" : seen.map { describe($0.appKit) }.joined(separator: "; ")
     fail("FAIL expected the window at \(describe(expected)); found: \(found)")
+
+case "expect" where arguments.count == 5 && arguments[2] == "minimized":
+    guard let pid = Int32(arguments[1]), let quadrant = Quadrant(rawValue: arguments[3]),
+          let scale = Double(arguments[4]) else { usageError() }
+    let screen = NSScreen.main ?? NSScreen.screens[0]
+    let visible = screen.visibleFrame
+    let rest = Geometry.frame(quadrant: quadrant, scale: CGFloat(scale), visible: visible)
+    let expected = Minimize.tab(rest: rest, visible: visible, side: quadrant.side)
+    func close(_ a: CGFloat, _ b: CGFloat) -> Bool { abs(a - b) <= 1 }
+    func isTheTab(_ frame: CGRect) -> Bool {
+        let edge = quadrant.isRight ? close(frame.maxX, visible.maxX) : close(frame.minX, visible.minX)
+        return close(frame.width, Minimize.handleSize.width) && close(frame.height, Minimize.handleSize.height)
+            && edge && close(frame.midY, rest.midY)
+    }
+
+    // The window is gone from the screen and one small panel, the tab, sits against the side.
+    var seen = "no window on screen"
+    for _ in 0..<60 {
+        let main = mainWindows(pid)
+        let tabs = tabWindows(pid)
+        if main.isEmpty, tabs.count == 1, let tab = tabs.first, isTheTab(tab.appKit) {
+            pass("ok   minimized to the \(quadrant.side.rawValue) edge: the tab at \(describe(tab.appKit))")
+        }
+        let found = (main + tabs).map { describe($0.appKit) }
+        seen = found.isEmpty ? "no window on screen" : found.joined(separator: "; ")
+        pause(0.05)
+    }
+    guard isRunning(pid) else { fail("FAIL the station (pid \(pid)) is not running") }
+    fail("FAIL expected the tab at \(describe(expected)); found: \(seen)")
 
 case "spaces" where arguments.count == 3:
     guard let pid = Int32(arguments[1]) else { usageError() }
@@ -243,7 +284,7 @@ case "expect" where arguments.count == 4 && arguments[2] == "alpha":
     // opacity expected follows wherever it happens to be.
     var seen = "no window on screen"
     for _ in 0..<60 {
-        if let window = stationWindows(pid).first {
+        if let window = mainWindows(pid).first {
             let pointerOn = window.appKit.contains(NSEvent.mouseLocation)
             let expected = windowAlpha(transparent: setting == "on", hovered: pointerOn)
             let place = pointerOn ? "the pointer on it" : "the pointer elsewhere"

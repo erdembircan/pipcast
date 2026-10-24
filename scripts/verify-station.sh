@@ -169,4 +169,39 @@ height="$(sips -g pixelHeight "$work/still.png" | awk '/pixelHeight/ {print $2}'
 [[ "$width" == "1432" && "$height" == "806" ]] || die "snapshot is ${width}x${height}, expected 1432x806"
 echo "ok   still.png is ${width}x${height}"
 
+step "minimized to the side"
+# A station that starts minimized shows only the tab. A story that lands brings the window out, with the real
+# page, and the window goes back into the side when the story ends.
+"$station" stop --home "$home" >/dev/null 2>&1 || true
+printf '{"v":1,"sound":false,"quadrant":"bottom-right","scale":1,"lastReportAt":null,"minimized":true}\n' > "$home/prefs.json"
+tuned="$(now_ms)"
+write_record "$tuned"
+( while true; do sleep 5; write_record "$tuned"; done ) &
+keeper=$!
+out="$("$station" launch --home "$home" --assets "$root/plugin/station" --target-bundle-id com.example.pipcast.never-frontmost)"
+[[ "$out" =~ ^started\ ([0-9]+)$ ]] || die "launch for the minimized step printed: $out"
+pid3="${BASH_REMATCH[1]}"
+pids+=("$pid3")
+wait_for 5 "the station to write station.json" status_has_pid "$pid3"
+"$inspect" expect "$pid3" minimized bottom-right 1
+# A fresh needs-input story, kept fresh so the desk runs its whole length.
+story_at="$(now_ms)"
+write_story_record() {
+  local now
+  now="$(now_ms)"
+  printf '{"v":1,"id":"verify","title":"Verify","project":"pipcast","state":"needs-input","stateAt":%s,"tunedInAt":%s,"checkedInAt":%s,"stories":[{"id":"verify:1","kind":"needs-input","at":%s,"command":"npm install"}],"activity":[],"hours":[]}\n' \
+    "$story_at" "$tuned" "$now" "$story_at" > "$home/sessions/verify.json.tmp"
+  mv "$home/sessions/verify.json.tmp" "$home/sessions/verify.json"
+}
+kill "$keeper" 2>/dev/null || true
+wait "$keeper" 2>/dev/null || true
+write_story_record
+( while true; do sleep 5; write_story_record; done ) &
+keeper=$!
+"$inspect" expect "$pid3" shown bottom-right 1
+wait_for 25 "the window to go back into the side" "$inspect" expect "$pid3" minimized bottom-right 1 >/dev/null
+grep -q ' out for a segment$' "$home/station.log" || die "the station never logged the window coming out for a segment"
+grep -q ' back to the side$' "$home/station.log" || die "the station never logged the window going back to the side"
+echo "ok   the window came out for a story and went back into the side"
+
 echo "verify-station: all checks passed"
