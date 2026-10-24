@@ -5,6 +5,7 @@ import { ACTIVITY_WRITE_MS, HEARTBEAT_MS } from '../src/contract/constants.ts'
 import { COMMAND_DESCRIPTION, COMMAND_NAME, REPLY, TOAST_CANNOT_START, fallbackTitle } from '../src/contract/copy.ts'
 import { defaultHome, storePaths } from '../src/contract/paths.ts'
 import { parseSessionRecord } from '../src/contract/validate.ts'
+import { startKind } from '../src/core/auto.ts'
 import { BAND_HEIGHT, REACH, band, blankLabel } from '../src/core/band.ts'
 import { activity, lastWords, permission, question } from '../src/core/describe.ts'
 import type { ToolInput } from '../src/core/describe.ts'
@@ -27,6 +28,14 @@ import type { Io, TuneInResult } from '../src/core/services.ts'
 import { TITLE_CHECK_MS, findTranscriptDir, readTitleFile, transcriptDirOf } from '../src/core/title.ts'
 
 const tuned = atom({ plugin: 'pipcast', key: 'tuned' } as const, false)
+
+// A new session waiting to tune in by itself until the desktop app shows it
+const due = atom({ plugin: 'pipcast', key: 'due' } as const, false)
+
+// Tune in every new session, the plugin's option, as this load was given it
+let autoTuneIn = false
+// Tuning in by itself runs one at a time, so a session never tunes in twice
+let autoQueue: Promise<void> = Promise.resolve()
 
 // What the hooks share. A reload starts the module over, and session.start
 // builds all of this again from $.state and the session's own record.
@@ -200,6 +209,12 @@ async function saveActivity($: EngineInterface): Promise<void> {
 async function setState($: EngineInterface, hasTuned: boolean): Promise<void> {
   if ((await read($, tuned)) !== hasTuned) {
     await update($, tuned, () => hasTuned)
+  }
+}
+
+async function setDue($: EngineInterface, isDue: boolean): Promise<void> {
+  if ((await read($, due)) !== isDue) {
+    await update($, due, () => isDue)
   }
 }
 
@@ -578,6 +593,7 @@ async function endSession($: EngineInterface): Promise<void> {
   if (wasTuned) {
     await update($, tuned, () => false).catch(() => undefined)
   }
+  await setDue($, false).catch(() => undefined)
 }
 
 async function tuneInNow($: EngineInterface): Promise<TuneInResult['status']> {
@@ -614,6 +630,8 @@ async function tuneOutNow($: EngineInterface): Promise<void> {
 // The band's plate and /pipcast do the same: tune in, or tune out
 async function toggle($: EngineInterface): Promise<'in' | 'out' | 'cannot-start'> {
   try {
+    // The person decides: nothing tunes this session in by itself after this
+    await setDue($, false)
     if ((await read($, tuned)) === true) {
       await tuneOutNow($)
       return 'out'
@@ -645,6 +663,43 @@ async function onTitle($: EngineInterface, title: unknown): Promise<void> {
       await save($)
     }
   }
+}
+
+// A session starts: a new one waits to tune in by itself while the option is
+// on, and tunes in at once if the desktop app already shows it, as after a
+// /clear. A resume leaves the session as it is; a compaction changes nothing.
+async function onSessionStart($: EngineInterface, source: unknown): Promise<void> {
+  const kind = startKind(source)
+  if (kind === 'same') {
+    return
+  }
+  await setDue($, autoTuneIn && kind === 'new')
+  await autoTune($)
+}
+
+// A session waiting to tune in by itself does, once, as soon as the desktop
+// app shows it. A headless run is shown nowhere, so it never tunes itself in.
+function autoTune($: EngineInterface): Promise<void> {
+  const task = async (): Promise<void> => {
+    if ((await read($, due)) !== true || !(await $.session.surfaces()).includes('desktop')) {
+      return
+    }
+    await setDue($, false)
+    if (!autoTuneIn || (await read($, tuned)) === true) {
+      return
+    }
+    let status: TuneInResult['status'] = 'cannot-start'
+    try {
+      status = await tuneInNow($)
+    } catch (error) {
+      failure($, 'tuning in by itself', error)
+    }
+    if (status === 'cannot-start') {
+      $.ui.toast(TOAST_CANNOT_START)
+    }
+  }
+  autoQueue = autoQueue.then(task, task)
+  return autoQueue
 }
 
 async function onTurnStart($: EngineInterface, turnId: string): Promise<void> {
@@ -747,7 +802,10 @@ async function onComplete($: EngineInterface, isAborted: boolean, reason: string
   await save($)
 }
 
-export const register: Register = (on) => {
+export const register: Register = (on, options) => {
+  // The plugin's options, fixed for this load: a change reloads the module
+  autoTuneIn = options.autoTuneIn === true
+
   on('session.start', async ($, e, next) => {
     try {
       await $.command.register({ name: COMMAND_NAME, description: COMMAND_DESCRIPTION })
@@ -766,6 +824,17 @@ export const register: Register = (on) => {
       failure($, 'session.end', error)
     }
     return next(e)
+  })
+
+  // The desktop app shows the session: one waiting to tune in by itself does
+  on('session.attach', { surface: 'desktop' }, async ($, e, next) => {
+    const attached = await next(e)
+    try {
+      await autoTune($)
+    } catch (error) {
+      failure($, 'session.attach', error)
+    }
+    return attached
   })
 
   on('command.run', { command: COMMAND_NAME }, async ($) => {
@@ -873,6 +942,11 @@ export const register: Register = (on) => {
     try {
       noteTranscript(e)
       await onTitle($, e.session_title)
+    } catch (error) {
+      failure($, 'SessionStart', error)
+    }
+    try {
+      await onSessionStart($, e.source)
     } catch (error) {
       failure($, 'SessionStart', error)
     }

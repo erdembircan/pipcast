@@ -1,4 +1,4 @@
-import type { On } from 'claude-code'
+import type { On, PluginOptions, RenderSurface } from 'claude-code'
 import { mock } from 'claude-code/testing'
 
 import type { SessionRecord } from '../src/contract/types.ts'
@@ -61,6 +61,10 @@ export interface WorldOptions {
   hasOtherBand?: boolean
   // The shape of the other mod's band: one plain Box, or a row like usage-band's
   otherBand?: 'plain' | 'row'
+  // The plugin's options, as settings hold them; unset, the manifest's defaults
+  settings?: PluginOptions
+  // What shows the session when it starts; unset, nothing, as in a headless run
+  surfaces?: RenderSurface[]
 }
 
 // The world beneath the mod: a session with an id, an in-memory file system
@@ -77,6 +81,8 @@ export function world(on: On, options: WorldOptions = {}) {
   const written: string[] = []
   const launched: (readonly string[])[] = []
   const toasts: string[] = []
+  // What shows the session, as $.session.surfaces() reads it; an attach adds its surface
+  const surfaces: RenderSurface[] = [...(options.surfaces ?? [])]
   // The session's own tree at ROOT, and other trees by their top folder
   const git = {
     head: 'c0ffee1',
@@ -113,6 +119,13 @@ export function world(on: On, options: WorldOptions = {}) {
   }))
   on('session.start', (_, e) => ({ cwd: e.cwd }))
   on('session.end', (_, e) => ({ sessionId: e.sessionId }))
+  on('session.surfaces', () => ({ value: [...surfaces] }))
+  on('session.attach', (_, e) => {
+    if (!surfaces.includes(e.surface)) {
+      surfaces.push(e.surface)
+    }
+    return { clientId: e.clientId }
+  })
   on('command.register', (_, e) => ({ value: { command: e.name } }))
   on('turn.start', (_, e) => ({ turnId: e.turnId }))
   on('turn.complete', () => ({ text: '' }))
@@ -258,6 +271,7 @@ export function world(on: On, options: WorldOptions = {}) {
     launched,
     launch,
     toasts,
+    surfaces,
     atTool,
     reads,
     written,

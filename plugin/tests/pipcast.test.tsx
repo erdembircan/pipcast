@@ -44,7 +44,11 @@ function scenario(name: string, options: WorldOptions, body: (w: ReturnType<type
       await $.session.end({ reason: 'other', sessionId: ID, resume: { id: ID } })
     }
   }
-  test(name, run)
+  if (options.settings === undefined) {
+    test(name, run)
+  } else {
+    test(name, { options: options.settings }, run)
+  }
 }
 
 const tuneIn = ($: Engine) => $.command.run(RUN)
@@ -63,6 +67,17 @@ const mounted = ($: Engine, surface: 'desktop' | 'terminal' = 'desktop', props: 
 
 // What a classic hook says about the session: its id and where its transcript is
 const located = { session_id: ID, transcript_path: TRANSCRIPT } as const
+
+// Tune in every new session, on
+const AUTO = { settings: { autoTuneIn: true } } as const
+
+// The engine starting a session, as classic.SessionStart says where it came from
+const started = ($: Engine, source: 'startup' | 'resume' | 'clear' | 'compact' | 'fork') =>
+  $.classic.SessionStart({ source, ...located } as never)
+
+// The desktop app showing the session; each window is a client of its own
+const shown = ($: Engine, clientId = 'window-1', surface: 'desktop' | 'mobile' = 'desktop') =>
+  $.session.attach({ surface, clientId })
 
 scenario('the band on the desktop: our own line under another mod\'s', {}, async (_w, $) => {
   const ui = await mounted($)
@@ -891,5 +906,148 @@ scenario('a reload carries on from the session own record', {}, async (w, $) => 
   // The module starts over; $.state says tuned in
   await $.session.start(START)
   expect(w.record()?.tunedInAt).toBe(before?.tunedInAt)
+})
+
+scenario('with Tune in every new session on, a new session tunes in when the desktop app shows it', AUTO, async (w, $) => {
+  await started($, 'startup')
+  expect(w.record()).toBeNull()
+  expect(w.launched.length).toBe(0)
+
+  await shown($)
+  expect(w.record()?.id).toBe(ID)
+  expect(w.record()?.tunedInAt).toBe(T0)
+  expect(w.launched.length).toBe(1)
+  expect(w.toasts).toEqual([])
+
+  const ui = await mounted($)
+  expect((await ui.findAll({ type: 'Svg' })).map((svg) => svg.props.alt)).toEqual([BAND_ALT.out])
+  expect((await ui.find({ type: 'Button' }))?.key).toBe('tune-out')
+  await ui.unmount()
+})
+
+scenario('a session the desktop app shows before it starts tunes in as it starts', AUTO, async (w, $) => {
+  await shown($)
+  expect(w.record()).toBeNull()
+  await started($, 'startup')
+  expect(w.record()?.id).toBe(ID)
+  expect(w.launched.length).toBe(1)
+})
+
+scenario('after /clear the new session tunes in again', AUTO, async (w, $) => {
+  await started($, 'startup')
+  await shown($)
+  expect(w.record()?.id).toBe(ID)
+
+  await $.session.end({ reason: 'clear', sessionId: ID, resume: { id: ID } })
+  expect(w.record()).toBeNull()
+  await started($, 'clear')
+  expect(w.record()?.id).toBe(ID)
+  expect(w.launched.length).toBe(2)
+})
+
+scenario('a fork tunes in like a new session', AUTO, async (w, $) => {
+  await started($, 'fork')
+  await shown($)
+  expect(w.record()?.id).toBe(ID)
+})
+
+scenario('a resumed session waits for TUNE IN', AUTO, async (w, $) => {
+  await started($, 'resume')
+  await shown($)
+  expect(w.record()).toBeNull()
+  expect(w.launched.length).toBe(0)
+})
+
+scenario('a compaction keeps a new session waiting for the desktop app', AUTO, async (w, $) => {
+  await started($, 'startup')
+  await started($, 'compact')
+  await shown($)
+  expect(w.record()?.id).toBe(ID)
+})
+
+scenario('with Tune in every new session off, a new session waits for TUNE IN', {}, async (w, $) => {
+  await started($, 'startup')
+  await shown($)
+  expect(w.record()).toBeNull()
+  expect(w.launched.length).toBe(0)
+  const ui = await mounted($)
+  expect((await ui.find({ type: 'Button' }))?.key).toBe('tune-in')
+  await ui.unmount()
+})
+
+scenario('a session nothing shows, as in a headless run, never tunes itself in', AUTO, async (w, $) => {
+  await started($, 'startup')
+  await turn($)
+  await w.clock.advance(10_000)
+  expect(w.record()).toBeNull()
+  expect(w.launched.length).toBe(0)
+})
+
+scenario('a session only a phone shows waits for the desktop app', AUTO, async (w, $) => {
+  await started($, 'startup')
+  await shown($, 'phone-1', 'mobile')
+  expect(w.record()).toBeNull()
+  await shown($)
+  expect(w.record()?.id).toBe(ID)
+})
+
+scenario('a session tuned out stays off the air when the desktop app shows it again or the mod reloads', AUTO, async (w, $) => {
+  await started($, 'startup')
+  await shown($)
+  expect((await tuneIn($)).text).toBe(REPLY.tunedOut)
+  expect(w.record()).toBeNull()
+
+  await shown($, 'window-2')
+  expect(w.record()).toBeNull()
+  // The module starts over; $.state says tuned out
+  await $.session.start(START)
+  await shown($, 'window-3')
+  expect(w.record()).toBeNull()
+  expect(w.launched.length).toBe(1)
+})
+
+scenario('/pipcast before the desktop app shows the session settles it', AUTO, async (w, $) => {
+  await started($, 'startup')
+  expect((await tuneIn($)).text).toBe(REPLY.tunedIn)
+  expect((await tuneIn($)).text).toBe(REPLY.tunedOut)
+  await shown($)
+  expect(w.record()).toBeNull()
+  expect(w.launched.length).toBe(1)
+})
+
+scenario('a reload keeps a new session waiting for the desktop app', AUTO, async (w, $) => {
+  await started($, 'startup')
+  // The module starts over; $.state says the session waits
+  await $.session.start(START)
+  await shown($)
+  expect(w.record()?.id).toBe(ID)
+  expect(w.launched.length).toBe(1)
+})
+
+scenario('a new session tunes in once, however many windows show it at once', AUTO, async (w, $) => {
+  await started($, 'startup')
+  await Promise.all([shown($), shown($, 'window-2')])
+  expect(w.record()?.id).toBe(ID)
+  expect(w.launched.length).toBe(1)
+})
+
+scenario('a station that will not start: a new session leaves the toast once and no record', { ...AUTO, launchExit: 1, launchOut: '' }, async (w, $) => {
+  await started($, 'startup')
+  await shown($)
+  expect(w.toasts).toEqual([TOAST_CANNOT_START])
+  expect(w.record()).toBeNull()
+  await shown($, 'window-2')
+  expect(w.toasts).toEqual([TOAST_CANNOT_START])
+})
+
+scenario("the window's close takes a session that tuned in by itself off the air for good", AUTO, async (w, $) => {
+  await started($, 'startup')
+  await shown($)
+  expect(w.record()?.id).toBe(ID)
+  w.files.set(`${HOME}/control.json`, JSON.stringify({ v: 1, closedAt: T0 + 1 }))
+  await w.clock.advance(10_000)
+  expect(w.record()).toBeNull()
+  await shown($, 'window-2')
+  expect(w.record()).toBeNull()
 })
 
