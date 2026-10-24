@@ -18,7 +18,6 @@ import { lookAtShells, lookDue, stillWorking } from '../src/core/shells.ts'
 import { waitsOn } from '../src/core/wake.ts'
 import {
   checkIn,
-  countOnAir,
   ensureStation,
   tuneIn,
   tuneOut,
@@ -28,7 +27,6 @@ import type { Io, TuneInResult } from '../src/core/services.ts'
 import { TITLE_CHECK_MS, findTranscriptDir, readTitleFile, transcriptDirOf } from '../src/core/title.ts'
 
 const tuned = atom({ plugin: 'pipcast', key: 'tuned' } as const, false)
-const onAir = atom({ plugin: 'pipcast', key: 'onAir' } as const, 0)
 
 // What the hooks share. A reload starts the module over, and session.start
 // builds all of this again from $.state and the session's own record.
@@ -199,20 +197,9 @@ async function saveActivity($: EngineInterface): Promise<void> {
   })
 }
 
-async function setState($: EngineInterface, hasTuned: boolean, count: number): Promise<void> {
+async function setState($: EngineInterface, hasTuned: boolean): Promise<void> {
   if ((await read($, tuned)) !== hasTuned) {
     await update($, tuned, () => hasTuned)
-  }
-  if ((await read($, onAir)) !== count) {
-    await update($, onAir, () => count)
-  }
-}
-
-async function refreshOnAir($: EngineInterface): Promise<void> {
-  const io = ioFor($)
-  const count = await countOnAir(io, await io.storeHome(), await $.clock.now())
-  if ((await read($, onAir)) !== count) {
-    await update($, onAir, () => count)
   }
 }
 
@@ -491,13 +478,13 @@ async function lookAgain($: EngineInterface): Promise<void> {
   }
 }
 
-// The heartbeat: a tuned-in session checks in; every session counts who is on
-// air; a held finish's background commands are looked at again
+// The heartbeat: a tuned-in session checks in; a held finish's background
+// commands are looked at again
 async function beat($: EngineInterface): Promise<void> {
   await lookAgain($)
   try {
     const io = ioFor($)
-    let outcome: { closed: boolean; onAir: number } | null = null
+    let outcome: { closed: boolean } | null = null
     await enqueue(async () => {
       if (model === null || tunedInAt === null) {
         return
@@ -506,16 +493,15 @@ async function beat($: EngineInterface): Promise<void> {
       lastWriteAt = await $.clock.now()
     })
     if (outcome === null) {
-      await refreshOnAir($)
       return
     }
-    const done: { closed: boolean; onAir: number } = outcome
+    const done: { closed: boolean } = outcome
     if (done.closed) {
       tunedInAt = null
       stopTimers()
-      await setState($, false, done.onAir)
+      await setState($, false)
     } else {
-      await setState($, true, done.onAir)
+      await setState($, true)
     }
   } catch (error) {
     failure($, 'heartbeat', error)
@@ -571,7 +557,6 @@ async function startSession($: EngineInterface): Promise<void> {
       startTitleChecks($)
     }
   }
-  await refreshOnAir($)
 }
 
 async function endSession($: EngineInterface): Promise<void> {
@@ -609,11 +594,9 @@ async function tuneInNow($: EngineInterface): Promise<TuneInResult['status']> {
     tunedInAt = result.tunedInAt
     lastWriteAt = result.tunedInAt
     startTitleChecks($)
-    await setState($, true, await countOnAir(io, await io.storeHome(), await $.clock.now()))
+    await setState($, true)
     // The model may have moved on while the station started
     await save($)
-  } else if (result.status === 'full') {
-    await refreshOnAir($)
   }
   return result.status
 }
@@ -625,11 +608,11 @@ async function tuneOutNow($: EngineInterface): Promise<void> {
   stopTimers()
   const home = await io.storeHome()
   await enqueue(() => tuneOut(io, home, m.record.id))
-  await setState($, false, await countOnAir(io, home, await $.clock.now()))
+  await setState($, false)
 }
 
-// The band's tab and /pipcast do the same: tune in, or tune out
-async function toggle($: EngineInterface): Promise<'in' | 'out' | 'full' | 'cannot-start'> {
+// The band's plate and /pipcast do the same: tune in, or tune out
+async function toggle($: EngineInterface): Promise<'in' | 'out' | 'cannot-start'> {
   try {
     if ((await read($, tuned)) === true) {
       await tuneOutNow($)
@@ -792,8 +775,6 @@ export const register: Register = (on) => {
         return { text: REPLY.tunedIn }
       case 'out':
         return { text: REPLY.tunedOut }
-      case 'full':
-        return { text: REPLY.full }
       default:
         return { text: REPLY.cannotStart }
     }
@@ -917,22 +898,19 @@ export const register: Register = (on) => {
       return beneath
     }
     const { Box, Button, Svg } = $.ui.resolve(e)
-    const view = band({ tuned: (await read($, tuned)) === true, onAir: (await read($, onAir)) ?? 0 })
+    const view = band({ tuned: (await read($, tuned)) === true })
     const ownLine = (
-      <Box alignItems="center" columnGap={1}>
-        <Svg source={view.chip.svg} alt={view.chip.alt} width={view.chip.width} height={BAND_HEIGHT} />
+      <Box alignItems="center">
         <Box>
-          <Svg source={view.tab.svg} alt={view.tab.alt} width={view.tab.width} height={BAND_HEIGHT} />
-          {view.kind !== 'off' && (
-            <Box position="absolute" top={0} bottom={0} left={-REACH} right={-REACH} alignItems="center" justifyContent="center">
-              <Button
-                key={view.kind === 'in' ? 'tune-in' : 'tune-out'}
-                label={blankLabel(view.tab.width)}
-                plain
-                onPress={() => pressed($)}
-              />
-            </Box>
-          )}
+          <Svg source={view.picture.svg} alt={view.picture.alt} width={view.picture.width} height={BAND_HEIGHT} />
+          <Box position="absolute" top={0} bottom={0} left={-REACH} right={-REACH} alignItems="center" justifyContent="center">
+            <Button
+              key={view.kind === 'in' ? 'tune-in' : 'tune-out'}
+              label={blankLabel(view.picture.width)}
+              plain
+              onPress={() => pressed($)}
+            />
+          </Box>
         </Box>
       </Box>
     )

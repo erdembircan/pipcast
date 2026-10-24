@@ -19,7 +19,7 @@ import type { HourRow, Scene } from '@pipcast/design'
 
 import type { TickerExtra } from './board.ts'
 import type { Segment } from './story.ts'
-import { DESK_MS, HOUR_OUTRO_MS, IDENT_MS, REDUCED_OPENER_MS, REVIEW_MS } from './timing.ts'
+import { DESK_MS, HOUR_OUTRO_MS, IDENT_MS, REDUCED_OPENER_MS, REVIEW_MS, REVIEW_ROWS } from './timing.ts'
 import type { Step } from './types.ts'
 
 export interface HourReport {
@@ -148,7 +148,8 @@ export function hourReport(
   }
   const review: Step = {
     role: 'review',
-    length: REVIEW_MS,
+    // A desk's 10 s for each page of four rows
+    length: REVIEW_MS * Math.max(1, Math.ceil(rows.length / REVIEW_ROWS)),
     scene: ({ now: at, ticker }): Scene => ({
       mode: 'review',
       clock: clock(at),

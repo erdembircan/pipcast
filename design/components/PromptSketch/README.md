@@ -5,4 +5,4 @@ Review-board furniture, never part of the mod: a plain sketch of the Claude desk
 - `theme`: `"light"` (the default) or `"dark"`, the app's.
 - `width`: the transcript column in px, 720 by default; the sketch is 80 px wider and 258 px tall. A narrow one stands for a pane docked beside the transcript.
 - `beside`: `"usage"` draws usage-band's group first, as that mod draws it (its own marks and colours), to show ours beside another mod's band.
-- `onAir`, `tuned`, `parts`, `pill` and `states` pass to `Band`.
+- `tuned` and `parts` pass to `Band`.

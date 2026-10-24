@@ -8,7 +8,7 @@ Pipcast is three programs that never call each other. Each Claude Code session r
    band, /pipcast,    ├──▶   Pipcast/sessions/<id>.json ───┤    ├─ reads the store every second
    events → record    │      control.json  station.json   │    └─ web view: the broadcast
  Claude Code session ─┘      prefs.json                    │         director → scenes → KLWD graphics
-   (up to four on air)                                     └─ quits when nothing is on air
+   (any number on air)                                     └─ quits when nothing is on air
 ```
 
 Every part is built from small pieces with no side effects of their own, so each can be tested alone: the mod's record reducer and band artwork, the station's geometry and store reading, the director's schedule. The side effects sit at the edges: the mod's file and process calls, the station's window, the web view's bridge.
@@ -62,7 +62,7 @@ interface SessionRecord {
 ```
 
 - A record is **live** while `now - checkedInAt` is 45 s or less. A session that stops checking in, because it crashed or the Mac slept, leaves the board.
-- **On air** are the live records sorted by `tunedInAt`, then by `id`, the first four of them. Every mod and the station apply this same rule, so they agree on who is on air without talking.
+- **On air** are the live records sorted by `tunedInAt`, then by `id`: all of them, with no limit. Every mod and the station apply this same rule, so they agree on who is on air without talking.
 - `control.json`'s `closedAt` tells every mod that tuned in before that moment to tune out: the window's close took every session off the air.
 
 ## The mod
@@ -86,7 +86,7 @@ What it listens to:
 | `classic.SessionStart`, `classic.UserPromptSubmit` | The session's title, when they carry one |
 | `session.end` | The record is removed: the row leaves the board |
 
-The mod keeps its record in memory whether or not the session is tuned in, so tuning in mid-turn shows the right state at once. It writes the record only while tuned in: at once for a new state or story, at most every 2 s for activity, and every 10 s as a heartbeat. The heartbeat also reads `control.json`, counts who is on air for the band, starts the station again if `station.json` has gone quiet for 20 s, and looks again at the background commands a finished turn waits on (Background commands, below).
+The mod keeps its record in memory whether or not the session is tuned in, so tuning in mid-turn shows the right state at once. It writes the record only while tuned in: at once for a new state or story, at most every 2 s for activity, and every 10 s as a heartbeat. The heartbeat also reads `control.json`, starts the station again if `station.json` has gone quiet for 20 s, and looks again at the background commands a finished turn waits on (Background commands, below).
 
 The title on air is the one the engine keeps. The engine writes a session's title to a small file beside its transcript, `<the transcript's folder>/<session id>/custom-title.json`, the moment it changes: a rename in the desktop app or with `/rename`, or a title the app gives the session itself. While the session is tuned in, the mod reads that file once a minute, a read of a few dozen bytes that starts no process, and writes the record at once when the title has changed. Tuning in reads it first, so the record carries the current title from its first write. With no file, or no title in it, the title is the latest one a hook carried, else the default name; a file caught half-written leaves the title as it was. Every classic hook says where the transcript is; after a reload, before one has fired, the mod finds the transcript once with `find`.
 
@@ -114,7 +114,7 @@ A server that starts listening a few seconds after the turn ends, or a watcher t
 
 ### The band
 
-Desktop only, and never while a survey holds it. The band is one line of its own: what another mod drew stays as it was, on its own line above ours. It draws two pictures and no words of its own: the chip, KLWD in chrome with four cells for the four places on air, and a tab, TUNE IN or TUNE OUT. A mod's button shows only text, so each tab is an `Svg` with a blank, plain `Button` laid over it. With four sessions on air, another session's TUNE IN is drawn dim, with no button. The pictures are built from outlines of the station's lettering, since an image loads no fonts.
+Desktop only, and never while a survey holds it. The band is one line of its own: what another mod drew stays as it was, on its own line above ours. It draws one picture and no words of its own: a plate with KLWD in chrome and, at its end, TUNE IN or TUNE OUT. It shows no count, so it is the same however many sessions are on air. A mod's button shows only text, so the plate is an `Svg` with a blank, plain `Button` laid over it. The picture is built from outlines of the station's lettering, since an image loads no fonts.
 
 ## The station
 
@@ -149,7 +149,7 @@ The broadcast is a web page in a `WKWebView` that never receives a mouse event: 
 | Station | `{ type: 'still', input }` | Snapshot mode: draw this one picture, without motion |
 | Page | `{ type: 'rendered' }` | Snapshot mode: the picture is drawn |
 
-`sessions` holds the records on air, at most four, as the store has them.
+`sessions` holds every record on air, as the store has them.
 
 ### Sound
 
@@ -164,7 +164,7 @@ The director is a pure function of time and the latest snapshot. Each tick it re
 | Segment | Steps |
 | --- | --- |
 | A story | BREAKING NEWS 1.9 s, cue `breaking`; the desk 10 s; the outro 1.4 s, cue `breaking-out` |
-| The hour | The ident 7.5 s from five seconds before the hour, cue `hour`; the desk 10 s; THE HOUR IN REVIEW 10 s, left out in a quiet hour; the outro 1.6 s, cue `hour-out` |
+| The hour | The ident 7.5 s from five seconds before the hour, cue `hour`; the desk 10 s; THE HOUR IN REVIEW 10 s for each page of four rows, left out in a quiet hour; the outro 1.6 s, cue `hour-out` |
 
 Between segments, the live board. The rules, from the design system's *Event desks*:
 
@@ -172,7 +172,8 @@ Between segments, the live board. The rules, from the design system's *Event des
 - A story whose session has moved on is dropped before it airs, and cut short at the desk if it moves on while on air. A story cut short is not restarted.
 - The report on the hour joins the queue only if the window shows as the hour strikes: at some moment in the five seconds before the hour, while its ident is due. If the window is hidden all that time, that hour's report is skipped, and showing the window later, tuning a session in or starting the station after the hour never brings it back. Once in the queue, the report waits its turn like a story and keeps its place while the window is hidden; one still waiting when the next report comes due is dropped. The next report covers everything since the last one that aired.
 - While the window is hidden, Claude is in front and shows every story itself. Nothing airs: a segment on air when the window hides is cut, the stories waiting their turn are dropped, and a story that lands while it is hidden never joins the queue. Only the report on the hour waits.
-- With reduced motion, the openers show their last picture and the outros cut straight to the board.
+- The board shows four sessions a page. With more, the listing turns its own pages every 8 s, on a clock that starts when the board appears, so it always comes back on its first page; what changes while a page is up waits for the next turn. THE HOUR IN REVIEW pages the same way, 10 s a page.
+- With reduced motion, the openers show their last picture, the outros cut straight to the board, and the listing's pages cut instead of turning.
 
 ## Building and checking
 

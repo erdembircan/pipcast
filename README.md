@@ -12,8 +12,8 @@ The window shows only while you're in another app. Switch back to Claude and it 
 
 ## What it does
 
-- **Tune in from Claude.** Press **TUNE IN** in the band above the prompt box, or run `/pipcast`. Up to four sessions can be on air at once.
-- **The live board.** Each session on air gets a row with its title and its state on a pill: INPUT when it needs you, ERROR when it stopped on an error, READY when it finished, LIVE while it works. A dev server or a watcher it leaves running in the background is not work: the session still goes READY when it finishes, and its story airs.
+- **Tune in from Claude.** Press **TUNE IN** in the band above the prompt box, or run `/pipcast`. There is no limit on how many sessions can be on air.
+- **The live board.** Each session on air gets a row with its title and its state on a pill: INPUT when it needs you, ERROR when it stopped on an error, READY when it finished, LIVE while it works. With more than four on air, the board shows four at a time and turns to the next four every 8 seconds.
 - **BREAKING NEWS for every story.** A session that needs your input, that is ready for review, whose work is complete, or that stopped on an error airs as its own segment. Stories air one after another, in the order they land. Nothing cuts in, and KLWD airs only what happens while you're away from Claude: switch to Claude and the stories still waiting are dropped, along with any that land while you're there.
 - **On the hour.** The station clock strikes the hour, Clawd reads the headlines, and THE HOUR IN REVIEW shows what each session did. If you're in Claude as the hour strikes, that hour is skipped, and the next report covers it.
 - **A window that stays out of the way.** It fills its quarter of the screen, resizes down to 70% from its edges, and moves to another corner when you drag it there. It floats above every app and never takes the keyboard.
@@ -48,7 +48,7 @@ New sessions load it.
 4. Hover over the window for its controls. Drag it to move it to another corner, or drag an edge to make it smaller.
 5. Press **TUNE OUT**, or run `/pipcast` again, to take the session off the air.
 
-The four cells in the band show how full KLWD is: blue for each session on air, gold for this one. With four sessions on air, **TUNE IN** dims until one tunes out.
+The band shows KLWD and what pressing it does: **TUNE IN** in gold while this session is off the air, **TUNE OUT** in blue while it is on.
 
 ## How it works
 

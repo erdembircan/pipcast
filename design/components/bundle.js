@@ -513,9 +513,134 @@
       time ? h('div', { className: 'pn-ticker-clock' }, h('span', null, time)) : null);
   }
 
+  /* ------------------------------------------------------------------
+     Pages. The listing has four rows. With more sessions it shows them
+     four at a time, and THE HOUR IN REVIEW does the same with its rows.
+     A page holds 8 s on the board and 10 s in the review, on a clock that
+     starts when the graphic appears, so the board always comes back on
+     its first page after a story. A turn is B · Push, chosen on PiP
+     Newsroom · More than four: each row leaves to the right as BREAKING
+     NEWS's words leave in its outro, fading as it goes, and once it has
+     gone the next page's row slides in from the left as the lower third
+     does, rows 110 ms apart from the top; the page tab goes last. What
+     changes while a page is up (a session tuning in or out, a new state)
+     waits for the next turn, so nothing moves while a page is read; with
+     one page before and after, the board is drawn as it comes, as it
+     always was. With reduced motion a turn is a cut, on the same clock.
+     ------------------------------------------------------------------ */
+  var PAGE_ROWS = 4;
+  var BOARD_PAGE_MS = 8000;
+  var REVIEW_PAGE_MS = 10000;
+  var TURN = { stagger: 110, leave: 420, enter: 460 };
+  /* the last thing to move is the tab's entrance */
+  var TURN_MS = PAGE_ROWS * TURN.stagger + TURN.leave + TURN.enter;
+
+  function pageCount(n) { return Math.max(1, Math.ceil(n / PAGE_ROWS)); }
+  function pageItems(items, page) { return items.slice(page * PAGE_ROWS, (page + 1) * PAGE_ROWS); }
+
+  /* What a paged graphic shows now: its items as they were at the last
+     turn, the page in view, the page before while its turn runs, and how
+     many turns there have been, for keys */
+  function usePages(items, pageMs, animate) {
+    var latest = React.useRef(items);
+    latest.current = items;
+    var shown = React.useRef({ items: items, page: 0 });
+    var turn = React.useRef({ prev: null, n: 0 });
+    var redraw = useState(0)[1];
+    if (items.length <= PAGE_ROWS && shown.current.items.length <= PAGE_ROWS) {
+      shown.current = { items: items, page: 0 };
+    }
+    useEffect(function () {
+      if (!animate) { return undefined; }
+      var begun = Date.now();
+      var next;
+      var settle;
+      function later() {
+        next = setTimeout(step, pageMs - ((Date.now() - begun) % pageMs));
+      }
+      function step() {
+        var from = shown.current;
+        var to = latest.current;
+        if (to.length <= PAGE_ROWS && from.items.length <= PAGE_ROWS) {
+          shown.current = { items: to, page: 0 };
+        } else {
+          var page = from.page + 1;
+          shown.current = { items: to, page: page >= pageCount(to.length) ? 0 : page };
+          turn.current = { prev: from, n: turn.current.n + 1 };
+          clearTimeout(settle);
+          settle = setTimeout(function () {
+            turn.current = { prev: null, n: turn.current.n };
+            redraw(function (k) { return k + 1; });
+          }, TURN_MS);
+        }
+        redraw(function (k) { return k + 1; });
+        later();
+      }
+      later();
+      return function () { clearTimeout(next); clearTimeout(settle); };
+    }, [animate, pageMs]);
+    var pushing = animate && !reducedMotion();
+    return { items: shown.current.items, page: shown.current.page, prev: pushing ? turn.current.prev : null, n: turn.current.n };
+  }
+
+  /* Each slot of a page: the row in view, and while a turn runs the row
+     of the page before leaving it, each on its turn's clock */
+  function pageSlots(view, slotClass, rowClass, content) {
+    var cur = pageItems(view.items, view.page);
+    var before = view.prev ? pageItems(view.prev.items, view.prev.page) : [];
+    var slots = [];
+    for (var r = 0; r < Math.max(cur.length, before.length); r += 1) {
+      var faces = [];
+      if (before[r]) {
+        faces.push(h('div', {
+          key: 'out:' + view.n + ':' + (before[r].id || r),
+          className: cx(rowClass, 'pn-turn-leave'),
+          style: { animationDelay: r * TURN.stagger + 'ms' }
+        }, content(before[r])));
+      }
+      if (cur[r]) {
+        faces.push(h('div', {
+          key: 'in:' + view.n + ':' + (cur[r].id || r),
+          className: cx(rowClass, view.prev && 'pn-turn-enter'),
+          style: view.prev ? { animationDelay: r * TURN.stagger + TURN.leave + 'ms' } : undefined
+        }, content(cur[r])));
+      }
+      slots.push(h('div', { key: r, className: slotClass }, faces));
+    }
+    return slots;
+  }
+
+  /* Which page of how many, on the ticker clock's blue tab; only with two
+     pages or more. It turns after the rows. */
+  function pageTab(view, tabClass) {
+    var pages = pageCount(view.items.length);
+    var before = view.prev ? pageCount(view.prev.items.length) : 1;
+    if (pages < 2 && before < 2) { return null; }
+    var faces = [];
+    if (view.prev && before > 1) {
+      faces.push(h('div', {
+        key: 'out:' + view.n,
+        className: 'pn-page pn-turn-leave',
+        style: { animationDelay: PAGE_ROWS * TURN.stagger + 'ms' }
+      }, pageWords(view.prev.page, before)));
+    }
+    if (pages > 1) {
+      faces.push(h('div', {
+        key: 'in:' + view.n,
+        className: cx('pn-page', view.prev && 'pn-turn-enter'),
+        style: view.prev ? { animationDelay: PAGE_ROWS * TURN.stagger + TURN.leave + 'ms' } : undefined
+      }, pageWords(view.page, pages)));
+    }
+    return h('div', { className: tabClass }, faces);
+  }
+  function pageWords(page, pages) {
+    return h('span', { className: 'pn-ticker-clock pn-page-tab' }, h('span', null, (page + 1) + ' OF ' + pages));
+  }
+
   /* The listing, as the first station sketch drew it: a glossy row per
-     session, its title, and its state on a pill. `sample` takes the sessions
-     from a scene. */
+     session, its title, and its state on a pill, four rows a page (Pages,
+     above). `animate` turns the pages; without it the board holds its
+     first page. `sample` takes the sessions from a scene. */
   function SessionBoard(props) {
     var scene = (props.sample && SAMPLES[props.sample]) || {};
     var list = (props.sessions || scene.sessions || []).slice();
@@ -524,12 +649,15 @@
         return (STATES[a.state] || STATES.working).priority - (STATES[b.state] || STATES.working).priority;
       });
     }
-    list = list.slice(0, 4);
-    return h('div', { className: cx('pn-board', props.inline && 'pn-inline') }, list.map(function (s, i) {
-      return h('div', { key: s.id || i, className: 'pn-row' },
-        h('span', { className: 'pn-row-name' }, s.name),
-        h(StatePill, { state: s.state }));
-    }));
+    var view = usePages(list, BOARD_PAGE_MS, bool(props.animate, false));
+    return h('div', { className: cx('pn-board', props.inline && 'pn-inline') },
+      pageSlots(view, 'pn-board-slot', 'pn-row', function (s) {
+        return [
+          h('span', { key: 'name', className: 'pn-row-name' }, s.name),
+          h(StatePill, { key: 'pill', state: s.state })
+        ];
+      }),
+      pageTab(view, 'pn-board-tab'));
   }
 
   /* The lower third. Every story wears the red BREAKING tab; only the hour
@@ -746,25 +874,30 @@
   }
 
   /* THE HOUR IN REVIEW: what each session did this hour, a row each: its
-     project, one detail and its state pill. Rows keep the listing's order.
-     `sample` takes the rows and the span from a scene. */
+     project, one detail and its state pill, four rows a page (Pages,
+     above). Rows keep the listing's order. `animate` turns the pages;
+     without it the review holds its first page. `sample` takes the rows
+     and the span from a scene. */
   function HourReview(props) {
     var scene = (props.sample && SAMPLES[props.sample]) || {};
     var rows = (props.rows || scene.rows || []).slice().sort(function (a, b) {
       return (STATES[a.state] || STATES.working).priority - (STATES[b.state] || STATES.working).priority;
-    }).slice(0, 4);
+    });
+    var view = usePages(rows, REVIEW_PAGE_MS, bool(props.animate, false));
     return h('div', { className: cx('pn-review', props.inline && 'pn-inline') },
       h('div', { className: 'pn-review-head' },
-        h('div', { className: 'pn-review-tag' }, h('span', null, props.span || scene.span || '14:00\u201315:00')),
+        h('div', { className: 'pn-review-tag' }, h('span', null, props.span || scene.span || '14:00–15:00')),
         h('div', { className: 'pn-review-title' }, h('span', null, props.label || 'THE HOUR IN REVIEW'))),
-      h('div', { className: 'pn-review-rows' }, rows.map(function (r, i) {
+      h('div', { className: 'pn-review-rows' }, pageSlots(view, 'pn-review-slot', 'pn-review-row', function (r) {
         var st = STATES[r.state] ? r.state : 'working';
-        return h('div', { key: r.id || i, className: 'pn-review-row' },
-          h('div', { className: 'pn-review-body' },
+        return [
+          h('div', { key: 'body', className: 'pn-review-body' },
             h('div', { className: 'pn-review-name' }, r.project || r.name),
             r.detail ? h('div', { className: 'pn-review-meta' }, r.detail) : null),
-          h(StatePill, { state: st }));
-      })));
+          h(StatePill, { key: 'pill', state: st })
+        ];
+      })),
+      pageTab(view, 'pn-review-tab'));
   }
 
   /* The studio: a dusk skyline through the studio window, drawn on the same
@@ -989,10 +1122,10 @@
     } else if (mode === 'ident') {
       parts.push(h(Ident, { key: 'id', hour: scene.hour, progress: scene.progress, animate: animate }));
     } else if (mode === 'review') {
-      parts.push(h(HourReview, { key: 'rv', rows: scene.rows, span: scene.span, label: scene.label }));
+      parts.push(h(HourReview, { key: 'rv', rows: scene.rows, span: scene.span, label: scene.label, animate: animate }));
     } else {
       if (animate) { parts.push(h(Signal, { key: 'signal' })); }
-      parts.push(h(SessionBoard, { key: 'board', sessions: scene.sessions }));
+      parts.push(h(SessionBoard, { key: 'board', sessions: scene.sessions, animate: animate }));
     }
     parts.push(h(TopBand, { key: 'top' }));
     if (mode !== 'stinger' && mode !== 'outro' && mode !== 'ident') {
@@ -1154,7 +1287,9 @@
     checkout: { id: 'checkout', name: 'Fix flaky checkout test', project: 'web-shop' },
     notes: { id: 'notes', name: 'Write release notes for 2.4', project: 'docs-site' },
     sqlite: { id: 'sqlite', name: 'Migrate settings to SQLite', project: 'desktop-app' },
-    crash: { id: 'crash', name: 'Check last night\u2019s crash reports', project: 'mobile-app' }
+    crash: { id: 'crash', name: 'Check last night\u2019s crash reports', project: 'mobile-app' },
+    search: { id: 'search', name: 'Speed up product search', project: 'search-api' },
+    runners: { id: 'runners', name: 'Move CI to the new runners', project: 'ci-config' }
   };
   function at(base, state) {
     return { id: base.id, name: base.name, project: base.project, state: state };
@@ -1246,6 +1381,18 @@
       ticker: [
         { lead: 'STILL WAITING', text: 'Fix flaky checkout test needs your input \u00B7 5 min' },
         { lead: 'READY', text: 'Release notes for 2.4 waiting for review' }
+      ]
+    },
+
+    /* More than four: seven sessions, four a page */
+    'board-seven': {
+      mode: 'board',
+      clock: '14:38',
+      sessions: [at(S.checkout, 'needs-input'), at(S.notes, 'ready'), at(S.auth, 'working'), at(S.sqlite, 'working'), at(S.crash, 'working'), at(S.search, 'working'), at(S.runners, 'working')],
+      ticker: [
+        { lead: 'STILL WAITING', text: 'Fix flaky checkout test needs your input · 5 min' },
+        { lead: 'READY', text: 'Release notes for 2.4 waiting for review' },
+        'api-server: editing src/auth/session.ts'
       ]
     },
 
@@ -1409,6 +1556,21 @@
         { id: 'checkout', project: 'web-shop', state: 'needs-input', detail: 'Waiting 27 min' },
         { id: 'notes', project: 'docs-site', state: 'ready', detail: '+182 \u221240' },
         { id: 'sqlite', project: 'desktop-app', state: 'working', detail: '+64 \u221212' }
+      ],
+      ticker: TICK_HOUR
+    },
+    'review-seven': {
+      mode: 'review',
+      clock: '15:00',
+      span: '14:00–15:00',
+      rows: [
+        { id: 'checkout', project: 'web-shop', state: 'needs-input', detail: 'Waiting 27 min' },
+        { id: 'notes', project: 'docs-site', state: 'ready', detail: '+182 −40' },
+        { id: 'auth', project: 'api-server', state: 'working', detail: '+1,204 −310' },
+        { id: 'sqlite', project: 'desktop-app', state: 'working', detail: '+64 −12' },
+        { id: 'crash', project: 'mobile-app', state: 'working', detail: '+18 −3' },
+        { id: 'search', project: 'search-api', state: 'working', detail: '+240 −88' },
+        { id: 'runners', project: 'ci-config', state: 'working', detail: '+31 −9' }
       ],
       ticker: TICK_HOUR
     },
@@ -2042,39 +2204,23 @@
 
   /* ------------------------------------------------------------------
      The band above the prompt: the mod's own control inside the Claude
-     desktop app. TUNE IN puts this session on KLWD, TUNE OUT takes it
-     off. In the mod the chip and each tab are Svg pictures (a tab gets a
-     blank native Button laid over it), and that is all: no status line,
-     no words besides the tab's. Review boards draw them with the
-     package's own classes.
+     desktop app. One plate: KLWD in chrome on the studio plate and, at
+     its end, the action, TUNE IN on the lower third's gold or TUNE OUT on
+     the ticker clock's blue, parted from the mark by an edge of its own.
+     TUNE IN puts this session on KLWD, TUNE OUT takes it off. There is no
+     count: the plate is the same however many sessions are on KLWD. In
+     the mod the plate is one Svg picture with a blank native Button laid
+     over it, and that is all. Review boards draw it with the package's
+     own classes.
      ------------------------------------------------------------------ */
-  var BAND_MAX = 4;
-  /* `onAir`: sessions on KLWD across the Mac, this one included when
-     `tuned`. Four with this one off: KLWD is full and TUNE IN is drawn
-     dim, with no button over it. `parts` outlines the two pieces.
-     Suggestions, not decided: `pill`, this session's state on a pill, and
-     `states`, each on-air session's state (comma-separated, this one
-     first), colouring the cells. */
+  /* `tuned`: this session is on air. `parts` outlines the plate. */
   function Band(props) {
     var tuned = bool(props.tuned, false);
-    var onAir = Math.max(tuned ? 1 : 0, Math.min(BAND_MAX, Math.round(num(props.onAir, tuned ? 1 : 0))));
-    var full = !tuned && onAir >= BAND_MAX;
-    var states = String(props.states || '').split(',').map(function (s) { return s.trim(); });
-    var cells = [];
-    for (var i = 0; i < BAND_MAX; i += 1) {
-      var state = i < onAir && STATES[states[i]] ? states[i] : null;
-      cells.push(h('i', { key: 'c' + i, className: cx('pn-band-cell', i < onAir && 'pn-band-cell--on', tuned && i === 0 && 'pn-band-cell--this', state && 'pn-band-cell--k pn-k-' + state) }));
-    }
-    var tab = tuned
-      ? h('span', { key: 'out', className: 'pn-ticker-clock pn-band-tab', role: 'img', 'aria-label': 'Tune out' }, h('span', null, 'TUNE OUT'))
-      : h('span', { key: 'in', className: cx('pn-l3-tag pn-k-working pn-band-tab', full && 'pn-band-tab--off'), role: 'img', 'aria-label': full ? 'Tune in: not available, KLWD is full' : 'Tune in' }, h('span', null, 'TUNE IN'));
     return h('div', { className: cx('pn-band', bool(props.parts, false) && 'pn-band--parts') },
-      h('span', { key: 'chip', className: 'pn-band-chip', role: 'img', 'aria-label': 'KLWD: ' + onAir + ' of ' + BAND_MAX + ' sessions on air' },
-        h('span', { className: 'pn-band-plate' },
-          h('span', { className: 'pn-mark pn-band-mark' }, h('span', { className: 'pn-chrome pn-mark-letters' }, 'KLWD')),
-          h('span', { className: 'pn-band-cells' }, cells))),
-      tab,
-      tuned && STATES[props.pill] ? h('span', { key: 'pill', className: 'pn-band-pill' }, h(StatePill, { state: props.pill })) : null);
+      h('span', { className: 'pn-band-plate', role: 'img', 'aria-label': tuned ? 'KLWD, Tune out' : 'KLWD, Tune in' },
+        h('span', { className: 'pn-mark pn-band-mark' }, h('span', { className: 'pn-chrome pn-mark-letters' }, 'KLWD')),
+        h('span', { className: cx('pn-band-act', tuned ? 'pn-band-act--out' : 'pn-band-act--in') },
+          h('span', { className: 'pn-band-word' }, tuned ? 'TUNE OUT' : 'TUNE IN'))));
   }
 
   /* Review-board furniture: what usage-band, another mod by the same
@@ -2120,7 +2266,7 @@
         [0.94, 0.86, 0.58].map(function (f, i) { return h('i', { key: i, style: { width: Math.round(w * f) + 'px' } }); })),
       h('div', { key: 'band', className: 'pn-app-band' },
         props.beside === 'usage' ? h(UsageBand, { key: 'usage' }) : null,
-        h(Band, { key: 'ours', onAir: props.onAir, tuned: props.tuned, parts: props.parts, pill: props.pill, states: props.states })),
+        h(Band, { key: 'ours', tuned: props.tuned, parts: props.parts })),
       h('div', { key: 'field', className: 'pn-app-field' },
         h('span', { key: 'hint', className: 'pn-app-hint' }, 'Reply\u2026'),
         h('span', { key: 'add', className: 'pn-app-add', 'aria-hidden': 'true' },

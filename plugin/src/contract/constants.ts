@@ -3,7 +3,6 @@
 export const SCHEMA_VERSION = 1
 
 // On air
-export const MAX_ON_AIR = 4
 export const HEARTBEAT_MS = 10_000
 export const STALE_MS = 45_000
 export const ACTIVITY_WRITE_MS = 2_000

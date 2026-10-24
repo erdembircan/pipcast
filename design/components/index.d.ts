@@ -69,7 +69,7 @@ export interface Scene {
   hour?: string;
   /** THE HOUR IN REVIEW: the span on its tab, "14:00–15:00". */
   span?: string;
-  /** THE HOUR IN REVIEW: one row per session, four at most. */
+  /** THE HOUR IN REVIEW: one row per session, four a page. */
   rows?: HourRow[];
   label?: string;
 }
@@ -163,9 +163,9 @@ export interface StingerProps { kind?: EventKind; words?: string[]; progress?: n
 /** ON THE HOUR: progress 0 is :55 before the hour, two thirds is the hour, 1 is 2.5 s past it; 7.5 s when animated. */
 export interface IdentProps { hour?: string; words?: string[]; progress?: number; animate?: boolean; duration?: number; /** The outro: the ident's last picture run out over 1.4 s, ending clear. */ outro?: boolean }
 
-export interface HourReviewProps { rows?: HourRow[]; span?: string; sample?: string; label?: string; inline?: boolean }
+export interface HourReviewProps { rows?: HourRow[]; span?: string; sample?: string; label?: string; inline?: boolean; /** Turns the pages, 10 s each; without it the review holds its first page. */ animate?: boolean }
 
-export interface SessionBoardProps { sessions?: Session[]; sample?: string; sort?: boolean; inline?: boolean }
+export interface SessionBoardProps { sessions?: Session[]; sample?: string; sort?: boolean; inline?: boolean; /** Turns the pages, 8 s each; without it the board holds its first page. */ animate?: boolean }
 
 /** The listing's state pill: INPUT, READY or LIVE. */
 export interface StatePillProps { state: SessionState; label?: string }
@@ -212,18 +212,12 @@ export interface ClawdProps {
   label?: string;
 }
 
-/** What the mod draws in the band above the Claude desktop app's prompt box: the chip and TUNE IN or TUNE OUT, nothing else. */
+/** What the mod draws in the band above the Claude desktop app's prompt box: one plate, KLWD and TUNE IN or TUNE OUT, nothing else. */
 export interface BandProps {
-  /** Sessions on KLWD across the Mac, 0 to 4, this one included when `tuned`. Four with this one off: KLWD is full. */
-  onAir?: number;
-  /** This session is on air: the tab says TUNE OUT and this session's cell is gold. */
+  /** This session is on air: the plate says TUNE OUT. */
   tuned?: boolean;
-  /** Outlines the two pieces, for the build board. */
+  /** Outlines the plate, for the build board. */
   parts?: boolean;
-  /** A suggestion, not decided: this session's state on a pill beside TUNE OUT. */
-  pill?: SessionState;
-  /** A suggestion, not decided: each on-air session's state, comma-separated, this one first, colouring the cells. */
-  states?: string;
 }
 
 /** Review-board furniture, never part of the mod: the app's prompt box, sketched, with the band above it. */

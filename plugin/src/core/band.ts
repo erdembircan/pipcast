@@ -1,13 +1,14 @@
-// The band's two pictures, as SVG documents: the chip (KLWD in chrome on the
-// studio plate, and four cells for the four places on air) and the tab
-// (TUNE IN, TUNE OUT, or TUNE IN dimmed when KLWD is full). They are the
-// design system's Band (design/components/Band) drawn for the desktop, which
-// draws a mod's Svg as an image: an image loads no fonts and cannot read the
-// app's theme, so the lettering is outlines (art.generated.ts) and every
-// piece carries its own ground.
+// The band's picture, as an SVG document: one plate. The bug's KLWD in chrome
+// on the studio plate with its gold edge, and at its end the action, TUNE IN
+// on the lower third's gold or TUNE OUT on the ticker clock's blue, parted
+// from the mark by an edge of its own. There is no count: the plate is the
+// same however many sessions are on KLWD. It is the design system's Band
+// (design/components/Band) drawn for the desktop, which draws a mod's Svg as
+// an image: an image loads no fonts and cannot read the app's theme, so the
+// lettering is outlines (art.generated.ts) and the plate carries its own
+// ground.
 
-import { MAX_ON_AIR } from '../contract/constants.ts'
-import { TAB_ALT, chipAlt } from '../contract/copy.ts'
+import { BAND_ALT } from '../contract/copy.ts'
 import { KLWD, TUNE_IN, TUNE_OUT } from './art.generated.ts'
 import type { Word } from './art.generated.ts'
 
@@ -23,13 +24,10 @@ const STUDIO =
   '<linearGradient id="s" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1a3f93"/><stop offset=".55" stop-color="#0b2260"/><stop offset="1" stop-color="#061233"/></linearGradient>'
 const CHROME =
   '<linearGradient id="c" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset=".46" stop-color="#c9d3e3"/><stop offset=".52" stop-color="#7f90b3"/><stop offset=".74" stop-color="#c9d3e3"/><stop offset="1" stop-color="#ffffff"/></linearGradient>'
-const ROW =
-  '<linearGradient id="r" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#5b8be8"/><stop offset=".48" stop-color="#2a57bf"/><stop offset=".52" stop-color="#1d449e"/><stop offset="1" stop-color="#2550b0"/></linearGradient>'
 const GOLD =
   '<linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffe08a"/><stop offset=".55" stop-color="#f2b630"/><stop offset="1" stop-color="#b97d0c"/></linearGradient>'
 const BAR =
   '<linearGradient id="b" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1d48a8"/><stop offset="1" stop-color="#163a8c"/></linearGradient>'
-const DIM = '<filter id="d"><feColorMatrix type="saturate" values=".3"/></filter>'
 
 export interface Picture {
   svg: string
@@ -37,7 +35,8 @@ export interface Picture {
   alt: string
 }
 
-export type TabKind = 'in' | 'out' | 'off'
+// What pressing the plate does: tune this session in, or out
+export type BandKind = 'in' | 'out'
 
 function num(x: number): string {
   return String(Math.round(x * 100) / 100)
@@ -53,98 +52,60 @@ function lettering(word: Word, x: number, centre: number, paint: string): string
   return `<path transform="translate(${num(x)} ${num(y)})" d="${word.d}" ${paint}/>`
 }
 
-function cell(x: number, fill: 'empty' | 'on' | 'this'): string {
-  const at = num(x)
-  if (fill === 'this') {
-    return `<rect x="${at}" y="5" width="6" height="12" rx="1" fill="url(#g)"/><rect x="${at}" y="5" width="6" height="1" fill="#ffffff" fill-opacity=".6"/>`
-  }
-  if (fill === 'on') {
-    return `<rect x="${at}" y="5" width="6" height="12" rx="1" fill="url(#r)"/><rect x="${at}" y="5" width="6" height="1" fill="#ffffff" fill-opacity=".45"/>`
-  }
-  return `<rect x="${at}" y="5" width="6" height="12" rx="1" fill="#061233"/><rect x="${num(x + 0.5)}" y="5.5" width="5" height="11" rx=".5" fill="none" stroke="#8fb0ff" stroke-opacity=".4"/>`
-}
-
-// The chip: the gold edge, the studio plate with its lit top edge, KLWD in
-// chrome with its shadow, and the four cells: empty, on air (the listing's
-// blue) or this session (gold)
-export function chip(onAir: number, tuned: boolean): Picture {
-  const count = Math.max(tuned ? 1 : 0, Math.min(MAX_ON_AIR, Math.round(onAir)))
+// The plate: the gold edge, the studio plate with its lit top edge, KLWD in
+// chrome with its shadow, then the action's own edge and the action. TUNE IN
+// is gold with a dark gold edge and words in on-gold; TUNE OUT is the bar's
+// blue with a lit top, a gold edge and white words.
+export function plate(kind: BandKind): Picture {
+  const word = kind === 'out' ? TUNE_OUT : TUNE_IN
   const mark = KLWD.width + 1.3
   const edge = 1 + HALF
   const plateX = edge + 2
-  const plateWidth = 6 + mark + 6 + 30 + 7
   const textX = plateX + 6
-  const cellsX = plateX + 6 + mark + 6
-  const width = Math.ceil(plateX + plateWidth + HALF + 1)
+  const partX = textX + mark + 6
+  const actX = partX + 2
+  const actWidth = 10 + word.width + 10
+  const plateWidth = actX + actWidth - plateX
+  const width = Math.ceil(actX + actWidth + HALF + 1)
 
-  let cells = ''
-  for (let i = 0; i < MAX_ON_AIR; i += 1) {
-    cells += cell(cellsX + i * 8, tuned && i === 0 ? 'this' : i < count ? 'on' : 'empty')
-  }
-
-  const plate =
+  const action =
+    kind === 'out'
+      ? `<rect x="${num(partX)}" y="0" width="2" height="22" fill="#f2b630"/>` +
+        `<rect x="${num(actX)}" y="0" width="${num(actWidth)}" height="22" fill="url(#b)"/>` +
+        `<rect x="${num(actX)}" y="0" width="${num(actWidth)}" height="1" fill="#8fb0ff"/>`
+      : `<rect x="${num(partX)}" y="0" width="2" height="22" fill="#b97d0c"/>` +
+        `<rect x="${num(actX)}" y="0" width="${num(actWidth)}" height="22" fill="url(#g)"/>` +
+        `<rect x="${num(actX)}" y="0" width="${num(actWidth)}" height="1" fill="#ffffff" fill-opacity=".5"/>`
+  const body =
     `<g transform="${LEAN}">` +
     `<rect x="${num(edge)}" y="0" width="2" height="22" fill="#f2b630"/>` +
     `<rect x="${num(plateX)}" y="0" width="${num(plateWidth)}" height="22" fill="url(#s)"/>` +
     `<rect x="${num(plateX)}" y="0" width="${num(plateWidth)}" height="1" fill="#8fb0ff" fill-opacity=".55"/>` +
-    cells +
+    action +
     '</g>'
   const shadow = lettering(KLWD, textX, 10.5 + 0.975, 'fill="#061233" fill-opacity=".75"')
   const letters = lettering(KLWD, textX, 10.5, 'fill="url(#c)" stroke="#061233" stroke-opacity=".6" stroke-width=".33"')
+  const words = lettering(word, actX + 10, 11, kind === 'out' ? 'fill="#ffffff"' : 'fill="#2a1800"')
+  const defs = STUDIO + CHROME + (kind === 'out' ? BAR : GOLD)
 
-  return { svg: svgDocument(width, STUDIO + CHROME + ROW + GOLD, plate + shadow + letters), width, alt: chipAlt(count) }
-}
-
-// The tab: TUNE IN is the lower third's tab in gold; TUNE OUT the ticker
-// clock's blue tab with its gold edge; TUNE IN dimmed when KLWD is full
-export function tab(kind: TabKind): Picture {
-  const word = kind === 'out' ? TUNE_OUT : TUNE_IN
-  const x0 = 1 + HALF
-  const face = 10 + word.width + 10
-
-  if (kind === 'out') {
-    const width = Math.ceil(x0 + 2 + face + HALF + 1)
-    const body =
-      `<g transform="${LEAN}">` +
-      `<rect x="${num(x0)}" y="0" width="2" height="22" fill="#f2b630"/>` +
-      `<rect x="${num(x0 + 2)}" y="0" width="${num(face)}" height="22" fill="url(#b)"/>` +
-      `<rect x="${num(x0 + 2)}" y="0" width="${num(face)}" height="1" fill="#8fb0ff"/>` +
-      '</g>' +
-      lettering(word, x0 + 2 + 10, 11, 'fill="#ffffff"')
-    return { svg: svgDocument(width, BAR, body), width, alt: TAB_ALT.out }
-  }
-
-  const width = Math.ceil(x0 + face + HALF + 1)
-  const body =
-    `<g transform="${LEAN}">` +
-    `<rect x="${num(x0)}" y="0" width="${num(face)}" height="22" fill="url(#g)"/>` +
-    `<rect x="${num(x0)}" y="0" width="${num(face)}" height="1" fill="#ffe08a"/>` +
-    `<rect x="${num(x0)}" y="21" width="${num(face)}" height="1" fill="#b97d0c"/>` +
-    `<rect x="${num(x0)}" y="1" width="${num(face)}" height="1" fill="#ffffff" fill-opacity=".5"/>` +
-    '</g>' +
-    lettering(word, x0 + 10, 11, 'fill="#2a1800"')
-
-  if (kind === 'off') {
-    return { svg: svgDocument(width, GOLD + DIM, `<g opacity=".4" filter="url(#d)">${body}</g>`), width, alt: TAB_ALT.off }
-  }
-  return { svg: svgDocument(width, GOLD, body), width, alt: TAB_ALT.in }
+  return { svg: svgDocument(width, defs, body + shadow + letters + words), width, alt: BAND_ALT[kind] }
 }
 
 // What the band shows for this session
-export function band(state: { tuned: boolean; onAir: number }): { chip: Picture; tab: Picture; kind: TabKind } {
-  const kind: TabKind = state.tuned ? 'out' : state.onAir >= MAX_ON_AIR ? 'off' : 'in'
-  return { chip: chip(state.onAir, state.tuned), tab: tab(kind), kind }
+export function band(state: { tuned: boolean }): { picture: Picture; kind: BandKind } {
+  const kind: BandKind = state.tuned ? 'out' : 'in'
+  return { picture: plate(kind), kind }
 }
 
-// How far the box that holds the tab's button reaches past the tab on each
-// side, in columns
+// How far the box that holds the plate's button reaches past the plate on
+// each side, in columns
 export const REACH = 2
 
-// A mod's Button shows only text, so the tab's button has a blank label: en
-// spaces, about one for every 8 px of the tab. The desktop draws a Button no
+// A mod's Button shows only text, so the plate's button has a blank label: en
+// spaces, about one for every 8 px of the plate. The desktop draws a Button no
 // wider than the Box that holds it and cuts a longer label with an ellipsis,
-// so the label stays short of the tab and its Box reaches REACH columns past
-// the tab on each side, as usage-band's padlock does.
+// so the label stays short of the plate and its Box reaches REACH columns past
+// the plate on each side, as usage-band's padlock does.
 export function blankLabel(width: number): string {
   return ' '.repeat(Math.max(1, Math.floor(width / 8)))
 }

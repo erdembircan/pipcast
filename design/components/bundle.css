@@ -247,6 +247,23 @@
   color: var(--on-air, #ffffff);
 }
 
+/* With more than four sessions the listing shows four a page (Pages in
+   bundle.js). Each row sits in a slot of its own, so the row leaving and
+   the row coming in share it while a page turns */
+.pn-board-slot { position: relative; height: 68px; }
+.pn-board-slot > .pn-row { position: absolute; left: 0; right: 0; top: 0; }
+/* Which page of how many: the ticker clock's blue tab under the pills, at
+   y 422–462, only with two pages or more */
+.pn-board-tab { position: absolute; right: 0; top: 330px; height: 40px; }
+.pn-page { position: absolute; right: 0; top: 0; }
+.pn-page-tab { height: 40px; margin-right: 0; white-space: nowrap; }
+/* A page turn, B · Push: a row leaves to the right as BREAKING NEWS's
+   words leave in its outro, and the next page's row slides in from the
+   left as the lower third does (pn-slide). Each face's delay is set where
+   it is drawn */
+.pn-anim .pn-turn-leave { animation: pn-turn-leave 420ms cubic-bezier(0.65, 0, 0.35, 1) both; }
+.pn-anim .pn-turn-enter { animation: pn-slide 460ms cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+
 /* State pill: the state as one word, INPUT, READY or LIVE */
 .pn-pill {
   flex: none;
@@ -489,6 +506,11 @@
   text-shadow: 0 2px 0 rgba(6, 18, 51, 0.55);
 }
 .pn-review-meta { font: 600 28px/1.05 var(--font-text, "Archivo", "Helvetica Neue", Arial, sans-serif); font-stretch: 92%; color: var(--on-air-muted, #b9c8ee); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* The review's rows a page, each in a slot as the listing's are, and its
+   page tab at the right end of the header, y 90–130 */
+.pn-review-slot { position: relative; height: 72px; }
+.pn-review-slot > .pn-review-row { position: absolute; left: 0; right: 0; top: 0; }
+.pn-review-tab { position: absolute; right: 0; top: 6px; height: 40px; }
 
 /* ---------- The studio: the city through the day, key light, anchor desk ---------- */
 .pn-desk { position: absolute; inset: 0; overflow: hidden; --sky-top: var(--dusk-top, #0b1d4d); --sky-mid: var(--dusk-mid, #3a2d74); --sky-low: var(--dusk-glow, #d9725c); --city: var(--tower, #08112e); --glass: rgba(255, 255, 255, 0.06); }
@@ -571,30 +593,18 @@
 .pn-sound-note { font: 500 14px/20px "IBM Plex Mono", ui-monospace, Menlo, monospace; color: #0a0f1f; }
 
 /* ---------- The band above the prompt: the mod's control inside the Claude desktop app ---------- */
-/* What our hook draws: the chip and a tab, each an Svg picture in the mod at the band's height (band-height), one column apart, drawn at 8px. Nothing else: no status line, no words besides the tab's */
-.pn-band { flex: none; display: flex; align-items: center; gap: 8px; height: var(--band-height, 22px); -webkit-font-smoothing: antialiased; }
-/* The chip: the bug's chrome KLWD on the studio plate, slanted, with a gold edge; then four cells, the listing's four rows */
-.pn-band-chip { flex: none; display: inline-flex; height: var(--band-height, 22px); padding: 0 3px; }
-.pn-band-plate { display: inline-flex; align-items: center; gap: 6px; height: 100%; padding: 0 7px 0 6px; transform: skewX(var(--slant, -12deg)); background: linear-gradient(180deg, var(--studio-top, #1a3f93) 0%, var(--studio-ink, #0b2260) 55%, var(--studio-deep, #061233) 100%); box-shadow: inset 0 1px 0 rgba(143, 176, 255, 0.55), -2px 0 0 var(--gold, #f2b630); }
+/* What our hook draws: one plate, a single Svg picture in the mod at the band's height (band-height), with a blank button laid over it. Nothing else: no count, no status line, no words besides the action's */
+.pn-band { flex: none; display: flex; align-items: center; height: var(--band-height, 22px); padding: 0 3px; -webkit-font-smoothing: antialiased; }
+/* The plate: the bug's chrome KLWD on the studio plate, slanted, with a gold edge, and the action at its end */
+.pn-band-plate { position: relative; display: inline-flex; align-items: center; gap: 6px; height: var(--band-height, 22px); padding: 0 0 0 6px; overflow: hidden; transform: skewX(var(--slant, -12deg)); background: linear-gradient(180deg, var(--studio-top, #1a3f93) 0%, var(--studio-ink, #0b2260) 55%, var(--studio-deep, #061233) 100%); box-shadow: inset 0 1px 0 rgba(143, 176, 255, 0.55), -2px 0 0 var(--gold, #f2b630); }
 .pn-band-mark { font-size: 13px; transform: skewX(calc(var(--slant, -12deg) * -1)); }
-.pn-band-cells { display: inline-flex; gap: 2px; }
-.pn-band-cell { display: block; width: 6px; height: 12px; border-radius: 1px; background: var(--studio-deep, #061233); box-shadow: inset 0 0 0 1px rgba(143, 176, 255, 0.4); }
-.pn-band-cell--on { background: linear-gradient(180deg, var(--row-hi, #5b8be8) 0%, var(--row, #2a57bf) 48%, var(--row-lo, #1d449e) 52%, var(--row-base, #2550b0) 100%); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45); }
-.pn-band-cell--this { background: linear-gradient(180deg, var(--gold-hi, #ffe08a) 0%, var(--gold, #f2b630) 55%, var(--gold-lo, #b97d0c) 100%); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6); }
-/* A suggestion, not decided: each cell in its session's state colour, this session's ringed */
-.pn-band-cell--k { background: linear-gradient(180deg, var(--pn-k-hi) 0%, var(--pn-k) 100%); box-shadow: none; }
-.pn-band-cell--k.pn-band-cell--this { background: linear-gradient(180deg, var(--pn-k-hi) 0%, var(--pn-k) 100%); box-shadow: 0 0 0 1px var(--on-air, #ffffff); }
-/* The tabs at the band's height: TUNE IN is the lower third's tab in gold, TUNE OUT the ticker clock's blue tab */
-.pn-band .pn-band-tab { flex: none; height: var(--band-height, 22px); margin: 0 3px; padding: 0 10px; font: italic 900 12px/1 var(--font-display, "Anybody", "Arial Black", sans-serif); font-stretch: 108%; letter-spacing: 0.02em; white-space: nowrap; }
-.pn-band .pn-l3-tag { border-top-width: 1px; border-bottom-width: 1px; }
-.pn-band .pn-ticker-clock { box-shadow: inset 0 1px 0 var(--bar-edge, #8fb0ff), -2px 0 0 var(--gold, #f2b630); }
-/* KLWD is full: TUNE IN drawn dim, with no Button laid over it */
-.pn-band .pn-band-tab--off { opacity: 0.4; filter: saturate(0.3); }
-/* A suggestion, not decided: this session's pill at the band's size */
-.pn-band-pill { flex: none; display: inline-flex; }
-.pn-band-pill > .pn-pill { padding: 3px 7px; border-radius: 4px; font-size: 11px; line-height: 1.1; }
-/* The build board: each piece outlined */
-.pn-band--parts .pn-band-chip, .pn-band--parts .pn-band-tab { outline: 1px dashed var(--chrome-lo, #7f90b3); outline-offset: 2px; }
+/* The action, parted from the mark by an edge of its own: TUNE IN on the lower third's gold, TUNE OUT on the ticker clock's blue */
+.pn-band-act { display: flex; align-items: center; align-self: stretch; margin-left: 2px; padding: 0 10px; }
+.pn-band-act--in { background: linear-gradient(180deg, var(--gold-hi, #ffe08a) 0%, var(--gold, #f2b630) 55%, var(--gold-lo, #b97d0c) 100%); color: var(--on-gold, #2a1800); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5), -2px 0 0 var(--gold-lo, #b97d0c); }
+.pn-band-act--out { background: linear-gradient(180deg, var(--bar, #1d48a8) 0%, var(--bar-lo, #163a8c) 100%); color: var(--on-air, #ffffff); box-shadow: inset 0 1px 0 var(--bar-edge, #8fb0ff), -2px 0 0 var(--gold, #f2b630); }
+.pn-band-word { display: inline-block; font: italic 900 12px/1 var(--font-display, "Anybody", "Arial Black", sans-serif); font-stretch: 108%; letter-spacing: 0.02em; white-space: nowrap; transform: skewX(calc(var(--slant, -12deg) * -1)); }
+/* The build board: the plate outlined */
+.pn-band--parts .pn-band-plate { outline: 1px dashed var(--chrome-lo, #7f90b3); outline-offset: 2px; }
 
 /* ---------- Review-board furniture: the Claude desktop app's prompt box, sketched. Not ours, never on air ---------- */
 .pn-app { box-sizing: border-box; padding: 24px 40px 30px; font-family: var(--font-app, -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif); }
@@ -630,6 +640,7 @@
 
 /* ---------- Motion ---------- */
 @keyframes pn-slide { from { transform: translateX(-110%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+@keyframes pn-turn-leave { from { transform: translateX(0); opacity: 1; } to { transform: translateX(180px); opacity: 0; } }
 @keyframes pn-glint { 0%, 70% { left: -20%; } 100% { left: 120%; } }
 @keyframes pn-power { 0% { transform: scaleY(0.02); filter: brightness(3); } 60% { transform: scaleY(1.04); filter: brightness(1.3); } 100% { transform: scaleY(1); filter: none; } }
 @keyframes pn-signal { 0% { transform: scale(1); opacity: 0; } 8% { opacity: 1; } 100% { transform: scale(2.5); opacity: 0; } }

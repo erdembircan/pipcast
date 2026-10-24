@@ -35,7 +35,6 @@ import Testing
         let constants = try Self.values(in: "plugin/src/contract/constants.ts")
         let mirrored: [String: String] = [
             "SCHEMA_VERSION": String(Constants.schemaVersion),
-            "MAX_ON_AIR": String(Constants.maxOnAir),
             "HEARTBEAT_MS": String(Int(Constants.heartbeatMs)),
             "STALE_MS": String(Int(Constants.staleMs)),
             "STATION_HEARTBEAT_MS": String(Int(Constants.stationHeartbeatMs)),

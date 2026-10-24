@@ -16,22 +16,15 @@ export const COMMAND_DESCRIPTION = 'Tune this session in to KLWD, or tune it out
 export const REPLY = {
   tunedIn: 'Tuned in to KLWD. It shows when you switch to another app.',
   tunedOut: 'Tuned out of KLWD.',
-  full: 'KLWD is full: four sessions are on air. Tune one out first.',
   cannotStart: 'KLWD could not start. Run /pipcast to try again.',
 } as const
 
 export const TOAST_CANNOT_START = 'Pipcast: KLWD could not start.'
 
-// The band draws pictures; these are what a screen reader reads for them
-
-export function chipAlt(onAir: number): string {
-  return `KLWD: ${onAir} of 4 sessions on air`
-}
-
-export const TAB_ALT = {
-  in: 'Tune in',
-  out: 'Tune out',
-  off: 'Tune in: not available, KLWD is full',
+// The band draws one picture; this is what a screen reader reads for it
+export const BAND_ALT = {
+  in: 'KLWD, Tune in',
+  out: 'KLWD, Tune out',
 } as const
 
 // A session with no title yet goes by its project and the start of its id

@@ -66,8 +66,8 @@ Write like a local newsroom: present tense, active voice, four words or fewer in
 - The stage has four bands, top to bottom: the top band with the KLWD bug (y 24–68); the content, either the listing from y 92 or the anchor desk; the lower third (y 364–460); and the ticker (y 484–540), with the clock at its right end.
 - The bug sits at the title-safe inset (`safe-inset`, x 40), level with the listing. On hover, the close button sits over its first letters. The right end of the top band stays empty for return.
 - At the desk, Clawd sits at x 138, y 211 at 18px cells, behind the desk top at y 328. The desk runs the full width; its chrome and gold lip follows the front edge (y 348 at the sides, 361 at the centre with the trim), above the lower third. The station mug stands left of Clawd and the script lies in front of Clawd. The wall monitor stands at the right, x 556–920.
-- The listing shows four rows at most, 68 tall with 12 between, sorted needs input, ready, working.
-- THE HOUR IN REVIEW keeps the listing's order: its header at y 84, four rows of 72 from y 150 to 462, above the ticker.
+- The listing shows four rows a page, 68 tall with 12 between, sorted needs input, error, ready, working. With more than four sessions a tab under the pills says which page it shows (1 OF 2), on the ticker clock's blue, at y 422–462; four or fewer is one page and no tab.
+- THE HOUR IN REVIEW keeps the listing's order: its header at y 84, four rows of 72 a page from y 150 to 462, above the ticker. With more than four sessions its page tab sits at the right end of the header, y 90–130.
 - The ident's clock starts at the centre and steps to x 250 at the hour, leaving the right half to ON THE HOUR.
 
 ### Motion
@@ -77,6 +77,7 @@ Motion has no token family, so the values live here.
 | Piece | Motion |
 | --- | --- |
 | The board | The ring at the top right sends out its signal: a wave leaves the ring every 3 s and spreads across the studio to two and a half times the ring's size, fading as it goes, 9 s from the ring to gone. The waves keep time with the clock, so they carry on under an outro's fade and never restart when the board comes back |
+| The listing's pages | With more than four sessions a page holds 8 s, then turns: each row leaves to the right as BREAKING NEWS's words leave in its outro (420 ms, fading as it goes), and once it has gone the next page's row slides in from the left as the lower third does (460 ms), rows 110 ms apart from the top, the page tab last. The clock starts when the board appears, so the board always comes back on its first page; what changes while a page is up waits for the next turn. THE HOUR IN REVIEW turns the same way, 10 s a page |
 | Stinger, the intro | Runs on one progress value: a red wave crosses the glass wall and leaves its panes glowing, the chrome words slam in one line after another, and a glint crosses them. No title: the session is named at the desk. 1.4 s, the same for every story |
 | Stinger, the outro | After every desk: the intro's last picture, run out over 1.2 s. A glint crosses the words, the words leave to the right one after the other, the red wave sweeps back across the wall and darkens it, and the open fades away to the board underneath |
 | Ident, on the hour | Runs on one progress value over 7.5 s, from five seconds before the hour: the clock's seconds hand steps once with each pip; on the long pip the minute hand jumps to the hour and a glint crosses the face, then the clock steps left and ON THE HOUR slams in. Nothing runs under it |
@@ -86,7 +87,7 @@ Motion has no token family, so the values live here.
 | Ticker | Crawls right to left at a steady 53 px a second, whatever it carries. Each item keeps its words until it has gone past the tab, and the crawl carries on across cuts; the clock stays put at its right end |
 | Clawd | Moves in whole poses (see Anchor), with a bob of 6px at most |
 
-With reduced motion, all of it stops; the intro and the ident show their last frame, the outros cut straight to the board, and the picture still reads.
+With reduced motion, all of it stops; the intro and the ident show their last frame, the outros cut straight to the board, the listing's pages cut from one to the next on the same clock, and the picture still reads.
 
 ### Sound
 
@@ -105,12 +106,12 @@ On the window, the sound button switches the jingles on and off: sound starts on
 
 - Clawd is pixel art, copied from the engine's own glyphs, and so is the city behind the desk, which follows the clock through morning, afternoon, evening and night (the NewsDesk card). The desk and what stands on it (the station mug, the script) are drawn like the graphics, with gloss and chrome. There are no icons on the stage: states are words on pills (INPUT, ERROR, READY, LIVE). No photographs, no emoji.
 - The window has three controls, close, sound and Back to Claude, shown on hover in the Liquid Glass of macOS's own picture-in-picture: clear glass the picture shows through, a thin rim that catches the light, white glyphs drawn like Apple's, over a light dimming of the picture. The buttons are 44 pt, a third bigger than macOS's. The one under the pointer brightens; nothing pops up, no name and no tooltip. Review boards mimic the glass; the app uses macOS's own material. There is no play, skip or timeline: nothing else sits on the picture.
-- The band above the prompt box carries the station into the Claude desktop app, inside the rounded container the desktop draws round every mod's band: the chip (the bug's chrome KLWD on the studio plate, and four cells, the listing's four rows), and TUNE IN on the lower third's gold tab or TUNE OUT on the ticker clock's blue one. No words besides the tab's: no status line, no on-air or off-air text. Both are pictures with their own ground, so they read the same on the app's light and dark themes. The Band section has the rules.
+- The band above the prompt box carries the station into the Claude desktop app, inside the rounded container the desktop draws round every mod's band: one plate, the bug's chrome KLWD on the studio plate and, at its end, TUNE IN on the lower third's gold or TUNE OUT on the ticker clock's blue. No count and no words besides the action's: no status line, no on-air or off-air text. The plate is a picture with its own ground, so it reads the same on the app's light and dark themes. The Band section has the rules.
 
 ## Using the components
 
 - A frame: `PipNews.Pip` with `width` in pt and `sample` (a scene name) or `scene`. Add `controls` to show close, sound and Back to Claude as they look on hover, `animate` to play.
 - `sample="loop"` plays the board and its stories: board, BREAKING NEWS and a permission ask, the board, then BREAKING NEWS and changes ready for review while the question still waits, and the board with both. `sample="hour"` plays the 15:00 report: the board at 14:59, the ident, the desk, THE HOUR IN REVIEW, the outro, back to the board; `sample="quiet-hour"` plays a quiet hour. `sample="breaking"`, `"breaking-ready"`, `"breaking-complete"` and `"breaking-error"` play one story each as it airs, from the board and back.
-- The parts (`TopBand`, `Ticker`, `SessionBoard`, `StatePill`, `LowerThird`, `OTSBox`, `Stinger`, `Ident`, `HourReview`, `NewsDesk`, `Clawd`) are placed on the 960 × 540 stage. Pass `inline` to show one on its own inside a `.pn-surface` container. `Ticker`, `SessionBoard` and `HourReview` also take `sample`, to draw a scene's data.
-- The band: `PipNews.Band` with `onAir` (0 to 4) and `tuned`. Show it in the app with `PipNews.PromptSketch`, review-board furniture that takes the same props, `theme="dark"` for the app's dark theme, `beside="usage"` for another mod's band beside ours, and `width` for a narrow column.
+- The parts (`TopBand`, `Ticker`, `SessionBoard`, `StatePill`, `LowerThird`, `OTSBox`, `Stinger`, `Ident`, `HourReview`, `NewsDesk`, `Clawd`) are placed on the 960 × 540 stage. Pass `inline` to show one on its own inside a `.pn-surface` container. `Ticker`, `SessionBoard` and `HourReview` also take `sample`, to draw a scene's data (`board-seven` and `review-seven` have seven sessions, two pages). `SessionBoard` and `HourReview` turn their pages only with `animate`; without it they hold their first page.
+- The band: `PipNews.Band` with `tuned`. Show it in the app with `PipNews.PromptSketch`, review-board furniture that takes the same props, `theme="dark"` for the app's dark theme, `beside="usage"` for another mod's band beside ours, and `width` for a narrow column.
 - `PipNews.pipSize(width, height)` gives the window's full size on a screen of that size in pt; `PipNews.pipRange(width, height)` gives its full and smallest sizes.

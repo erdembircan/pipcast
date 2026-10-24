@@ -7,6 +7,9 @@ export const STORY_OUTRO_MS = 1_400
 
 export const IDENT_MS = 7_500
 export const REVIEW_MS = 10_000
+// THE HOUR IN REVIEW shows four rows a page, as the design draws it, and each
+// page runs REVIEW_MS
+export const REVIEW_ROWS = 4
 export const HOUR_OUTRO_MS = 1_600
 
 // With reduced motion the openers show their last picture for this long

@@ -75,7 +75,7 @@ func recordJSON(id: String, tunedInAt: Double, checkedInAt: Double, v: Int = 1) 
         #expect(!isLive(summary(now + 5_001), now: now))
     }
 
-    @Test func onAirIsTheFirstFourLiveByTunedInThenID() {
+    @Test func onAirIsEveryLiveRecordByTunedInThenID() {
         let now = 1_000_000.0
         let live = now - 1_000
         let summaries = [
@@ -86,7 +86,7 @@ func recordJSON(id: String, tunedInAt: Double, checkedInAt: Double, v: Int = 1) 
             SessionSummary(id: "d", tunedInAt: 40, checkedInAt: live),
             SessionSummary(id: "c", tunedInAt: 30, checkedInAt: live),
         ]
-        #expect(onAir(summaries, now: now).map(\.id) == ["a", "b", "c", "d"])
+        #expect(onAir(summaries, now: now).map(\.id) == ["a", "b", "c", "d", "e"])
     }
 
     @Test func onAirOverWholeRecordsKeepsTheirJSON() {

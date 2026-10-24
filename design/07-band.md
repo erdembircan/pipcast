@@ -1,8 +1,8 @@
 # The band
 
-The mod's control inside the Claude desktop app sits in the band directly above the prompt box, where the proof of concept put its **Track session** button. It puts a session on KLWD and takes it off. It is designed on the PiP Newsroom · Band canvas (https://claude.ai/artifact/LrMxrQF2mTCNXeLssgf9j1), with the station's own pieces: the bug's chrome KLWD, the lower third's gold tab and the ticker clock's blue one.
+The mod's control inside the Claude desktop app sits in the band directly above the prompt box, where the proof of concept put its **Track session** button. It puts a session on KLWD and takes it off. It was designed on the PiP Newsroom · Band canvas (https://claude.ai/artifact/LrMxrQF2mTCNXeLssgf9j1) and became one plate on PiP Newsroom · More than four (https://claude.ai/artifact/Jgfrd35WD6unpDQM6v2BoR), with the station's own pieces: the bug's chrome KLWD on its studio plate, the lower third's gold and the ticker clock's blue.
 
-The band is two pieces and no words besides the tab's: no status line, no on-air or off-air text, no explanation (your rule).
+The band is one piece and no words besides the action's: no count, no status line, no on-air or off-air text, no explanation (your rule).
 
 ## The container is the app's
 
@@ -17,7 +17,7 @@ The desktop draws every mod's band inside one container of its own, above the pr
 | Buttons | A mod's buttons are one line of text tall | The app's code |
 | Light theme | `app-band`, a step darker than the ground | Inferred, not measured yet |
 
-Our chip and tab sit on that box, so it is their ground in both themes.
+Our plate sits on that box, so it is its ground in both themes.
 
 ## What it does
 
@@ -26,38 +26,34 @@ Our chip and tab sit on that box, so it is their ground in both themes.
 | TUNE IN | Puts this session on KLWD: its row joins the listing and its stories air. The first session on air brings the window, which shows when you switch to another app | The proof of concept's Track session |
 | TUNE OUT | Takes this session off KLWD: its row leaves the listing. With nothing on air there is no window | The same, Stop tracking |
 | The window's close | Takes every session off at once, and the channel ends. TUNE OUT takes only this one | Frame, "Close stops tracking" |
-| Four at most | The chip's four cells are the listing's four rows. With four on air, a fifth session's TUNE IN is dimmed, with no button over it | Your rule |
-| The slash command | Does what the tab does, from the prompt, as `/session-pip` does in the proof of concept | The proof of concept |
+| No limit | Every session can tune in, so TUNE IN never dims, and the band shows no count | Your rule, on PiP Newsroom · More than four |
+| The slash command | Does what the plate does, from the prompt, as `/session-pip` does in the proof of concept | The proof of concept |
 | A session that ends | /clear, /resume or exit takes its row off the listing; its band shows TUNE IN again | Event desks, "Not tracked" |
 
-## The four states
+## The two states
 
-| State | Chip | Tab |
-| --- | --- | --- |
-| Off air, nothing on KLWD | Four empty cells | TUNE IN |
-| Off air, room on KLWD | One blue cell per session on air | TUNE IN |
-| On air | This session's cell in gold, the others on air in blue | TUNE OUT |
-| KLWD is full | Four blue cells | TUNE IN, dimmed, with no button over it |
+| State | The plate |
+| --- | --- |
+| Off air | KLWD, then TUNE IN on the lower third's gold, however many sessions are on KLWD |
+| On air | KLWD, then TUNE OUT on the ticker clock's blue |
 
-## The pieces
+## The piece
 
 | Piece | In the mod | Size | Look |
 | --- | --- | --- | --- |
-| The chip | One `Svg`, drawn as an image | 22 px tall (`band-height`), about 105 px wide | The bug's KLWD in chrome on the studio plate, slanted, with a gold edge; then four cells: empty (`studio-deep`), on air (the listing's blue), this session (gold). Its `alt`: "KLWD: 3 of 4 sessions on air" |
-| TUNE IN | One `Svg`, with a blank native `Button` laid over it | 22 px tall, about 85 px wide | The lower third's tab in gold, words in `on-gold` (9.4:1). Dimmed when KLWD is full; its `alt` then says so |
-| TUNE OUT | The same | 22 px tall, about 95 px wide | The ticker clock's blue tab with its gold edge, words in `on-air` (8.3:1) |
+| The plate | One `Svg`, drawn as an image, with a blank native `Button` laid over it | 22 px tall (`band-height`); 151 px wide with TUNE IN, 164 px with TUNE OUT | The bug's KLWD in chrome on the studio plate, slanted, with a gold edge; then, parted from the mark by an edge of its own, the action: TUNE IN on the lower third's gold with words in `on-gold` (9.4:1) and a `gold-lo` edge, or TUNE OUT on the ticker clock's blue with words in `on-air` (8.3:1) and a gold edge. Its `alt`: "KLWD, Tune in" or "KLWD, Tune out" |
 
 ## The rules
 
 1. **Desktop only.** The band draws on the desktop surface; on any other it passes on what is beneath unchanged. The slash command works everywhere.
 2. **A survey comes first.** While a survey holds the band (`hasSurvey`), ours steps aside and draws nothing.
-3. **A line of our own.** Another mod may draw the band too. Ours is one line of its own, the chip and the tab and nothing else, under what the other mod drew. That stays exactly as it was drawn, on its own line: we never take it apart, set it in our row or draw over it. Every mod in the band does the same, so each mod has one line.
-4. **Every picture is 22 px tall** (`band-height`), as usage-band's marks are, about a regular macOS button's height.
-5. **A picture loads no fonts and cannot read the theme.** So the words in the chip and the tabs are outlines (or a subset of Anybody embedded in the `Svg`), and each piece carries its own ground, the studio plate or the tab, so it reads the same on the container's light and dark colours.
-6. **A tab is a picture with a blank button over it.** A mod's `Button` shows only text, so each tab gets a `plain` Button with a blank label (en spaces, about one for every 8 px of the tab) laid over it in a `Box` that reaches two columns past the tab on each side, since the desktop draws a Button no wider than its Box and cuts a longer label with an ellipsis. This is usage-band's padlock. The press is the Button's; under the pointer the app inverts it, as it does every plain Button. There is no hover of our own, and nothing pops up: no tooltip, no `<title>`, no card.
+3. **A line of our own.** Another mod may draw the band too. Ours is one line of its own, the plate and nothing else, under what the other mod drew. That stays exactly as it was drawn, on its own line: we never take it apart, set it in our row or draw over it. Every mod in the band does the same, so each mod has one line.
+4. **The picture is 22 px tall** (`band-height`), as usage-band's marks are, about a regular macOS button's height.
+5. **A picture loads no fonts and cannot read the theme.** So the words on the plate are outlines (or a subset of Anybody embedded in the `Svg`), and the plate carries its own ground, so it reads the same on the container's light and dark colours.
+6. **The plate is a picture with a blank button over it.** A mod's `Button` shows only text, so the plate gets a `plain` Button with a blank label (en spaces, about one for every 8 px of the plate) laid over it in a `Box` that reaches two columns past the plate on each side, since the desktop draws a Button no wider than its Box and cuts a longer label with an ellipsis. This is usage-band's padlock. The press is the Button's; under the pointer the app inverts it, as it does every plain Button. There is no hover of our own, and nothing pops up: no tooltip, no `<title>`, no card.
 7. **A screen reader** reads the picture's `alt` and then a button with no name, as with usage-band's padlock. The slash command works without either.
-8. **No text of our own.** Nothing in the band but the chip and the tab; the cells say how full KLWD is and which cell is this session. The two pieces need about 210 px and never shrink, so they fit beside a docked pane.
-9. **Gaps are columns, lines are `md` apart.** One column between the chip and the tab. Between our line and another mod's, the app's own `md` gap, about the room the app leaves above and below the band's first line. The boards draw a column at 8 px; the desktop's own figure is not measured yet.
-10. **Copy.** Caps on the tabs, and nothing else to write.
+8. **No text of our own, and no count.** Nothing in the band but the plate, the same however many sessions are on KLWD. It needs about 165 px and never shrinks, so it fits beside a docked pane.
+9. **Lines are `md` apart.** Between our line and another mod's, the app's own `md` gap, about the room the app leaves above and below the band's first line.
+10. **Copy.** Caps on the action, and nothing else to write.
 
-Two suggestions are on the canvas, not decided: this session's pill beside TUNE OUT, and the cells in each session's state colour.
+The two suggestions the Band canvas left open, this session's pill beside TUNE OUT and cells in each session's state colour, went with the cells: the plate carries no count.

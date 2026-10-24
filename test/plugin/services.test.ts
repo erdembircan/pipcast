@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
 
-import { STALE_MS, defaultHome, storePaths } from '@pipcast/contract'
+import { defaultHome, storePaths } from '@pipcast/contract'
 import type { SessionRecord } from '@pipcast/contract'
 import * as m from '../../plugin/src/core/model.ts'
-import { checkIn, countOnAir, ensureStation, readRecords, recordOf, tuneIn, tuneOut } from '../../plugin/src/core/services.ts'
+import { checkIn, ensureStation, recordOf, tuneIn, tuneOut } from '../../plugin/src/core/services.ts'
 import type { Io, RunResult } from '../../plugin/src/core/services.ts'
 
 const HOME = '/store'
@@ -88,32 +88,6 @@ const stored = (state: Fake): SessionRecord | undefined => {
   return text === undefined ? undefined : (JSON.parse(text) as SessionRecord)
 }
 
-describe('readRecords and countOnAir', () => {
-  it('reads every parseable record and never a .tmp or a broken file', async () => {
-    const state = fake()
-    other(state, 'a', T - 1)
-    other(state, 'b', T - 2)
-    state.files.set(`${paths.sessions}/c.json.tmp`, '{"half":')
-    state.files.set(`${paths.sessions}/d.json`, '{not json')
-    state.files.set(`${paths.sessions}/e.json`, JSON.stringify({ v: 2 }))
-    const records = await readRecords(state.io, HOME)
-    expect(records.map((record) => record.id).sort()).toEqual(['a', 'b'])
-  })
-
-  it('counts the live ones on air, four at most', async () => {
-    const state = fake()
-    for (const [i, id] of ['a', 'b', 'c', 'd', 'e', 'f'].entries()) {
-      other(state, id, T - 100 + i)
-    }
-    other(state, 'stale', T - 200, T - STALE_MS - 1)
-    expect(await countOnAir(state.io, HOME, T)).toBe(4)
-  })
-
-  it('is zero for an empty store', async () => {
-    expect(await countOnAir(fake().io, HOME, T)).toBe(0)
-  })
-})
-
 describe('ensureStation', () => {
   it('makes the binary executable, then launches it with the store and the assets', async () => {
     const state = fake()
@@ -160,57 +134,14 @@ describe('tuneIn', () => {
     expect(state.runs.some((argv) => argv[1] === 'launch')).toBe(true)
   })
 
-  it('is full when four others are on air, and writes nothing', async () => {
+  it('tunes in however many others are on air', async () => {
     const state = fake()
-    for (const [i, id] of ['a', 'b', 'c', 'd'].entries()) {
+    for (const [i, id] of ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j'].entries()) {
       other(state, id, T - 5000 + i)
     }
-    expect(await tuneIn(state.io, mine())).toEqual({ status: 'full' })
-    expect(stored(state)).toBeUndefined()
-    expect(state.runs).toEqual([])
-  })
-
-  it('does not count a stale record or its own', async () => {
-    const state = fake()
-    for (const [i, id] of ['a', 'b', 'c'].entries()) {
-      other(state, id, T - 5000 + i)
-    }
-    other(state, 'gone', T - 9000, T - STALE_MS - 1)
-    const model = mine()
-    state.files.set(paths.session('me'), JSON.stringify(recordOf(model, T - 8000, T - 1000)))
-    expect((await tuneIn(state.io, model)).status).toBe('on')
-  })
-
-  it('loses a race: the record is removed and it is full', async () => {
-    const state = fake()
-    other(state, 'a', T - 5000)
-    other(state, 'b', T - 4000)
-    other(state, 'c', T - 3000)
-    // as it writes, two sessions that tuned in earlier write theirs
-    state.onWrite = (path) => {
-      if (path === paths.session('me')) {
-        other(state, 'x', T - 2000)
-        other(state, 'y', T - 1000)
-      }
-    }
-    expect(await tuneIn(state.io, mine())).toEqual({ status: 'full' })
-    expect(stored(state)).toBeUndefined()
-    expect(state.runs).toEqual([])
-  })
-
-  it('wins a race when it is among the first four', async () => {
-    const state = fake()
-    other(state, 'a', T - 5000)
-    state.onWrite = (path) => {
-      if (path === paths.session('me')) {
-        other(state, 'x', T + 1)
-        other(state, 'y', T + 2)
-        other(state, 'z', T + 3)
-        other(state, 'w', T + 4)
-      }
-    }
-    expect((await tuneIn(state.io, mine())).status).toBe('on')
-    expect(stored(state)).toBeDefined()
+    expect(await tuneIn(state.io, mine())).toEqual({ status: 'on', tunedInAt: T })
+    expect(stored(state)).toMatchObject({ id: 'me', tunedInAt: T, checkedInAt: T })
+    expect(state.runs.some((argv) => argv[1] === 'launch')).toBe(true)
   })
 
   it('removes the record when the station cannot start', async () => {
@@ -236,7 +167,7 @@ describe('checkIn', () => {
   const alive = (state: Fake, heartbeatAt = state.now) =>
     state.files.set(paths.station, JSON.stringify({ v: 1, pid: 1, startedAt: T - 1000, heartbeatAt, version: '1' }))
 
-  it('writes the record with a new checkedInAt and counts who is on air', async () => {
+  it('writes the record with a new checkedInAt', async () => {
     const state = fake()
     other(state, 'a', T - 5000)
     alive(state)
@@ -245,7 +176,7 @@ describe('checkIn', () => {
     state.now = T + 10_000
     alive(state)
     const result = await checkIn(state.io, mine(), T)
-    expect(result).toEqual({ closed: false, onAir: 2 })
+    expect(result).toEqual({ closed: false })
     expect(stored(state)).toMatchObject({ tunedInAt: T, checkedInAt: T + 10_000 })
     expect(state.runs).toEqual([])
   })
@@ -255,7 +186,7 @@ describe('checkIn', () => {
     await tuneIn(state.io, mine())
     state.files.set(paths.control, JSON.stringify({ v: 1, closedAt: T }))
     state.now = T + 10_000
-    expect(await checkIn(state.io, mine(), T)).toEqual({ closed: true, onAir: 0 })
+    expect(await checkIn(state.io, mine(), T)).toEqual({ closed: true })
     expect(stored(state)).toBeUndefined()
   })
 
