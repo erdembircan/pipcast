@@ -7,6 +7,7 @@
 - Never edit `plugin/` by hand. The mod is in `packages/mod`, with its manifest in `packages/mod/plugin.json`; the contract it shares with the station and the broadcast is in `packages/contract`; the broadcast is in `packages/director` and `packages/renderer`; the station is in `station/`.
 - After changing any of them, run `scripts/build.sh` and commit what it builds with the change. CI builds again and fails when the result differs from what is committed.
 - A change to `station/Sources` or `scripts/build-station.sh` means a new station binary, which only builds on a Mac. Run `scripts/build.sh` after the last such change, then commit.
+- A change to the icon's drawing, in `scripts/build-icon.mjs` or in a token or letter outline it takes in, means new PNGs of the icon and its layers, which only render on a Mac with Chrome. Run `scripts/build.sh` there after the last such change, then commit.
 - Keep sources, tests and tools out of `plugin/`. A new file the plugin needs goes in `SHIPS` in `scripts/build-plugin.mjs`, and in the build step that makes it.
 - Code in `packages/mod/src` and `packages/contract/src` imports with relative paths only: the kit tests run against the built plugin in a folder of their own, where an alias such as `@pipcast/contract` resolves to nothing.
 

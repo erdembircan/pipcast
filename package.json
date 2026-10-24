@@ -15,6 +15,7 @@
     "build:web": "node scripts/build-web.mjs",
     "build:jingles": "node scripts/render-jingles.mjs",
     "build:band-art": "node scripts/build-band-art.mjs",
+    "build:icon": "node scripts/build-icon.mjs",
     "build:plugin": "node scripts/build-plugin.mjs",
     "render:fixtures": "node scripts/render-fixtures.mjs",
     "render:band": "node scripts/render-band.mjs",

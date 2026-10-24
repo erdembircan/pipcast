@@ -221,12 +221,12 @@ An install copies `plugin/`, the folder the marketplace names, as it is. Claude 
 | `hooks/register.js` | `packages/mod/src` and `packages/contract/src`, bundled into one ES module |
 | `hooks/hooks.json` | Written by the build: it names `register.js` |
 | `.claude-plugin/plugin.json`, `types/index.d.ts` | `packages/mod/plugin.json` and `packages/mod/types/index.d.ts`, copied |
-| `assets/icon.png`, `LICENSE` | `assets/icon-512.png` and `LICENSE`, copied |
+| `assets/icon.png`, `LICENSE` | `assets/icon-512.png`, rendered on a Mac from the icon `scripts/build-icon.mjs` draws, and `LICENSE`, copied |
 | `station/pipcast-station` | `station/`, built on a Mac |
 | `station/web` | `packages/renderer`, `packages/director`, `packages/contract`, `design/components` and `assets/fonts` |
 | `station/sounds` | The design system's scores in `design/components/bundle.js`, rendered on a Mac |
 
-Everything else stays on the development side of that line: the TypeScript sources, the unit tests in each package's `test/`, the kit tests in `packages/mod/kit`, the type configurations, the scripts, and the stamps in `scripts/build.d` that say which sources the station binary and the jingles were built from.
+Everything else stays on the development side of that line: the TypeScript sources, the unit tests in each package's `test/`, the kit tests in `packages/mod/kit`, the type configurations, the scripts, the icon's layers in `assets/icon-layers`, and the stamps in `scripts/build.d` that say which sources the station binary, the jingles and the icon's PNGs were built from.
 
 The bundle is an ES module that imports `claude-code`, with its JSX compiled against the engine's `h` and `Fragment`, and it is never minified: `claude plugin validate` reads a hooks module's source, and it finds the same hooks, calls, environment reads and state keys in the bundle as in the sources. Its paths are relative to the repository, so it builds the same on any machine.
 
@@ -240,13 +240,13 @@ Three checks hold the line:
 
 | Script | What it does |
 | --- | --- |
-| `scripts/build.sh` | Builds everything an install gets into `plugin/`: the station binary, the web page, the jingles, and the mod's bundle with its manifest, state contract, icon and license. On the way it writes the band's artwork into `packages/mod/src/core`, which the bundle takes in. Its last step checks that `plugin/` holds exactly what ships |
+| `scripts/build.sh` | Builds everything an install gets into `plugin/`: the station binary, the web page, the jingles, and the mod's bundle with its manifest, state contract, icon and license. On the way it writes the band's artwork into `packages/mod/src/core`, which the bundle takes in, and draws the icon in layers into `assets`. Its last step checks that `plugin/` holds exactly what ships |
 | `scripts/test.sh` | Lint, types, the unit tests, the station's Swift tests, the built plugin's manifest and the mod's kit tests against it on the engine bundled with the desktop app, and `scripts/live.sh` in a throwaway copy of the repository |
 | `scripts/verify.sh` | A real headless session tunes in and out, and a witness asks the window server where the window is, how opaque it shows with **Transparent window** on and off, and whether it ever took the keyboard. Another is renamed on air, off air and after the window's close, and its record has to follow each time. One more, with nothing saved for **Tune in every new session**, which leaves it on, stays off the air until a stand-in for the desktop app shows it, then tunes in by itself, and again after a `/clear`; the sessions that tune in have to write **Transparent window** to `options.json`. An install into a throwaway configuration has to hold exactly the files in `plugin/`, with no source or test among them. There `/pipcast auto` has to say **Tune in every new session** is on before anything is saved; then `/pipcast auto` and `/pipcast transparency` turn both settings on and off, and each value has to land where Claude Code keeps plugin options, the second in `options.json` too |
 | `scripts/capture-controls.sh` | Shows the real broadcast with the controls on and saves the station's own picture of its window to `artifacts/station/controls.png`, for checking the glass by eye |
 | `scripts/live.sh` | Shows or changes what the desktop app runs: the live checkout beside the clone, which the `pipcast` marketplace points at. `setup` makes it; `pr <number>`, a branch or a commit puts that in the app; `master` puts master back |
 
-CI runs the lint, the types and the unit tests on every pull request and on master, then runs `scripts/build.sh` and fails when what it builds differs from what is committed, or when `plugin/` holds a file the build does not make. The binary and the jingles are built on a Mac, so on CI their steps only compare the stamps in `scripts/build.d` with the sources, and fail when a stamp names other sources.
+CI runs the lint, the types and the unit tests on every pull request and on master, then runs `scripts/build.sh` and fails when what it builds differs from what is committed, or when `plugin/` holds a file the build does not make. The binary, the jingles and the icon's PNGs are built on a Mac, so on CI their steps only compare the stamps in `scripts/build.d` with the sources, and fail when a stamp names other sources.
 
 ## Decisions
 
