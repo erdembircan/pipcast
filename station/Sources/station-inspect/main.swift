@@ -55,8 +55,9 @@ func windows(options: CGWindowListOption) -> [Window] {
     }
 }
 
+/// The station's windows: the window at the status-bar level, the handle and the tab one above it.
 func stationWindows(_ pid: Int32, options: CGWindowListOption = [.optionOnScreenOnly]) -> [Window] {
-    windows(options: options).filter { $0.pid == pid && $0.layer == stationLevel }
+    windows(options: options).filter { $0.pid == pid && ($0.layer == stationLevel || $0.layer == stationLevel + 1) }
 }
 
 /// The station's windows that are the window itself: wider than 100 pt. The handle's panel is narrower, and is on

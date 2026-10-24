@@ -128,6 +128,7 @@ final class StationController: NSObject, InteractionDelegate, WKNavigationDelega
         ) { [weak self] _ in
             self?.keepOffOwnSpaces()
             self?.updateVisibility()
+            self?.keepOnActiveSpace()
         }
         NotificationCenter.default.addObserver(
             forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main
@@ -310,6 +311,7 @@ final class StationController: NSObject, InteractionDelegate, WKNavigationDelega
                 panel.animationBehavior = .default
                 panel.orderFrontRegardless()
             }
+            keepOnActiveSpace()
             keepOffOwnSpaces()
             // The window server puts a window that has just come on screen on its Spaces a moment later.
             DispatchQueue.main.async { [weak self] in self?.keepOffOwnSpaces() }
@@ -319,8 +321,7 @@ final class StationController: NSObject, InteractionDelegate, WKNavigationDelega
             // into the side.
             finishSlide()
             act(.hidden)
-            // At once: AppKit's fade would leave the window on screen for a quarter of a second more. The tab
-            // leaves the window first: ordering a parent out takes its children with it.
+            // At once: AppKit's fade would leave the window on screen for a quarter of a second more. The tab goes too.
             hideTab()
             panel.animationBehavior = .none
             panel.orderOut(nil)
@@ -372,6 +373,25 @@ final class StationController: NSObject, InteractionDelegate, WKNavigationDelega
                 lastSpacesLines[panel.windowNumber] = line
             }
         }
+    }
+
+    /// Puts the window, or the tab, back on every Space when the window server has left it off the one you are on: on
+    /// 24 October it kept the window on one desktop alone. Clearing `canJoinAllSpaces`, committing that, and setting it
+    /// again makes AppKit put a window on every Space; without the commit in between AppKit sees no change. Claude's own
+    /// full-screen Spaces are taken off it again right after. Called as the window shows and each time you switch Spaces.
+    private func keepOnActiveSpace() {
+        guard isShown == true, slide == nil else { return }
+        var moved = false
+        for (window, name) in [(panel as NSPanel, "window"), (tab as NSPanel, "tab")]
+        where window.isVisible && !window.isOnActiveSpace {
+            window.collectionBehavior.remove(.canJoinAllSpaces)
+            CATransaction.flush()
+            window.collectionBehavior.insert(.canJoinAllSpaces)
+            CATransaction.flush()
+            log.write("\(name) back on every Space: it was off the one you are on")
+            moved = true
+        }
+        if moved { keepOffOwnSpaces() }
     }
 
     /// With `PIPCAST_SELF_CAPTURE` set to a file path: once, 1.5 s after the window is first shown, shows the controls
@@ -435,6 +455,11 @@ final class StationController: NSObject, InteractionDelegate, WKNavigationDelega
                 context.duration = 0.2
                 context.timingFunction = CAMediaTimingFunction(name: .easeOut)
                 panel.animator().setFrame(frame, display: true)
+                // The handle is attached to nothing: it makes the same move.
+                if tab.isVisible && model.mode != .minimized {
+                    let side = Minimize.side(of: frame, visible: screen.visibleFrame)
+                    tab.animator().setFrame(Minimize.handle(on: frame, side: side), display: true)
+                }
             }, completionHandler: { [weak self] in
                 self?.panel.invalidateShadow()
                 self?.placeHandle()
@@ -526,10 +551,7 @@ final class StationController: NSObject, InteractionDelegate, WKNavigationDelega
             tab.setFrame(Minimize.handle(on: panel.frame, side: side), display: true)
             tab.handle.show(docked: 0, side: side)
             docked = 0
-            if tab.parent == nil {
-                tab.alphaValue = 0
-                panel.addChildWindow(tab, ordered: .above)
-            }
+            if !tab.isVisible { tab.alphaValue = 0 }
             tab.orderFrontRegardless()
             setAlpha(1)
         } else if tab.isVisible {
@@ -539,17 +561,16 @@ final class StationController: NSObject, InteractionDelegate, WKNavigationDelega
     }
 
     /// Puts the hover handle where the window is now, on the inner edge of the side it would go to, so it follows a
-    /// drag across the middle of the screen, a resize and the snap into a corner. Nothing while it is not on the window.
+    /// drag across the middle of the screen, a resize and the snap into a corner. Nothing while it is not shown on the window.
     private func placeHandle() {
-        guard slide == nil, tab.parent === panel else { return }
+        guard slide == nil, model.mode != .minimized, tab.isVisible else { return }
         let side = Minimize.side(of: panel.frame, visible: currentScreen().visibleFrame)
         tab.setFrame(Minimize.handle(on: panel.frame, side: side), display: true)
         tab.handle.show(docked: 0, side: side)
     }
 
-    /// Takes the tab off the window and off the screen.
+    /// Takes the tab off the screen.
     private func hideTab() {
-        panel.removeChildWindow(tab)
         tab.orderOut(nil)
     }
 
@@ -622,8 +643,7 @@ final class StationController: NSObject, InteractionDelegate, WKNavigationDelega
         slideScreen = screen
         slideStart = now
 
-        // The tab leaves the window and moves on its own; a press on the window does nothing meanwhile.
-        panel.removeChildWindow(tab)
+        // The tab moves on its own; a press on the window does nothing meanwhile.
         chrome.interaction.isEnabled = false
         apply(next.frame(at: 0), of: next)
         if running == nil {
@@ -695,8 +715,6 @@ final class StationController: NSObject, InteractionDelegate, WKNavigationDelega
             tab.handle.show(docked: 0, side: slide.side)
             tab.alphaValue = 1
             docked = 0
-            // On the window while it is out, so it rides drags and the snap into a corner.
-            panel.addChildWindow(tab, ordered: .above)
             // The page is told at once that the window is out.
             sendSnapshot()
         }
