@@ -4,8 +4,9 @@
 import { errorWords } from '../contract/copy.ts'
 import { hourKey } from '../contract/format.ts'
 import { trimRecord } from '../contract/validate.ts'
-import type { SessionRecord, SessionState, Story } from '../contract/types.ts'
+import type { SessionRecord, SessionState, Story, UsageLimit } from '../contract/types.ts'
 import type { Booking } from './diffstat.ts'
+import { keepLimits } from './limits.ts'
 import { stillWorking } from './shells.ts'
 import type { Shell, ShellState } from './shells.ts'
 import type { Waiting } from './wake.ts'
@@ -109,6 +110,7 @@ export function newModel(id: string, project: string, fallback: string, now: num
       stories: [],
       activity: [],
       hours: [],
+      limits: [],
     }),
     seq: 0,
     turn: emptyTurn(),
@@ -265,7 +267,7 @@ export function aborted(m: SessionModel, now: number): SessionModel {
   return withRecord(m, withState(m.record, 'ready', now), { turn: { ...m.turn, ended: true }, waitingOn: null, tally: emptyTally(), held: null })
 }
 
-// After a reload: the stories and hours the session's own record kept, and
+// After a reload: the stories, hours and usage limits the session's own record kept, and
 // story numbers that carry on after its newest, which the station has seen
 export function restored(m: SessionModel, own: SessionRecord): SessionModel {
   const prefix = `${m.record.id}:`
@@ -278,7 +280,16 @@ export function restored(m: SessionModel, own: SessionRecord): SessionModel {
       }
     }
   }
-  return withRecord(m, { ...m.record, stories: own.stories, hours: own.hours }, { seq })
+  return withRecord(m, { ...m.record, stories: own.stories, hours: own.hours, limits: own.limits ?? [] }, { seq })
+}
+
+// A reading of the account's usage limits: each limit it holds replaces the
+// one the record kept of its kind
+export function measured(m: SessionModel, read: readonly UsageLimit[]): SessionModel {
+  if (read.length === 0) {
+    return m
+  }
+  return withRecord(m, { ...m.record, limits: keepLimits(m.record.limits ?? [], read) })
 }
 
 function withTitles(m: SessionModel, titles: Titles): SessionModel {

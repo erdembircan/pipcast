@@ -15,6 +15,7 @@ import type { SessionRecord, Snapshot, Story } from '@pipcast/contract'
 import type { Scene, Session, TickerItem } from '@pipcast/design'
 
 import { movedOn } from './story.ts'
+import { limitMeters } from './limits.ts'
 import { AFTER_REPORT_MS, BREAKING_MS, HOUR_MS } from './timing.ts'
 import type { BoardState } from './types.ts'
 
@@ -186,5 +187,8 @@ export function boardScene(now: number, snapshot: Snapshot | null, state: BoardS
     project: session.project,
     state: session.state,
   }))
-  return { mode: 'board', clock: clock(now), sessions, ticker: boardTicker(now, snapshot, state) }
+  const scene: Scene = { mode: 'board', clock: clock(now), sessions, ticker: boardTicker(now, snapshot, state) }
+  // With no reading, no meters: the board as it always was
+  const limits = limitMeters(snapshot.sessions, now)
+  return limits.length === 0 ? scene : { ...scene, limits }
 }

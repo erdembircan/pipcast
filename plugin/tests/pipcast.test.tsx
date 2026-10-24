@@ -2,7 +2,7 @@ import type { On } from 'claude-code'
 import type { Engine } from 'claude-code/testing'
 import { expect, test } from 'claude-code/testing'
 
-import { ACTIVITY_WRITE_MS } from '../src/contract/constants.ts'
+import { ACTIVITY_WRITE_MS, HEARTBEAT_MS } from '../src/contract/constants.ts'
 import { BAND_ALT, ERROR_WORDS, OPTION_REPLY, REPLY, TOAST_CANNOT_START, optionState } from '../src/contract/copy.ts'
 import { hourKey } from '../src/contract/format.ts'
 import { TITLE_CHECK_MS } from '../src/core/title.ts'
@@ -251,6 +251,66 @@ scenario('a station that will not start leaves a toast and no record', { launchE
   await ui.unmount()
 
   expect((await tuneIn($)).text).toBe(REPLY.cannotStart)
+})
+
+const FIVE_HOUR = { kind: 'five_hour', percentUsed: 42, resetsAt: '2026-10-21T18:00:00Z' }
+const SEVEN_DAY = { kind: 'seven_day', percentUsed: 61.4, resetsAt: '2026-10-24T09:00:00Z' }
+
+// Claude Code measuring the session, with these windows reported
+const measuredWith = ($: Engine, rateLimits: { kind: string; percentUsed: number; resetsAt?: string }[]) =>
+  $.session.measure({ context: { window: 200_000 }, rateLimits, changed: ['rateLimits'] } as never)
+
+scenario('tuning in writes the account\'s usage limits the engine has', { limits: [FIVE_HOUR, SEVEN_DAY] }, async (w, $) => {
+  await tuneIn($)
+  expect(w.record()?.limits).toEqual([
+    { kind: 'session', percentUsed: 42, resetsAt: Date.parse('2026-10-21T18:00:00Z'), at: T0 },
+    { kind: 'week', percentUsed: 61.4, resetsAt: Date.parse('2026-10-24T09:00:00Z'), at: T0 },
+  ])
+})
+
+scenario('a reply that moves a limit writes the record at once', { limits: [FIVE_HOUR, SEVEN_DAY] }, async (w, $) => {
+  await tuneIn($)
+  await w.clock.advance(1000)
+  await measuredWith($, [{ ...FIVE_HOUR, percentUsed: 43 }, SEVEN_DAY])
+  const limits = w.record()?.limits
+  expect(limits?.[0]).toEqual({ kind: 'session', percentUsed: 43, resetsAt: Date.parse('2026-10-21T18:00:00Z'), at: T0 + 1000 })
+  expect(limits?.[1]?.at).toBe(T0 + 1000)
+})
+
+scenario('a reply that moves only the time leaves the record to the heartbeat', { limits: [FIVE_HOUR, SEVEN_DAY] }, async (w, $) => {
+  await tuneIn($)
+  await w.clock.advance(1000)
+  await measuredWith($, [FIVE_HOUR, SEVEN_DAY])
+  expect(w.record()?.limits?.map((limit) => limit.at)).toEqual([T0, T0])
+  await w.clock.advance(HEARTBEAT_MS - 1000)
+  expect(w.record()?.limits?.map((limit) => limit.at)).toEqual([T0 + 1000, T0 + 1000])
+})
+
+scenario('a limit the engine stops reporting stays on the record', { limits: [FIVE_HOUR, SEVEN_DAY] }, async (w, $) => {
+  await tuneIn($)
+  await w.clock.advance(1000)
+  await measuredWith($, [{ ...SEVEN_DAY, percentUsed: 62 }])
+  const limits = w.record()?.limits
+  expect(limits?.[0]).toEqual({ kind: 'session', percentUsed: 42, resetsAt: Date.parse('2026-10-21T18:00:00Z'), at: T0 })
+  expect(limits?.[1]).toEqual({ kind: 'week', percentUsed: 62, resetsAt: Date.parse('2026-10-24T09:00:00Z'), at: T0 + 1000 })
+})
+
+scenario('a gateway\'s spend limit is not on the record', { limits: [{ kind: 'spend_limit', percentUsed: 120 }] }, async (w, $) => {
+  await tuneIn($)
+  expect(w.record()?.limits).toEqual([])
+})
+
+scenario('an account with no limits writes none', {}, async (w, $) => {
+  await tuneIn($)
+  expect(w.record()?.limits).toEqual([])
+})
+
+scenario('limits read before tuning in are on the first write', {}, async (w, $) => {
+  await w.clock.advance(1000)
+  await measuredWith($, [FIVE_HOUR, SEVEN_DAY])
+  await tuneIn($)
+  expect(w.record()?.limits?.map((limit) => limit.at)).toEqual([T0 + 1000, T0 + 1000])
+  expect(w.record()?.limits?.map((limit) => limit.percentUsed)).toEqual([42, 61.4])
 })
 
 scenario('turn.start writes working', {}, async (w, $) => {

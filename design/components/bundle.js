@@ -643,6 +643,44 @@
     return h('span', { className: 'pn-ticker-clock pn-page-tab' }, h('span', null, (page + 1) + ' OF ' + pages));
   }
 
+  /* The account's usage limits under the listing, as chosen on PiP Newsroom ·
+     Usage limits: SESSION, Claude's five-hour window, then WEEK, its
+     seven-day one. Each is its name in the ticker's gold caps, a meter filled
+     to the share used, and the figure, a whole percent. usage-band's steps in
+     the station's colours: from 70% the meter and the figure turn the lower
+     third's gold, from 90% BREAKING's red. They sit on the page tab's line,
+     the tab keeping the right end, and stay put while the pages turn. */
+  var LIMITS = [
+    { kind: 'session', label: 'SESSION', name: 'Session limit' },
+    { kind: 'week', label: 'WEEK', name: 'Weekly limit' }
+  ];
+  function limitStep(percent) {
+    return percent >= 90 ? 'top' : (percent >= 70 ? 'high' : null);
+  }
+  function LimitMeters(props) {
+    var given = props.limits || [];
+    var meters = [];
+    LIMITS.forEach(function (limit) {
+      var found = null;
+      given.forEach(function (meter) {
+        if (meter && meter.kind === limit.kind) { found = meter; }
+      });
+      if (!found) { return; }
+      var percent = Math.max(0, Math.min(100, Math.round(num(found.percent, 0))));
+      var step = limitStep(percent);
+      meters.push(h('span', {
+        key: limit.kind,
+        className: cx('pn-limit', step && 'pn-limit--' + step),
+        role: 'img',
+        'aria-label': limit.name + ', ' + percent + '% used'
+      },
+      h('span', { className: 'pn-ticker-lead' }, limit.label),
+      h('span', { className: 'pn-limit-track' }, h('i', { className: 'pn-limit-fill', style: { width: percent + '%' } })),
+      h('span', { className: 'pn-limit-figure' }, percent + '%')));
+    });
+    return meters.length ? h('div', { className: 'pn-board-limits' }, meters) : null;
+  }
+
   /* The listing, as the first station sketch drew it: a glossy row per
      session, its project on a plate, its title, and its state on a pill,
      four rows a page (Pages, above). `animate` turns the pages; without it
@@ -668,7 +706,8 @@
           h(StatePill, { key: 'pill', state: s.state })
         ];
       }),
-      pageTab(view, 'pn-board-tab'));
+      pageTab(view, 'pn-board-tab'),
+      h(LimitMeters, { limits: props.limits || scene.limits }));
   }
 
   /* The lower third. Every story wears the red BREAKING tab; only the hour
@@ -1244,7 +1283,7 @@
       var back = scene.board || {};
       parts.push(h('div', { key: 'under', className: 'pn-board-under', style: { position: 'absolute', left: 0, top: 0, width: STAGE_W + 'px', height: STAGE_H + 'px', zIndex: 0 } },
         animate ? h(Signal) : null,
-        h(SessionBoard, { sessions: back.sessions }),
+        h(SessionBoard, { sessions: back.sessions, limits: back.limits }),
         h(Ticker, { items: back.ticker, time: back.clock, animate: animate })));
       parts.push(scene.open === 'hour'
         ? h(Ident, { key: 'id-out', outro: true, hour: scene.hour, progress: scene.progress, animate: animate })
@@ -1255,7 +1294,7 @@
       parts.push(h(HourReview, { key: 'rv', rows: scene.rows, span: scene.span, label: scene.label, animate: animate }));
     } else {
       if (animate) { parts.push(h(Signal, { key: 'signal' })); }
-      parts.push(h(SessionBoard, { key: 'board', sessions: scene.sessions, animate: animate }));
+      parts.push(h(SessionBoard, { key: 'board', sessions: scene.sessions, limits: scene.limits, animate: animate }));
     }
     parts.push(h(TopBand, { key: 'top' }));
     if (mode !== 'stinger' && mode !== 'outro' && mode !== 'ident') {
@@ -1764,6 +1803,13 @@
   SAMPLES['brk-outro-2'] = outroOf(SAMPLES['board-needs-you'], 0.8);
   SAMPLES['hour-outro-1'] = outroOf(SAMPLES['hour-return'], 0.4, 'hour', '15:00');
   SAMPLES['hour-outro-2'] = outroOf(SAMPLES['hour-return'], 0.8, 'hour', '15:00');
+
+  /* The account's usage limits under the listing: well inside both on the
+     board of every state; past each step on the board of two pages, beside
+     its page tab; and on the board under an outro */
+  SAMPLES['board-limits'] = Object.assign({}, SAMPLES['board-every-state'], { limits: [{ kind: 'session', percent: 42 }, { kind: 'week', percent: 61 }] });
+  SAMPLES['board-limits-near'] = Object.assign({}, SAMPLES['board-seven'], { limits: [{ kind: 'session', percent: 74 }, { kind: 'week', percent: 92 }] });
+  SAMPLES['limits-outro'] = outroOf(SAMPLES['board-limits'], 0.8);
 
   var RUNS = {
     /* The board and its stories, as they air: a question, the board, then a

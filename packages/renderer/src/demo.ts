@@ -61,6 +61,14 @@ function newSessions(now: number): SessionRecord[] {
       stories: [],
       activity: text === undefined ? [] : [{ at: now, text: text.slice(prefix.length) }],
       hours: [],
+      // The first session read the account's usage limits a moment ago
+      limits:
+        index === 0
+          ? [
+              { kind: 'session' as const, percentUsed: 42, resetsAt: now + 2 * 60 * MINUTE, at: now },
+              { kind: 'week' as const, percentUsed: 61, resetsAt: now + 3 * 24 * 60 * MINUTE, at: now },
+            ]
+          : [],
     }
   })
 }

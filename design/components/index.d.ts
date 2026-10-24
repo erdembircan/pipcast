@@ -56,6 +56,8 @@ export interface Scene {
   /** 24-hour clock: "14:32". */
   clock?: string;
   sessions?: Session[];
+  /** The board: the account's usage limits, on meters under the listing; none before a session has read them. */
+  limits?: LimitMeter[];
   event?: NewsEvent;
   act?: ClawdAct;
   ticker?: TickerItem[];
@@ -85,6 +87,12 @@ export interface HourRow {
   state: SessionState;
   /** One short detail after the state word: "4 min", "+182 −40". */
   detail?: string;
+}
+
+/** One of the account's usage limits on the board: `session`, Claude's five-hour window, or `week`, its seven-day window, and the share used, a whole percent from 0 to 100. */
+export interface LimitMeter {
+  kind: 'session' | 'week';
+  percent: number;
 }
 
 export interface RunStep { scene: Scene; dur: number }
@@ -166,7 +174,7 @@ export interface IdentProps { hour?: string; words?: string[]; progress?: number
 
 export interface HourReviewProps { rows?: HourRow[]; span?: string; sample?: string; label?: string; inline?: boolean; /** Turns the pages, 10 s each; without it the review holds its first page. */ animate?: boolean }
 
-export interface SessionBoardProps { sessions?: Session[]; sample?: string; sort?: boolean; inline?: boolean; /** Turns the pages, 8 s each; without it the board holds its first page. */ animate?: boolean }
+export interface SessionBoardProps { sessions?: Session[]; sample?: string; sort?: boolean; inline?: boolean; /** Turns the pages, 8 s each; without it the board holds its first page. */ animate?: boolean; /** The account's usage limits, on meters under the listing beside the page tab: SESSION, then WEEK. */ limits?: LimitMeter[] }
 
 /** The listing's state pill: INPUT, READY or LIVE. */
 export interface StatePillProps { state: SessionState; label?: string }

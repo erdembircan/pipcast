@@ -6,6 +6,7 @@ import { MAX_ACTIVITY, MAX_HOURS, MAX_STORIES, STALE_MS, STATION_STALE_MS } from
 import type {
   Activity,
   HourStats,
+  LimitKind,
   Quadrant,
   SessionRecord,
   SessionState,
@@ -15,11 +16,13 @@ import type {
   StationStatus,
   Story,
   StoryKind,
+  UsageLimit,
 } from './types.ts'
 
 const SESSION_STATES: readonly string[] = ['working', 'needs-input', 'ready', 'error']
 const STORY_KINDS: readonly string[] = ['needs-input', 'ready', 'complete', 'error']
 const QUADRANTS: readonly string[] = ['top-left', 'top-right', 'bottom-left', 'bottom-right']
+const LIMIT_KINDS: readonly string[] = ['session', 'week']
 const HOUR_KEY = /^\d{4}-\d{2}-\d{2}T\d{2}$/
 
 // How far ahead of now a check-in may be before it is not believed
@@ -47,6 +50,10 @@ function isStoryKind(value: unknown): value is StoryKind {
 
 function isQuadrant(value: unknown): value is Quadrant {
   return typeof value === 'string' && QUADRANTS.includes(value)
+}
+
+function isLimitKind(value: unknown): value is LimitKind {
+  return typeof value === 'string' && LIMIT_KINDS.includes(value)
 }
 
 function parseStory(value: unknown): Story | null {
@@ -97,6 +104,17 @@ function parseHour(value: unknown): HourStats | null {
   return { hour, added, removed, files }
 }
 
+function parseLimit(value: unknown): UsageLimit | null {
+  if (!isObject(value)) {
+    return null
+  }
+  const { kind, percentUsed, resetsAt, at } = value
+  if (!isLimitKind(kind) || !isNumber(percentUsed) || !isNumber(at)) {
+    return null
+  }
+  return { kind, percentUsed, resetsAt: isNumber(resetsAt) ? resetsAt : null, at }
+}
+
 function parseList<T>(value: unknown, parseItem: (item: unknown) => T | null): T[] {
   if (!Array.isArray(value)) {
     return []
@@ -109,6 +127,13 @@ function parseList<T>(value: unknown, parseItem: (item: unknown) => T | null): T
     }
   }
   return out
+}
+
+// A record's usage limits: the well-formed ones it holds, and none when it
+// holds none. The broadcast reads them through this too, since the station
+// hands each record over as the store has it
+export function parseLimits(value: unknown): UsageLimit[] {
+  return parseList(value, parseLimit)
 }
 
 export function parseSessionRecord(value: unknown): SessionRecord | null {
@@ -134,6 +159,7 @@ export function parseSessionRecord(value: unknown): SessionRecord | null {
     stories: parseList(value.stories, parseStory),
     activity: parseList(value.activity, parseActivity),
     hours: parseList(value.hours, parseHour),
+    limits: parseLimits(value.limits),
   }
 }
 

@@ -49,6 +49,21 @@ export interface HourStats {
   files: number
 }
 
+// The account's usage limits: Claude's five-hour window is the session's
+// limit, its seven-day window the week's
+export type LimitKind = 'session' | 'week'
+
+// One limit as a session last read it
+export interface UsageLimit {
+  kind: LimitKind
+  // How much of the window is used, 0 to 100, as the engine reports it
+  percentUsed: number
+  // When the window resets, in ms; null when the engine gives no time
+  resetsAt: number | null
+  // When the session read it
+  at: number
+}
+
 export interface SessionRecord {
   v: 1
   id: string
@@ -61,6 +76,9 @@ export interface SessionRecord {
   stories: Story[]
   activity: Activity[]
   hours: HourStats[]
+  // The account's usage limits as this session last read them; none on a
+  // record written before they were read
+  limits?: UsageLimit[]
 }
 
 export interface StationStatus {

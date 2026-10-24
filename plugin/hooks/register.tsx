@@ -13,6 +13,7 @@ import { editCounts } from '../src/core/diffstat.ts'
 import type { Booking } from '../src/core/diffstat.ts'
 import { FILE_TOOLS, MAX_FOLDERS, NOTHING, agentMetaPath, look, parseAgentMeta, readTree, remember, topOf } from '../src/core/ledger.ts'
 import type { Reading } from '../src/core/ledger.ts'
+import { limitsMoved, readLimits } from '../src/core/limits.ts'
 import * as record from '../src/core/model.ts'
 import type { SessionModel } from '../src/core/model.ts'
 import { TRANSPARENT_KEY, needsSharing, parseRequest } from '../src/core/options.ts'
@@ -498,6 +499,29 @@ function startTitleChecks($: EngineInterface): void {
   })
 }
 
+// A report of the account's usage limits, on the model; true when a figure
+// moved, so the record is worth writing at once
+async function takeLimits($: EngineInterface, reported: unknown): Promise<boolean> {
+  if (model === null) {
+    return false
+  }
+  const next = record.measured(model, readLimits(reported, await $.clock.now()))
+  const moved = limitsMoved(model.record.limits ?? [], next.record.limits ?? [])
+  model = next
+  return moved
+}
+
+// The usage limits the engine has now, for a record about to be written. A
+// session has none before its first reply, and an account with no plan never
+// has any
+async function readLimitsNow($: EngineInterface): Promise<void> {
+  try {
+    await takeLimits($, (await $.session.usage()).rateLimits)
+  } catch (error) {
+    failure($, 'usage limits', error)
+  }
+}
+
 // While a turn's finish waits on background commands alone, the heartbeat
 // looks at them again: a dev server that listens a few seconds after the turn
 // ended, or a watcher that says so after its first build, lets it land
@@ -602,6 +626,7 @@ async function startSession($: EngineInterface): Promise<void> {
         model = record.restored(model, own)
       }
       await checkTitle($)
+      await readLimitsNow($)
       tunedInAt = own.tunedInAt
       await save($)
       // A reload after a change brings the new value; the station follows it
@@ -636,8 +661,9 @@ async function endSession($: EngineInterface): Promise<void> {
 
 async function tuneInNow($: EngineInterface): Promise<TuneInResult['status']> {
   const built = await ensureSession($)
-  // The record's first write carries the title the engine has now
+  // The record's first write carries the title and the usage limits the engine has now
   await checkTitle($)
+  await readLimitsNow($)
   // The station reads Transparent window as it starts
   await shareOwnTransparency($)
   const m = model ?? built
@@ -1042,6 +1068,20 @@ export const register: Register = (on, options) => {
       await onComplete($, e.isAborted, e.reason)
     } catch (error) {
       failure($, 'turn.complete', error)
+    }
+    return next(e)
+  })
+
+  // Claude Code measured the session: after each reply, and when a usage
+  // limit moves a whole point. The limits are the account's, so every session
+  // on air reads the same ones; the board shows the newest reading
+  on('session.measure', async ($, e, next) => {
+    try {
+      if (await takeLimits($, e.rateLimits)) {
+        await save($)
+      }
+    } catch (error) {
+      failure($, 'session.measure', error)
     }
     return next(e)
   })
