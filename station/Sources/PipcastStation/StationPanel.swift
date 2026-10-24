@@ -6,7 +6,8 @@ import StationCore
 let stationLevel = Int(CGWindowLevelForKey(.statusWindow))
 
 /// The window recipe: borderless and non-activating, at level 25, on every
-/// Space and beside full-screen apps. It can never become key or main.
+/// Space and beside full-screen apps. The station takes it off the target's own
+/// full-screen Spaces. It can never become key or main.
 final class StationPanel: NSPanel {
     /// Whether `init` managed to force the active appearance (see `forceActiveAppearance`).
     private(set) var hasForcedActiveAppearance = false

@@ -100,9 +100,17 @@ func recordJSON(id: String, tunedInAt: Double, checkedInAt: Double, v: Int = 1) 
 }
 
 @Suite struct VisibilityTests {
+    static let claude = "com.anthropic.claudefordesktop"
+
     @Test func showsUnlessTheTargetIsFrontmost() {
-        #expect(shouldShow(frontmost: "com.apple.Safari", target: "com.anthropic.claudefordesktop"))
-        #expect(!shouldShow(frontmost: "com.anthropic.claudefordesktop", target: "com.anthropic.claudefordesktop"))
-        #expect(shouldShow(frontmost: nil, target: "com.anthropic.claudefordesktop"))
+        #expect(shouldShow(frontmost: "com.apple.Safari", target: Self.claude, onTargetsOwnSpace: false))
+        #expect(!shouldShow(frontmost: Self.claude, target: Self.claude, onTargetsOwnSpace: false))
+        #expect(shouldShow(frontmost: nil, target: Self.claude, onTargetsOwnSpace: false))
+    }
+
+    @Test func hiddenOnTheTargetsOwnFullScreenSpaceWhicheverAppIsFrontmost() {
+        #expect(!shouldShow(frontmost: "com.apple.Safari", target: Self.claude, onTargetsOwnSpace: true))
+        #expect(!shouldShow(frontmost: nil, target: Self.claude, onTargetsOwnSpace: true))
+        #expect(!shouldShow(frontmost: Self.claude, target: Self.claude, onTargetsOwnSpace: true))
     }
 }

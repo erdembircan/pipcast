@@ -1,13 +1,16 @@
 import AppKit
 import StationCore
 
-// The checks' witness: asks the window server where a running station is and
-// whether it ever took the keyboard. Not shipped.
+// The checks' witness: asks the window server where a running station is,
+// which Spaces its window is on, how soon it leaves the screen, and whether it
+// ever took the keyboard. Not shipped.
 
 let usage = """
 usage: station-inspect window <pid>
        station-inspect expect <pid> shown <top-left|top-right|bottom-left|bottom-right> <scale>
        station-inspect expect <pid> hidden
+       station-inspect expect <pid> gone-within <ms> <station.log>
+       station-inspect spaces <pid> <bundle id>
        station-inspect frontmost
        station-inspect locked
 """
@@ -16,6 +19,7 @@ let stationLevel = Int(CGWindowLevelForKey(.statusWindow))
 
 struct Window {
     let pid: Int32
+    let number: CGWindowID
     let owner: String
     let layer: Int
     let onScreen: Bool
@@ -39,6 +43,7 @@ func windows(options: CGWindowListOption) -> [Window] {
         let appKit = CGRect(x: bounds.minX, y: primaryHeight() - bounds.minY - bounds.height,
                             width: bounds.width, height: bounds.height)
         return Window(pid: entry[kCGWindowOwnerPID as String] as? Int32 ?? -1,
+                      number: entry[kCGWindowNumber as String] as? CGWindowID ?? 0,
                       owner: entry[kCGWindowOwnerName as String] as? String ?? "?",
                       layer: layer,
                       onScreen: entry[kCGWindowIsOnscreen as String] as? Bool ?? false,
@@ -80,6 +85,28 @@ func describe(_ frame: CGRect) -> String {
 func number(_ value: CGFloat) -> String {
     let rounded = (Double(value) * 100).rounded() / 100
     return rounded == rounded.rounded() ? String(Int(rounded)) : String(rounded)
+}
+
+/// Space ids for a line, or "none".
+func spaceList(_ ids: [UInt64]) -> String {
+    ids.isEmpty ? "none" : ids.map(String.init).joined(separator: ", ")
+}
+
+/// A station log's lines, or none when it cannot be read.
+func logLines(_ path: String) -> [String] {
+    guard let text = try? String(contentsOfFile: path, encoding: .utf8) else { return [] }
+    return text.split(separator: "\n").map(String.init)
+}
+
+/// When the first of these log lines that says `hidden` was written.
+func hiddenTime(in lines: ArraySlice<String>) -> Date? {
+    let formatter = ISO8601DateFormatter()
+    formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    for line in lines where line.hasSuffix(" hidden") {
+        guard let stamp = line.split(separator: " ").first else { continue }
+        if let date = formatter.date(from: String(stamp)) { return date }
+    }
+    return nil
 }
 
 /// Waits while letting notifications arrive.
@@ -191,6 +218,49 @@ case "expect" where arguments.count == 5 && arguments[2] == "shown":
     guard isRunning(pid) else { fail("FAIL the station (pid \(pid)) is not running") }
     let found = seen.isEmpty ? "no window on screen" : seen.map { describe($0.appKit) }.joined(separator: "; ")
     fail("FAIL expected the window at \(describe(expected)); found: \(found)")
+
+case "spaces" where arguments.count == 3:
+    guard let pid = Int32(arguments[1]) else { usageError() }
+    let target = arguments[2]
+    guard let spaces = WindowServerSpaces() else { fail("FAIL cannot read the window server's Spaces on this macOS") }
+    guard let window = stationWindows(pid, options: [.optionAll]).first else { fail("FAIL the station (pid \(pid)) has no window") }
+    let pids = NSRunningApplication.runningApplications(withBundleIdentifier: target).map { Int($0.processIdentifier) }
+    let own = Spaces.ownFullScreen(in: spaces.displays(), pids: Set(pids))
+    let on = spaces.spaces(of: window.number)
+    let both = on.filter(own.contains)
+    let detail = "the window is on \(spaceList(on)); \(target)'s own full-screen Spaces: \(spaceList(own)); you are on \(spaces.active())"
+    if !both.isEmpty { fail("FAIL the window is on \(target)'s own full-screen Space \(spaceList(both)): \(detail)") }
+    pass("ok   the window is off \(target)'s own full-screen Spaces: \(detail)")
+
+case "expect" where arguments.count == 5 && arguments[2] == "gone-within":
+    guard let pid = Int32(arguments[1]), let limit = Double(arguments[3]) else { usageError() }
+    let path = arguments[4]
+    let watch = ActivationWatch(pid: pid)
+    let skip = logLines(path).count
+    var seen = false
+    var goneAt: Date?
+    var hiddenAt: Date?
+    let deadline = Date().addingTimeInterval(10)
+    while Date() < deadline {
+        if watch.check(pid) { fail("FAIL the station is the frontmost app") }
+        if stationWindows(pid).isEmpty {
+            if seen && goneAt == nil { goneAt = Date() }
+        } else {
+            seen = true
+        }
+        if hiddenAt == nil { hiddenAt = hiddenTime(in: logLines(path).dropFirst(skip)) }
+        if let goneAt, let hiddenAt {
+            let ms = (goneAt.timeIntervalSince(hiddenAt) * 1000).rounded()
+            if ms > limit {
+                fail("FAIL the window left the screen \(Int(ms)) ms after the station hid it; the limit is \(Int(limit)) ms")
+            }
+            pass("ok   the window left the screen within \(Int(max(0, ms))) ms of the station hiding it")
+        }
+        pause(0.005)
+    }
+    if !seen { fail("FAIL the window was never on screen") }
+    if hiddenAt == nil { fail("FAIL the station never hid its window") }
+    fail("FAIL the window stayed on screen")
 
 default:
     usageError()

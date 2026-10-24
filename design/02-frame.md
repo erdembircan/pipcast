@@ -6,9 +6,9 @@ The feed plays in our own window, not in macOS's picture-in-picture. The proof o
 
 | Behaviour | How | Where it is settled |
 | --- | --- | --- |
-| Floats above every app, the Dock, the menu bar and full-screen apps | A borderless, non-activating panel at the status-bar window level, on every Space | Technical reference 4.1, 4.2 |
+| Floats above every app, the Dock, the menu bar and full-screen apps | A borderless, non-activating panel at the status-bar window level, on every Space but Claude's own full-screen ones | Technical reference 4.1, 4.2 |
 | Never takes the keyboard | The panel never becomes the key window, so the app you are in keeps typing | Technical reference 4.3 |
-| Hides while Claude is in front | It shows when any other app is frontmost and hides when the Claude desktop app is | `Visibility.swift` |
+| Hides while Claude is in front | It shows when any other app is frontmost, and hides at once when the Claude desktop app is or you are on Claude's own full-screen Space | `Visibility.swift` |
 | Lives in one of four quadrants | The screen's visible area splits at its centre lines; on release the window goes to the quadrant that holds its centre, in 0.2 s | `Corner.swift` |
 | Starts bottom right | The default quadrant | `Options.swift` |
 | Is the size of its quadrant | It opens filling its quadrant, which is also the largest it can be | Your rule |
