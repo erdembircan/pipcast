@@ -4,12 +4,14 @@
 # folder, so the user's own configuration is never read or changed. Then it
 # checks that the installed copy holds everything the mod and the station run
 # from, and exactly the files plugin/ holds, with no TypeScript source, test or
-# tsconfig.json among them. Last, it runs /pipcast auto, /pipcast auto on and
-# /pipcast auto off, then the same for /pipcast transparency, in a headless
-# session on that copy, started without CLAUDE_CODE_EXECPATH as a desktop
-# session is: each value has to land in the throwaway configuration's plugin
-# options, and Transparent window's in the throwaway store's options.json as
-# well. No model call is made. The temporary folder is removed on every exit.
+# tsconfig.json among them. Last, in a headless session on that copy, started
+# without CLAUDE_CODE_EXECPATH as a desktop session is, /pipcast auto has to say
+# that Tune in every new session is on while nothing is saved. Then it runs
+# /pipcast auto off and /pipcast auto on, then /pipcast transparency,
+# /pipcast transparency on and /pipcast transparency off: each value has to
+# land in the throwaway configuration's plugin options, and Transparent
+# window's in the throwaway store's options.json as well. No model call is
+# made. The temporary folder is removed on every exit.
 set -uo pipefail
 
 root="$(cd "$(dirname "$0")/.." && pwd)"
@@ -82,6 +84,8 @@ fi
 step "/pipcast auto and /pipcast transparency, in a headless session on the installed copy"
 store="$config/pipcast-home"
 out="$config/engine-out.jsonl"
+# What the engine had written when /pipcast auto, the first prompt, was answered
+first="$config/engine-out-first.jsonl"
 notes="$config/notes.log"
 mkdir -p "$store"
 : >"$notes"
@@ -123,12 +127,13 @@ shared() { # what the throwaway store's options.json tells the station: on, off,
   echo "before $(saved autoTuneIn)" >>"$notes"
   say "/pipcast auto"
   sleep 6
-  say "/pipcast auto on"
-  sleep 8
-  echo "after-on $(saved autoTuneIn)" >>"$notes"
+  cp "$out" "$first"
   say "/pipcast auto off"
   sleep 8
   echo "after-off $(saved autoTuneIn)" >>"$notes"
+  say "/pipcast auto on"
+  sleep 8
+  echo "after-on $(saved autoTuneIn)" >>"$notes"
   echo "before-transparency $(saved transparentWindow) $(shared)" >>"$notes"
   say "/pipcast transparency"
   sleep 6
@@ -143,11 +148,17 @@ shared() { # what the throwaway store's options.json tells the station: on, off,
   --input-format stream-json --output-format stream-json --verbose \
   --model haiku --no-session-persistence >"$out" 2>&1
 
-check "nothing was saved before /pipcast auto on" grep -qx "before unset" "$notes"
-check "/pipcast auto said the setting is off" grep -qF -- "$auto_off" "$out"
-check "/pipcast auto on saved it on" grep -qx "after-on true" "$notes"
-check "/pipcast auto on answered that it is on" grep -qF -- "$auto_on" "$out"
+# What the engine wrote after the first reply: its answers to the later prompts
+[[ -f "$first" ]] || : >"$first"
+later="$config/engine-out-later.jsonl"
+tail -c +"$(( $(wc -c <"$first") + 1 ))" "$out" >"$later"
+
+check "nothing was saved before /pipcast auto off" grep -qx "before unset" "$notes"
+check "/pipcast auto said the setting is on, with nothing saved" grep -qF -- "$auto_on" "$first"
 check "/pipcast auto off saved it off" grep -qx "after-off false" "$notes"
+check "/pipcast auto off answered that it is off" grep -qF -- "$auto_off" "$later"
+check "/pipcast auto on saved it on" grep -qx "after-on true" "$notes"
+check "/pipcast auto on answered that it is on" grep -qF -- "$auto_on" "$later"
 check "nothing was saved for Transparent window, and the store had no options.json, before /pipcast transparency on" grep -qx "before-transparency unset none" "$notes"
 check "/pipcast transparency said the setting is off" grep -qF -- "$transparency_off" "$out"
 check "/pipcast transparency on saved it on and told the station" grep -qx "transparency-after-on true on" "$notes"

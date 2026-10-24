@@ -18,7 +18,7 @@
       "type": "boolean",
       "title": "Tune in every new session",
       "description": "Each new session in the Claude desktop app tunes in to KLWD as it opens, with no TUNE IN to press. TUNE OUT still takes a session off the air.",
-      "default": false
+      "default": true
     },
     "transparentWindow": {
       "type": "boolean",
