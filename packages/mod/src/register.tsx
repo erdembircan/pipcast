@@ -78,8 +78,11 @@ let readings: Promise<void> = Promise.resolve()
 // A look at the background commands a held finish waits on is running
 let looking = false
 
-// The engine's own band is an empty Box; another mod's band has content.
-const hasContent = (drawn: RenderElement) => drawn.type !== 'Box' || (drawn.children?.length ?? 0) > 0
+// Whether another mod drew a line beneath ours. With none, next(e) answers with
+// the engine's own drawing ({ type: 'engine' }), which the desktop draws as an
+// empty block: set in our column, it would leave the md gap above the plate.
+// An empty Box draws nothing either.
+const hasContent = (drawn: RenderElement) => drawn.type !== 'engine' && (drawn.type !== 'Box' || (drawn.children?.length ?? 0) > 0)
 
 function enqueue(task: () => Promise<void>): Promise<void> {
   queue = queue.then(task, task)

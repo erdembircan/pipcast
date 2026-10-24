@@ -1448,7 +1448,7 @@ var tops = /* @__PURE__ */ new Map();
 var agentFolders = /* @__PURE__ */ new Map();
 var readings = Promise.resolve();
 var looking = false;
-var hasContent = (drawn) => drawn.type !== "Box" || (drawn.children?.length ?? 0) > 0;
+var hasContent = (drawn) => drawn.type !== "engine" && (drawn.type !== "Box" || (drawn.children?.length ?? 0) > 0);
 function enqueue(task) {
   queue = queue.then(task, task);
   return queue;

@@ -8,11 +8,12 @@
 # Tune in every new session on and Transparent window off, the session has to
 # stay off the air while nothing shows it, tune in by itself once a stand-in
 # for the desktop app attaches as the app does (ui_attach), telling the station
-# the window is solid, stay off the air after /pipcast tunes it out and a
-# second window shows it, and tune in again after /clear. No model call is
-# made and no station is started: PIPCAST_STATION_BIN is a stand-in that logs
-# its arguments. Everything lives in a temporary folder that is removed on
-# exit.
+# the window is solid, draw the band as the plate alone when the stand-in asks
+# for it as the app does (ui_render), with no other mod in the band, stay off
+# the air after /pipcast tunes it out and a second window shows it, and tune in
+# again after /clear. No model call is made and no station is started:
+# PIPCAST_STATION_BIN is a stand-in that logs its arguments. Everything lives
+# in a temporary folder that is removed on exit.
 set -uo pipefail
 
 root="$(cd "$(dirname "$0")/.." && pwd)"
@@ -67,6 +68,28 @@ options_state() { # <store>
   ' "$1"
 }
 
+# How the engine answered the stand-in's ask for the band: alone when the tree
+# is our line by itself, the plate in a Box with no line above it and nothing
+# of the engine's own drawing in it; stacked when it is anything else; none
+# when no answer came
+band_state() { # <engine output> <request id>
+  node -e '
+    const fs = require("node:fs")
+    const [file, id] = process.argv.slice(1)
+    let tree
+    for (const line of fs.readFileSync(file, "utf8").split("\n")) {
+      let message
+      try { message = JSON.parse(line) } catch { continue }
+      if (message?.type === "control_response" && message.response?.request_id === id) tree = message.response.response?.tree
+    }
+    if (tree === undefined) { process.stdout.write("none"); process.exit(0) }
+    const text = JSON.stringify(tree)
+    const alone = tree.type === "Box" && tree.props?.alignItems === "center" && tree.props?.rowGap === undefined &&
+      text.includes("\"type\":\"Svg\"") && !text.includes("\"type\":\"engine\"")
+    process.stdout.write(alone ? "alone" : "stacked")
+  ' "$1" "$2"
+}
+
 # The settings a session runs with: Tune in every new session and Transparent
 # window, each on or off, for the plugin as --plugin-dir loads it
 settings() { # <true|false> <true|false>
@@ -79,6 +102,11 @@ clear='{"type":"user","message":{"role":"user","content":"/clear"}}'
 # The desktop app showing the session, as it says so: each window is a client
 attach() { # <client id>
   printf '{"type":"control_request","request_id":"attach-%s","request":{"subtype":"ui_attach","surface":"desktop","client_id":"%s"}}\n' "$1" "$1"
+}
+
+# The desktop app asking a window's session to draw the band above the prompt
+band() { # <request id>
+  printf '{"type":"control_request","request_id":"%s","request":{"subtype":"ui_render","surface":"desktop","client_id":"window-1","component":"AbovePrompt","instance_id":"above-prompt","props":{"hasSurvey":false,"isWorking":false,"maxRows":12,"bodyColumns":100,"scroll":{"offset":0,"bodyRows":12},"view":{}}}}\n' "$1"
 }
 
 (
@@ -111,6 +139,8 @@ echo "running $(pgrep -f "$tmp" | wc -l | tr -d ' ')" >>"$notes"
   sleep 3
   echo "auto-shown $(record_state "$auto_home")" >>"$notes"
   echo "auto-options $(options_state "$auto_home")" >>"$notes"
+  band band-1
+  sleep 2
   echo "$command"
   sleep 3
   echo "auto-out $(record_state "$auto_home")" >>"$notes"
@@ -131,6 +161,7 @@ echo "running $(pgrep -f "$tmp" | wc -l | tr -d ' ')" >>"$notes"
 sleep 1
 echo "auto-end $(record_state "$auto_home")" >>"$notes"
 echo "auto-running $(pgrep -f "$tmp" | wc -l | tr -d ' ')" >>"$notes"
+echo "band $(band_state "$auto_out" band-1)" >>"$notes"
 
 failed=0
 
@@ -155,6 +186,7 @@ check "running 0" "$notes" "nothing is left running"
 check "auto-unshown none" "$notes" "with Tune in every new session on, a session nothing shows stays off the air"
 check "auto-shown ok" "$notes" "the desktop app showing the new session tuned it in"
 check "auto-options off" "$notes" "tuning in by itself told the station the window is solid"
+check "band alone" "$notes" "the band the desktop app asked for is the plate alone, with no line above it"
 check "launch --home $auto_home --assets $root/plugin/station --target-bundle-id com.example.pipcast.never-frontmost" "$calls" "the station was launched for it"
 check "auto-out none" "$notes" "/pipcast took it off the air"
 check "$tuned_out" "$auto_out" "/pipcast answered that it tuned out"

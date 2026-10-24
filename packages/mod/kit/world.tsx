@@ -62,9 +62,11 @@ export interface WorldOptions {
   launchExit?: number
   launchOut?: string
   hasRepo?: boolean
-  hasOtherBand?: boolean
-  // The shape of the other mod's band: one plain Box, or a row like usage-band's
-  otherBand?: 'plain' | 'row'
+  // What the band holds beneath ours: another mod's line, as one plain Box or a
+  // row like usage-band's; nothing, where the engine answers with its own
+  // drawing, as it does when no other mod draws there; or an empty Box. Unset,
+  // one plain Box
+  otherBand?: 'plain' | 'row' | 'nothing' | 'empty'
   // The plugin's options, as settings hold them; unset, the manifest's defaults
   settings?: PluginOptions
   // What shows the session when it starts; unset, nothing, as in a headless run
