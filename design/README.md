@@ -87,6 +87,8 @@ Motion has no token family, so the values live here.
 | Ticker | Crawls right to left at a steady 53 px a second, whatever it carries. Each item keeps its words until it has gone past the tab, and the crawl carries on across cuts; the clock stays put at its right end |
 | Clawd | Moves in whole poses (see Anchor), with a bob of 6px at most |
 
+All of it moves by transform and opacity, which the system's compositor plays at the display's own rate. The stinger and the ident, intros and outros, draw every piece from their one progress value and hand the whole run to the compositor as keyframes drawn from the same pictures, so a moving frame and the storyboard frame at that moment are the same picture. In Low Power Mode WebKit gives the page 30 frames a second and runs its timers late, and the compositor keeps its pace. Two pieces are still moved by the page itself: the ticker's belt, a layer of its own that it moves each frame, and Clawd, whose poses step 12 times a second on a layer of his own, so a step redraws him alone.
+
 With reduced motion, all of it stops; the intro and the ident show their last frame, the outros cut straight to the board, the listing's pages cut from one to the next on the same clock, and the picture still reads.
 
 ### Sound

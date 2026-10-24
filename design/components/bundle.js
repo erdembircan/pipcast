@@ -7,6 +7,8 @@
   var h = React.createElement;
   var useState = React.useState;
   var useEffect = React.useEffect;
+  var useRef = React.useRef;
+  var useLayoutEffect = React.useLayoutEffect;
 
   var STAGE_W = 960;
   var STAGE_H = 540;
@@ -154,7 +156,11 @@
     return g.slice(0, GRID_H);
   }
 
-  /* A repaint clock for animated pieces. Static frames never start it. */
+  /* Clawd's clock. He moves in whole poses, so his acts step on a timer, 12
+     times a second, and each step draws him again; he is a layer of his own,
+     so a step redraws nothing behind him. Static frames never start it. The
+     opens and outros have no clock: the compositor plays them (Motion on the
+     compositor, below). */
   function useClock(animate, fps) {
     var st = useState(0);
     var t = st[0];
@@ -675,7 +681,7 @@
     return h('div', { className: cx('pn-l3', 'pn-k-' + family, props.inline && 'pn-inline') },
       h('div', { className: 'pn-l3-line' },
         h('div', { className: 'pn-l3-tag' }, h('span', null, props.tag || ev.tag)),
-        h('div', { className: 'pn-l3-head' }, h('span', null, props.headline || ev.headline), h('i', { className: 'pn-l3-glint', 'aria-hidden': 'true' }))),
+        h('div', { className: 'pn-l3-head' }, h('span', null, props.headline || ev.headline), h('i', { className: 'pn-l3-sweep', 'aria-hidden': 'true' }, h('i', { className: 'pn-l3-glint' })))),
       strap ? h('div', { className: 'pn-l3-strap' }, h('span', null,
         h('span', { className: 'pn-l3-title' }, strap),
         props.project ? h('b', null, '\u00B7 ' + props.project) : null)) : null);
@@ -709,28 +715,121 @@
     }
     return out;
   })();
+  /* Motion on the compositor. An open or an outro draws every piece from one
+     number, the run's progress from 0 to 1: `move(id, at)` names a piece and
+     keeps `at`, its style at any progress. A still frame draws each piece at
+     its progress. The moving version draws the last frame and hands each
+     piece's whole run to the Web Animations API, as keyframes sampled from
+     the same `at` 60 times a second, every stretch that runs in a straight
+     line folded to its two ends. The system's compositor plays them at the
+     display's own rate, however busy the page is: in Low Power Mode WebKit
+     gives a page 30 frames a second and runs its timers late, and the opens
+     stuttered while they drew themselves on a timer. Without the Web
+     Animations API, or with reduced motion, the last frame stays. */
+  var MOTION_RATE = 60;
+  /* how far a sample may sit off a straight line and still be folded into it */
+  var MOTION_EPSILON = 0.001;
+  /* four decimals are finer than any screen shows, and keep every number in
+     plain digits: a style parser may refuse 1e-7 */
+  function round4(v) { return +v.toFixed(4); }
+  var NUMBER = /-?(?:\d+\.?\d*|\.\d+)(?:e[-+]?\d+)?/gi;
+  function numbersOf(style, names) {
+    var out = [];
+    names.forEach(function (name) {
+      String(style[name]).replace(NUMBER, function (m) { out.push(parseFloat(m)); return m; });
+    });
+    return out;
+  }
+  function motionFrames(at, dur) {
+    var n = Math.max(1, Math.round(dur * MOTION_RATE));
+    var frames = [];
+    for (var i = 0; i <= n; i++) {
+      var style = at(i / n);
+      var frame = { offset: i / n };
+      for (var name in style) {
+        if (Object.prototype.hasOwnProperty.call(style, name)) { frame[name] = style[name]; }
+      }
+      frames.push(frame);
+    }
+    var names = Object.keys(frames[0]).filter(function (key) { return key !== 'offset'; });
+    var values = frames.map(function (f) { return numbersOf(f, names); });
+    /* a frame stays where the straight line from the last frame kept to the
+       one after it misses a sample */
+    var kept = [0];
+    for (var k = 1; k < n; k++) {
+      var a = kept[kept.length - 1];
+      var b = k + 1;
+      var straight = true;
+      for (var j = a + 1; j < b && straight; j++) {
+        var t = (j - a) / (b - a);
+        for (var v = 0; v < values[j].length; v++) {
+          var line = values[a][v] + (values[b][v] - values[a][v]) * t;
+          if (Math.abs(values[j][v] - line) > MOTION_EPSILON) { straight = false; break; }
+        }
+      }
+      if (!straight) { kept.push(k); }
+    }
+    kept.push(n);
+    return kept.map(function (i) { return frames[i]; });
+  }
+  /* `run` names the run, so new words or another hour start it again */
+  function useMotion(animate, dur, run) {
+    var ref = useRef(null);
+    var moves = {};
+    var latest = useRef(moves);
+    latest.current = moves;
+    useLayoutEffect(function () {
+      var root = ref.current;
+      if (!animate || !root || typeof root.animate !== 'function') { return undefined; }
+      var pieces = Array.prototype.slice.call(root.querySelectorAll('[data-pn-move]'));
+      if (root.hasAttribute('data-pn-move')) { pieces.unshift(root); }
+      var running = [];
+      pieces.forEach(function (el) {
+        var at = latest.current[el.getAttribute('data-pn-move')];
+        if (at) { running.push(el.animate(motionFrames(at, dur), { duration: dur * 1000, fill: 'both' })); }
+      });
+      return function () { running.forEach(function (anim) { anim.cancel(); }); };
+    }, [animate, dur, run]);
+    return {
+      ref: ref,
+      move: function (id, at) { moves[id] = at; return id; }
+    };
+  }
+
   /* `back`: the outro's wave, sweeping back from the right and leaving the
      panes it passes dark. The same rule draws both: a pane glows once the
-     intro's wave has passed it, until the outro's wave passes it again. */
-  function glassWall(p, back) {
-    var front = back ? 1450 - 1700 * p : -250 + 1700 * p;
+     intro's wave has passed it, until the outro's wave passes it again.
+     `wave` turns the run's progress into the wave's. */
+  function glassWall(p, back, wave, move) {
     return [
       h('div', { key: 'wall', className: 'pn-stinger-wall', 'aria-hidden': 'true' },
         PANES.map(function (g, i) {
-          var lit = clamp01(1 - Math.abs(g.d - front) / 260);
-          var settled = g.d < front ? 0.08 + 0.3 * g.v : 0.04;
-          return h('div', { key: i, className: 'pn-stinger-pane', style: { left: g.x + 'px', top: g.y + 'px', opacity: Math.max(0.75 * lit, settled).toFixed(3) } });
+          var at = function (x) {
+            var front = back ? 1450 - 1700 * wave(x) : -250 + 1700 * wave(x);
+            var lit = clamp01(1 - Math.abs(g.d - front) / 260);
+            var settled = g.d < front ? 0.08 + 0.3 * g.v : 0.04;
+            return { opacity: round4(Math.max(0.75 * lit, settled)) };
+          };
+          return h('div', { key: i, className: 'pn-stinger-pane', 'data-pn-move': move('pane-' + i, at), style: { left: g.x + 'px', top: g.y + 'px', opacity: at(p).opacity } });
         })),
       h('div', { key: 'glass', className: 'pn-stinger-glass' })
     ];
   }
 
   /* One line of chrome words: the outline underneath, hidden from VoiceOver,
-     and the chrome on top, which the glint crosses (0 to 1). */
-  function chromeLine(word, className, style, glint) {
-    return h('div', { key: word, className: className, style: style },
-      h('span', { className: 'pn-stinger-ink', 'aria-hidden': 'true' }, word),
-      h('span', { className: 'pn-stinger-face', style: { backgroundPosition: (130 - 160 * glint).toFixed(1) + '% 0, 0 0' } }, word));
+     the chrome on top, and the glint, which crosses the chrome (0 to 1). The
+     glint is a window that slides across the line while the bright copy of
+     the word inside it slides back the same distance, so the word stays put
+     and only the light moves. */
+  function chromeLine(word, className, p, lineAt, glintAt, move) {
+    function windowAt(x) { return { transform: 'translateX(' + round4(-163 + 320 * glintAt(x)) + '%)' }; }
+    function copyAt(x) { return { transform: 'translateX(' + round4(163 - 320 * glintAt(x)) + '%)' }; }
+    return h('div', { key: word, className: className, 'data-pn-move': move('line-' + word, lineAt), style: lineAt(p) },
+      h('div', { className: 'pn-stinger-cast' },
+        h('span', { className: 'pn-stinger-ink', 'aria-hidden': 'true' }, word),
+        h('span', { className: 'pn-stinger-face' }, word)),
+      h('span', { className: 'pn-stinger-glint', 'aria-hidden': 'true', 'data-pn-move': move('glint-' + word, windowAt), style: windowAt(p) },
+        h('span', { className: 'pn-stinger-shine', 'data-pn-move': move('shine-' + word, copyAt), style: copyAt(p) }, word)));
   }
 
   /* BREAKING NEWS, for every story, in red: the intro before the desk and
@@ -742,20 +841,21 @@
     var outro = bool(props.outro, false);
     var animate = bool(props.animate, false) && !reducedMotion();
     var dur = num(props.duration, outro ? BREAKING.outro : BREAKING.duration);
-    var t = useClock(animate, 30);
-    var p = animate ? clamp01(t / dur) : clamp01(num(props.progress, 1));
     var words = props.words || BREAKING.words;
-    if (outro) { return outroPicture(p, words); }
-    var glint = seg(p, 0.6, 0.92);
+    var motion = useMotion(animate, dur, (outro ? 'outro ' : 'intro ') + words.join(' '));
+    var p = animate ? 1 : clamp01(num(props.progress, 1));
+    if (outro) { return outroPicture(p, words, motion); }
     var lines = words.map(function (w, i) {
-      var s = easeOut(seg(p, 0.22 + 0.1 * i, 0.5 + 0.1 * i));
-      return chromeLine(w, 'pn-stinger-line', {
-        opacity: s,
-        transform: 'translateX(' + ((1 - s) * -140).toFixed(1) + 'px) scale(' + (1.3 - 0.3 * s).toFixed(3) + ')'
-      }, glint);
+      return chromeLine(w, 'pn-stinger-line', p, function (x) {
+        var s = easeOut(seg(x, 0.22 + 0.1 * i, 0.5 + 0.1 * i));
+        return {
+          opacity: round4(s),
+          transform: 'translateX(' + round4((1 - s) * -140) + 'px) scale(' + round4(1.3 - 0.3 * s) + ')'
+        };
+      }, function (x) { return seg(x, 0.6, 0.92); }, motion.move);
     });
-    return h('div', { className: 'pn-stinger pn-k-breaking' },
-      glassWall(p),
+    return h('div', { ref: motion.ref, className: 'pn-stinger pn-k-breaking' },
+      glassWall(p, false, function (x) { return x; }, motion.move),
       h('div', { className: 'pn-stinger-words' }, lines));
   }
 
@@ -763,17 +863,19 @@
      words (0-30%), the words leave to the right one after the other (10-57%),
      the red wave sweeps back across the wall and darkens it (0-75%), and the
      whole open fades away to the board underneath (70-100%). */
-  function outroPicture(p, words) {
-    var glint = seg(p, 0, 0.3);
+  function outroPicture(p, words, motion) {
     var lines = words.map(function (w, i) {
-      var s = easeInOut(seg(p, 0.1 + 0.12 * i, 0.45 + 0.12 * i));
-      return chromeLine(w, 'pn-stinger-line', {
-        opacity: (1 - s).toFixed(3),
-        transform: 'translateX(' + (s * 180).toFixed(1) + 'px) scale(' + (1 + 0.25 * s).toFixed(3) + ')'
-      }, glint);
+      return chromeLine(w, 'pn-stinger-line', p, function (x) {
+        var s = easeInOut(seg(x, 0.1 + 0.12 * i, 0.45 + 0.12 * i));
+        return {
+          opacity: round4(1 - s),
+          transform: 'translateX(' + round4(s * 180) + 'px) scale(' + round4(1 + 0.25 * s) + ')'
+        };
+      }, function (x) { return seg(x, 0, 0.3); }, motion.move);
     });
-    return h('div', { className: 'pn-stinger pn-k-breaking', style: { opacity: (1 - easeInOut(seg(p, 0.7, 1))).toFixed(3) } },
-      glassWall(seg(p, 0, 0.75), true),
+    function fadeAt(x) { return { opacity: round4(1 - easeInOut(seg(x, 0.7, 1))) }; }
+    return h('div', { ref: motion.ref, className: 'pn-stinger pn-k-breaking', 'data-pn-move': motion.move('open', fadeAt), style: fadeAt(p) },
+      glassWall(p, true, function (x) { return seg(x, 0, 0.75); }, motion.move),
       h('div', { className: 'pn-stinger-words' }, lines));
   }
 
@@ -803,36 +905,48 @@
     return 1 + 2.6 * u * u * u + 1.6 * u * u;
   }
 
-  /* The station clock, drawn in the ident's 360 x 360 box from one moment,
-     `t`: seconds from the hour, -5 at the first pip, 0 on the hour, 2.5 when
-     the ident ends; `prev` is the minute before the hour. The monitor's
-     chrome bezel round a glossy blue face, gold bars for the hours, chrome
-     hands, a gold seconds hand and the mark. The seconds hand steps with each
-     pip; on the long pip the minute hand jumps to the hour and a glint
-     crosses the face. */
+  /* The station clock, drawn in the ident's 360 x 360 box. `time(x)` is the
+     moment at the run's progress x, in seconds from the hour: -5 at the first
+     pip, 0 on the hour, 2.5 when the ident ends; `prev` is the minute before
+     the hour, and `x` the progress drawn. The monitor's chrome bezel round a
+     glossy blue face, gold bars for the hours, chrome hands, a gold seconds
+     hand and the mark. The seconds hand steps with each pip; on the long pip
+     the minute hand jumps to the hour and a glint crosses the face. */
   function stationClock(c) {
-    var sec = c.t < 0 ? 60 + c.t : c.t;
-    var whole = Math.floor(sec);
-    var sAng = (whole - 1 + tickEase(sec - whole)) * 6;
-    var jump = c.t < 0 ? 0 : tickEase(c.t);
     var hm = hoursMinutes(c.prev);
-    var mAng = (hm[1] + jump) * 6;
-    var hAng = ((hm[0] % 12) + (hm[1] + jump) / 60) * 30;
-    var glint = c.t < 0 ? 0 : seg(c.t, 0.02, 0.55);
+    function jump(x) { var t = c.time(x); return t < 0 ? 0 : tickEase(t); }
+    /* counted on from the minute before, so the hand turns on through the
+       hour and never back round the dial */
+    function seconds(x) {
+      var sec = 60 + c.time(x);
+      var whole = Math.floor(sec);
+      return (whole - 1 + tickEase(sec - whole)) * 6;
+    }
+    function turn(angle) { return function (x) { return { transform: 'rotate(' + round4(angle(x)) + 'deg)' }; }; }
+    var hourAt = turn(function (x) { return ((hm[0] % 12) + (hm[1] + jump(x)) / 60) * 30; });
+    var minuteAt = turn(function (x) { return (hm[1] + jump(x)) * 6; });
+    var secondAt = turn(seconds);
+    /* the glint starts off the face's left edge (-30%) and crosses 160% of
+       the 336 px face */
+    function glintAt(x) {
+      var t = c.time(x);
+      var g = t < 0 ? 0 : seg(t, 0.02, 0.55);
+      return { transform: 'translateX(' + round4(537.6 * g) + 'px) skewX(-20deg)' };
+    }
     var marks = [];
     for (var i = 0; i < 60; i++) {
       marks.push(h('i', { key: i, className: i % 5 === 0 ? 'pn-dial-hour' : 'pn-dial-min', style: { transform: 'rotate(' + i * 6 + 'deg)' } }));
     }
-    function hand(cls, ang) { return h('i', { className: cls, style: { transform: 'rotate(' + ang.toFixed(2) + 'deg)' } }); }
+    function piece(cls, id, at) { return h('i', { className: cls, 'data-pn-move': c.move(id, at), style: at(c.x) }); }
     return h('div', { className: 'pn-dial', 'aria-hidden': 'true' },
       h('div', { className: 'pn-dial-face' },
         marks,
         h('div', { className: 'pn-dial-mark pn-chrome' }, 'KLWD'),
-        hand('pn-dial-hand pn-dial-hand--h', hAng),
-        hand('pn-dial-hand pn-dial-hand--m', mAng),
-        hand('pn-dial-sec', sAng),
+        piece('pn-dial-hand pn-dial-hand--h', 'hour-hand', hourAt),
+        piece('pn-dial-hand pn-dial-hand--m', 'minute-hand', minuteAt),
+        piece('pn-dial-sec', 'second-hand', secondAt),
         h('i', { className: 'pn-dial-cap' }),
-        h('i', { className: 'pn-dial-glint', style: { left: (-30 + 160 * glint).toFixed(1) + '%' } })));
+        piece('pn-dial-glint', 'dial-glint', glintAt)));
   }
 
   /* `outro`: the ident's last picture, run out over 1.4 s. A glint crosses
@@ -843,37 +957,48 @@
     var outro = bool(props.outro, false);
     var animate = bool(props.animate, false) && !reducedMotion();
     var dur = num(props.duration, outro ? EVENTS.hourly.outro : EVENTS.hourly.ident);
-    var t = useClock(animate, 30);
-    var q = animate ? clamp01(t / dur) : clamp01(num(props.progress, 1));
-    var p = outro ? 1 : q;
-    var o = outro ? q : 0;
     var hour = props.hour || '15:00';
     var words = props.words || EVENTS.hourly.words;
-    var struck = p >= STRIKE;
-    var now = struck ? 60 : Math.floor(55 + 5 * p / STRIKE);
-    var move = easeInOut(seg(p, STRIKE + 0.01, STRIKE + 0.16));
-    var glint = outro ? seg(o, 0, 0.3) : seg(p, 0.88, 1);
-    var clock = stationClock({ t: (p - STRIKE) * EVENTS.hourly.ident, hour: hour, prev: minuteBefore(hour) });
+    var motion = useMotion(animate, dur, (outro ? 'outro ' : 'intro ') + hour + ' ' + words.join(' '));
+    var q = animate ? 1 : clamp01(num(props.progress, 1));
+    /* the run's progress x as the intro's p, or as the outro's o with p at its end */
+    function P(x) { return outro ? 1 : x; }
+    function O(x) { return outro ? x : 0; }
+    var struck = P(q) >= STRIKE;
+    var now = struck ? 60 : Math.floor(55 + 5 * P(q) / STRIKE);
+    function glintAt(x) { return outro ? seg(O(x), 0, 0.3) : seg(P(x), 0.88, 1); }
     var lines = words.map(function (w, i) {
-      var s = easeOut(seg(p, STRIKE + 0.04 + 0.06 * i, STRIKE + 0.16 + 0.06 * i));
-      var leave = outro ? easeInOut(seg(o, 0.15 + 0.12 * i, 0.5 + 0.12 * i)) : 0;
-      return chromeLine(w, 'pn-stinger-line pn-ident-line', {
-        opacity: (s * (1 - leave)).toFixed(3),
-        transform: 'translateX(' + ((1 - s) * 160 + leave * 180).toFixed(1) + 'px) scale(' + (1.3 - 0.3 * s + 0.25 * leave).toFixed(3) + ')'
-      }, glint);
+      return chromeLine(w, 'pn-stinger-line pn-ident-line', q, function (x) {
+        var s = easeOut(seg(P(x), STRIKE + 0.04 + 0.06 * i, STRIKE + 0.16 + 0.06 * i));
+        var leave = outro ? easeInOut(seg(O(x), 0.15 + 0.12 * i, 0.5 + 0.12 * i)) : 0;
+        return {
+          opacity: round4(s * (1 - leave)),
+          transform: 'translateX(' + round4((1 - s) * 160 + leave * 180) + 'px) scale(' + round4(1.3 - 0.3 * s + 0.25 * leave) + ')'
+        };
+      }, glintAt, motion.move);
     });
-    var drop = outro ? easeInOut(seg(o, 0.4, 0.72)) : 0;
     /* the clock and the words share the frame's centre line */
-    var cxp = 480 - 230 * move;
-    var cyp = 268;
-    var sc = (1 - 0.2 * move) * (1 - 0.3 * drop);
-    return h('div', { className: cx('pn-ident', 'pn-k-hourly'), style: outro ? { opacity: (1 - easeInOut(seg(o, 0.7, 1))).toFixed(3) } : undefined },
-      h('div', { className: 'pn-ident-rays', style: { background: 'repeating-conic-gradient(from ' + (p * 30 + o * 12).toFixed(1) + 'deg at 50% 50%, rgba(255, 224, 138, 0.07) 0deg 6deg, rgba(255, 224, 138, 0) 6deg 18deg)' } }),
+    function clockAt(x) {
+      var aside = easeInOut(seg(P(x), STRIKE + 0.01, STRIKE + 0.16));
+      var drop = outro ? easeInOut(seg(O(x), 0.4, 0.72)) : 0;
+      var sc = (1 - 0.2 * aside) * (1 - 0.3 * drop);
+      return {
+        opacity: round4(1 - drop),
+        transform: 'translate(' + round4(480 - 230 * aside) + 'px, 268px) scale(' + round4(sc) + ')'
+      };
+    }
+    /* the rays turn as one piece about the frame's centre */
+    function raysAt(x) { return { transform: 'rotate(' + round4(P(x) * 30 + O(x) * 12) + 'deg)' }; }
+    function fadeAt(x) { return { opacity: round4(1 - easeInOut(seg(O(x), 0.7, 1))) }; }
+    var clock = stationClock({ prev: minuteBefore(hour), time: function (x) { return (P(x) - STRIKE) * EVENTS.hourly.ident; }, x: q, move: motion.move });
+    return h('div', { ref: motion.ref, className: cx('pn-ident', 'pn-k-hourly'), 'data-pn-move': outro ? motion.move('open', fadeAt) : undefined, style: outro ? fadeAt(q) : undefined },
+      h('div', { className: 'pn-ident-rays', 'data-pn-move': motion.move('rays', raysAt), style: raysAt(q) }),
       h('div', {
         className: 'pn-ident-clock',
         role: 'img',
         'aria-label': struck ? 'The station clock at ' + hour : 'The station clock, ' + (60 - now) + ' seconds to ' + hour,
-        style: { opacity: (1 - drop).toFixed(3), transform: 'translate(' + cxp.toFixed(1) + 'px, ' + cyp.toFixed(1) + 'px) scale(' + sc.toFixed(3) + ')' }
+        'data-pn-move': motion.move('clock', clockAt),
+        style: clockAt(q)
       }, clock),
       h('div', { className: 'pn-ident-words' }, lines));
   }
