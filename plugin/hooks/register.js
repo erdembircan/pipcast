@@ -348,7 +348,7 @@ function parseSharedOptions(value) {
   if (!isObject(value) || value.v !== 1 || typeof value.transparent !== "boolean") {
     return null;
   }
-  return { v: 1, transparent: value.transparent };
+  return isNumber(value.pressedAt) ? { v: 1, transparent: value.transparent, pressedAt: value.pressedAt } : { v: 1, transparent: value.transparent };
 }
 
 // packages/mod/src/core/auto.ts
@@ -1196,7 +1196,16 @@ var OPTIONS = [
 ];
 var TRANSPARENT_KEY = "transparentWindow";
 function needsSharing(file, transparent) {
-  return file === null || file.transparent !== transparent;
+  return file === null || file.pressedAt === void 0 && file.transparent !== transparent;
+}
+function answerFor(file, transparent) {
+  if (file === null || file.pressedAt === void 0) {
+    return { kind: "none" };
+  }
+  return { kind: file.transparent === transparent ? "clear" : "save", pressedAt: file.pressedAt, transparent: file.transparent };
+}
+function stillPressed(file, pressedAt) {
+  return file !== null && file.pressedAt === pressedAt;
 }
 function parseRequest(args) {
   const typed = args.trim().split(/\s+/).filter((word) => word !== "");
@@ -1368,6 +1377,18 @@ async function shareOptions(io, home, options, writer) {
   const path = storePaths(home).options;
   await io.write(path, JSON.stringify(options), `${path}.${writer}.tmp`);
 }
+async function answerPress(io, home, transparent, writer, save2) {
+  const answer = answerFor(await readSharedOptions(io, home), transparent);
+  if (answer.kind === "none") {
+    return "none";
+  }
+  const saved = answer.kind === "clear" || await save2(answer.transparent);
+  if (!stillPressed(await readSharedOptions(io, home), answer.pressedAt)) {
+    return "overtaken";
+  }
+  await shareOptions(io, home, { v: 1, transparent: saved ? answer.transparent : transparent }, writer);
+  return answer.kind === "clear" ? "cleared" : saved ? "saved" : "refused";
+}
 
 // packages/mod/src/core/settings.ts
 var ENGINE_MS = 6e4;
@@ -1448,6 +1469,7 @@ var tops = /* @__PURE__ */ new Map();
 var agentFolders = /* @__PURE__ */ new Map();
 var readings = Promise.resolve();
 var looking = false;
+var answering = false;
 var hasContent = (drawn) => drawn.type !== "Box" || (drawn.children?.length ?? 0) > 0;
 function enqueue(task) {
   queue = queue.then(task, task);
@@ -1609,6 +1631,27 @@ async function shareOwnTransparency($) {
     }
   } catch (error) {
     failure($, "telling the station", error);
+  }
+}
+async function answerPressNow($) {
+  if (answering) {
+    return;
+  }
+  answering = true;
+  try {
+    const io = ioFor($);
+    const save2 = async (on) => {
+      const home = await optionsHomeOf($);
+      return home !== null && await writeOption(io, home, TRANSPARENT_KEY, on);
+    };
+    const outcome = await answerPress(io, await io.storeHome(), transparentWindow, await $.session.id(), save2);
+    if (outcome === "refused") {
+      $.ui.toast(OPTION_REPLY.cannotSave("transparency", !transparentWindow));
+    }
+  } catch (error) {
+    failure($, "answering a press of the window button", error);
+  } finally {
+    answering = false;
   }
 }
 function noteTranscript(e) {
@@ -1867,6 +1910,7 @@ async function beat($) {
       await setState($, false);
     } else {
       await setState($, true);
+      await answerPressNow($);
     }
   } catch (error) {
     failure($, "heartbeat", error);

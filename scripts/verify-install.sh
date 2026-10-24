@@ -9,7 +9,12 @@
 # session on that copy, started without CLAUDE_CODE_EXECPATH as a desktop
 # session is: each value has to land in the throwaway configuration's plugin
 # options, and Transparent window's in the throwaway store's options.json as
-# well. No model call is made. The temporary folder is removed on every exit.
+# well. Then the session tunes in, to a stand-in for the station, and two
+# presses of the window's Transparent window button, on and then off, are
+# written to options.json as the station writes them: the session's next
+# check-in has to save each in the plugin options and take the press off
+# options.json. No model call is made. The temporary folder is removed on
+# every exit.
 set -uo pipefail
 
 root="$(cd "$(dirname "$0")/.." && pwd)"
@@ -79,12 +84,19 @@ else
   check "the installed copy holds no TypeScript source, test or tsconfig.json" test -z "$sources"
 fi
 
-step "/pipcast auto and /pipcast transparency, in a headless session on the installed copy"
+step "/pipcast auto, /pipcast transparency and the window's button, in a headless session on the installed copy"
 store="$config/pipcast-home"
 out="$config/engine-out.jsonl"
 notes="$config/notes.log"
 mkdir -p "$store"
 : >"$notes"
+
+station="$config/stand-in-station"
+cat >"$station" <<'EOF'
+#!/bin/sh
+echo "started 4242"
+EOF
+chmod +x "$station"
 
 state() { # <word> <on|off>: one of /pipcast <word>'s replies, from the contract
   node -e "import('$root/packages/contract/src/copy.ts').then((m) => process.stdout.write(m.optionState(process.argv[1], process.argv[2] === 'on')))" "$1" "$2"
@@ -118,6 +130,19 @@ shared() { # what the throwaway store's options.json tells the station: on, off,
   ' "$store/options.json"
 }
 
+press() { # <true|false>: a press of the window's Transparent window button, as the station writes it
+  printf '{"v":1,"transparent":%s,"pressedAt":%s}\n' "$1" "$(( $(date +%s) * 1000 ))" >"$store/options.json.tmp"
+  mv "$store/options.json.tmp" "$store/options.json"
+}
+
+pending() { # whether the store's options.json still holds a press: pressed, or none
+  node -e '
+    const fs = require("node:fs")
+    const options = JSON.parse(fs.readFileSync(process.argv[1], "utf8"))
+    process.stdout.write(options.pressedAt === undefined ? "none" : "pressed")
+  ' "$store/options.json"
+}
+
 (
   sleep 3
   echo "before $(saved autoTuneIn)" >>"$notes"
@@ -138,7 +163,15 @@ shared() { # what the throwaway store's options.json tells the station: on, off,
   say "/pipcast transparency off"
   sleep 8
   echo "transparency-after-off $(saved transparentWindow) $(shared)" >>"$notes"
-) | env -u CLAUDE_CODE_EXECPATH CLAUDE_CONFIG_DIR="$config" PIPCAST_HOME="$store" PIPCAST_STATION_BIN=/usr/bin/false \
+  say "/pipcast"
+  sleep 6
+  press true
+  sleep 30
+  echo "press-on $(saved transparentWindow) $(shared) $(pending)" >>"$notes"
+  press false
+  sleep 30
+  echo "press-off $(saved transparentWindow) $(shared) $(pending)" >>"$notes"
+) | env -u CLAUDE_CODE_EXECPATH CLAUDE_CONFIG_DIR="$config" PIPCAST_HOME="$store" PIPCAST_STATION_BIN="$station" \
   CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1 "$claude" -p \
   --input-format stream-json --output-format stream-json --verbose \
   --model haiku --no-session-persistence >"$out" 2>&1
@@ -153,6 +186,8 @@ check "/pipcast transparency said the setting is off" grep -qF -- "$transparency
 check "/pipcast transparency on saved it on and told the station" grep -qx "transparency-after-on true on" "$notes"
 check "/pipcast transparency on answered that it is on" grep -qF -- "$transparency_on" "$out"
 check "/pipcast transparency off saved it off and told the station" grep -qx "transparency-after-off false off" "$notes"
+check "a press of the window's button, on, was saved by the next check-in and taken off options.json" grep -qx "press-on true on none" "$notes"
+check "a press of the window's button, off, was saved by the next check-in and taken off options.json" grep -qx "press-off false off none" "$notes"
 
 if [[ "$failed" -eq 0 ]]; then
   echo "verify-install: all checks passed"

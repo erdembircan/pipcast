@@ -1385,16 +1385,31 @@
     ]);
   }
 
+  /* Transparent window: the window as Apple draws it, saying what the
+     setting is. Off, the window with solid contents (rectangle.inset.filled);
+     on, the same window with its contents a checkerboard, see-through
+     (checkerboard.rectangle). */
+  function iconTransparent(on) {
+    var frame = h('rect', { key: 'f', x: 1.8, y: 1.8, width: 16.4, height: 12.4, rx: 2.8, strokeWidth: 1.6 });
+    var inside = on
+      ? h('path', { key: 'c', d: 'M5.07 2.6h2.46v2.7h-2.46zM10 2.6h2.47v2.7H10zM14.93 2.6h2.47v2.7h-2.47zM2.6 5.3h2.47V8H2.6zM7.53 5.3H10V8H7.53zM12.47 5.3h2.46V8h-2.46zM5.07 8h2.46v2.7H5.07zM10 8h2.47v2.7H10zM14.93 8h2.47v2.7h-2.47zM2.6 10.7h2.47v2.7H2.6zM7.53 10.7H10v2.7H7.53zM12.47 10.7h2.46v2.7h-2.46z', fill: 'currentColor', stroke: 'none' })
+      : h('rect', { key: 'i', x: 3.8, y: 3.8, width: 12.4, height: 8.4, rx: 1.4, fill: 'currentColor', stroke: 'none' });
+    return icon(20, 16, [frame, inside]);
+  }
+
   /* The hover controls, in Liquid Glass as macOS draws picture-in-picture:
      clear glass circles the picture shows through, 44 pt, over a light
      dimming of the picture so white glyphs read on any frame. `sound` is the
-     state the sound button shows ("on" or "off"); `hover` names the button
-     under the pointer ("close", "sound" or "back"): its glass brightens and
-     nothing pops up, no name and no tooltip. The names are for VoiceOver
-     only. Review boards mimic the glass; the app uses macOS's own. */
+     state the sound button shows ("on" or "off"), and `transparent` the
+     state the Transparent window button shows ("off" or "on"); `hover`
+     names the button under the pointer ("close", "transparent", "sound" or
+     "back"): its glass brightens and nothing pops up, no name and no
+     tooltip. The names are for VoiceOver only. Review boards mimic the
+     glass; the app uses macOS's own. */
   function PipControls(props) {
     var w = num(props.width, 716);
     var soundOn = !(props.sound === 'off' || props.sound === false || props.sound === 'false');
+    var transparentOn = props.transparent === 'on' || props.transparent === true || props.transparent === 'true';
     function button(key, cls, label, glyph) {
       var under = props.hover === key;
       return h('div', { key: key, className: cx('pn-glass', 'pn-ctl-btn', cls, under && 'pn-glass--hover'), role: 'img', 'aria-label': label }, glyph);
@@ -1402,6 +1417,7 @@
     return h('div', { className: 'pn-ctl', style: { width: w + 'px', height: Math.round(w * 9 / 16) + 'px' } },
       h('div', { key: 'dim', className: 'pn-ctl-dim' }),
       button('close', 'pn-ctl-close', 'Stop tracking', iconClose()),
+      button('transparent', 'pn-ctl-transparent', transparentOn ? 'Make the window solid' : 'Make the window transparent', iconTransparent(transparentOn)),
       button('sound', 'pn-ctl-sound', soundOn ? 'Mute' : 'Unmute', iconSound(soundOn)),
       button('back', 'pn-ctl-return', 'Back to Claude', iconReturn()));
   }
@@ -1421,7 +1437,7 @@
       style: style
     },
     blank ? null : h(Stage, { width: w, animate: animate }, content),
-    bool(props.controls, false) ? h(PipControls, { width: w, sound: props.sound, hover: props.hover }) : null);
+    bool(props.controls, false) ? h(PipControls, { width: w, sound: props.sound, transparent: props.transparent, hover: props.hover }) : null);
   }
 
   /* The window's size is its quadrant: the screen's visible area splits into

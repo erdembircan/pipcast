@@ -101,12 +101,13 @@
 .pn-glass > * { position: relative; }
 .pn-glass--hover { background: var(--pip-glass-hover, rgba(255, 255, 255, 0.26)); }
 
-/* Our three hover buttons: 44 pt (pip-control), a third bigger than macOS's 33 pt, 8 pt in from the top corners. Close at the top left; sound and Back to Claude at the top right, 8 pt apart. Nothing pops up on hover */
+/* Our four hover buttons: 44 pt (pip-control), a third bigger than macOS's 33 pt, 8 pt in from the top corners. Close at the top left; Transparent window, sound and Back to Claude at the top right, 8 pt apart. Nothing pops up on hover */
 .pn-ctl { position: absolute; left: 0; top: 0; z-index: 3; pointer-events: none; }
 .pn-ctl-dim { position: absolute; inset: 0; background: var(--pip-dim, rgba(0, 0, 0, 0.18)); }
 .pn-ctl-btn { display: flex; align-items: center; justify-content: center; }
-.pn-ctl-close, .pn-ctl-sound, .pn-ctl-return { width: var(--pip-control, 44px); height: var(--pip-control, 44px); top: 8px; }
+.pn-ctl-close, .pn-ctl-transparent, .pn-ctl-sound, .pn-ctl-return { width: var(--pip-control, 44px); height: var(--pip-control, 44px); top: 8px; }
 .pn-ctl-close { left: 8px; }
+.pn-ctl-transparent { right: calc(var(--pip-control, 44px) * 2 + 24px); }
 .pn-ctl-sound { right: calc(var(--pip-control, 44px) + 16px); }
 .pn-ctl-return { right: 8px; }
 

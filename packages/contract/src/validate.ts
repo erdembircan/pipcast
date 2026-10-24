@@ -236,10 +236,13 @@ export function parsePrefs(value: unknown): StationPrefs {
   return prefs
 }
 
-// options.json, or null when it is missing or not one
+// options.json, or null when it is missing or not one. A `pressedAt` that is
+// not a number is no press.
 export function parseSharedOptions(value: unknown): SharedOptions | null {
   if (!isObject(value) || value.v !== 1 || typeof value.transparent !== 'boolean') {
     return null
   }
-  return { v: 1, transparent: value.transparent }
+  return isNumber(value.pressedAt)
+    ? { v: 1, transparent: value.transparent, pressedAt: value.pressedAt }
+    : { v: 1, transparent: value.transparent }
 }

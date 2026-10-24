@@ -102,10 +102,14 @@ export interface StationPrefs {
   lastReportAt: number | null
 }
 
-// options.json: the plugin options the station follows, written by the mods
+// options.json: the plugin options the station follows, written by the mods.
+// The window's Transparent window button writes it too, with `pressedAt`, the
+// time of the press, until a session on air saves the value as the plugin's
+// option and writes the file again without it.
 export interface SharedOptions {
   v: 1
   transparent: boolean
+  pressedAt?: number
 }
 
 // The bridge between the station and its web page

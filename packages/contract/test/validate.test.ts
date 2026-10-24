@@ -314,4 +314,11 @@ describe('the options the station follows', () => {
       expect(parseSharedOptions(value)).toBeNull()
     }
   })
+
+  it('keeps a press of the window\'s button when its time is a number', () => {
+    expect(parseSharedOptions({ v: 1, transparent: true, pressedAt: 1_800_000_000_123 })).toEqual({ v: 1, transparent: true, pressedAt: 1_800_000_000_123 })
+    expect(parseSharedOptions({ v: 1, transparent: false, pressedAt: 'soon' })).toEqual({ v: 1, transparent: false })
+    expect(parseSharedOptions({ v: 1, transparent: false, pressedAt: Number.NaN })).toEqual({ v: 1, transparent: false })
+    expect(Object.keys(parseSharedOptions({ v: 1, transparent: true }) ?? {})).toEqual(['v', 'transparent'])
+  })
 })

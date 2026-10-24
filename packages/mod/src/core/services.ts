@@ -5,6 +5,7 @@ import { storePaths } from '../../../contract/src/paths.ts'
 import { isStationAlive, parseControl, parseSharedOptions, parseStationStatus, trimRecord } from '../../../contract/src/validate.ts'
 import type { SessionRecord, SharedOptions } from '../../../contract/src/types.ts'
 import type { SessionModel } from './model.ts'
+import { answerFor, stillPressed } from './options.ts'
 
 export interface RunResult {
   exitCode: number
@@ -124,4 +125,36 @@ export async function readSharedOptions(io: Io, home: string): Promise<SharedOpt
 export async function shareOptions(io: Io, home: string, options: SharedOptions, writer: string): Promise<void> {
   const path = storePaths(home).options
   await io.write(path, JSON.stringify(options), `${path}.${writer}.tmp`)
+}
+
+// What came of a press of the window's Transparent window button: none to
+// answer; taken away, its value being the option's already; saved; refused by
+// Claude Code, and the file put back to this load's value; or overtaken by a
+// newer press or a /pipcast transparency while it was being saved, and left
+// for the next check-in
+export type PressOutcome = 'none' | 'cleared' | 'saved' | 'refused' | 'overtaken'
+
+// Answers a press of the window's Transparent window button, as a session on
+// air does at its check-in. `transparent` is this load's value of the option,
+// and `save` saves a value as the option, true once Claude Code has. The file
+// is written again only while it still holds the same press: with the press's
+// value once that is the option's, else with this load's, and either way
+// without the press.
+export async function answerPress(
+  io: Io,
+  home: string,
+  transparent: boolean,
+  writer: string,
+  save: (on: boolean) => Promise<boolean>,
+): Promise<PressOutcome> {
+  const answer = answerFor(await readSharedOptions(io, home), transparent)
+  if (answer.kind === 'none') {
+    return 'none'
+  }
+  const saved = answer.kind === 'clear' || (await save(answer.transparent))
+  if (!stillPressed(await readSharedOptions(io, home), answer.pressedAt)) {
+    return 'overtaken'
+  }
+  await shareOptions(io, home, { v: 1, transparent: saved ? answer.transparent : transparent }, writer)
+  return answer.kind === 'clear' ? 'cleared' : saved ? 'saved' : 'refused'
 }

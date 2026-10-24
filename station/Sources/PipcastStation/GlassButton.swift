@@ -1,6 +1,6 @@
 import AppKit
 
-/// One of the three 44 pt circles on the window: Liquid Glass on macOS 26 and
+/// One of the four 44 pt circles on the window: Liquid Glass on macOS 26 and
 /// later, a HUD-material blur before it, with a white SF Symbol in it.
 /// It sets no tooltip: nothing pops up over it.
 final class GlassButton: NSView {

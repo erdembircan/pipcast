@@ -183,4 +183,36 @@ import Testing
         try #"{"v":1,"transparent":false}"#.write(toFile: path, atomically: true, encoding: .utf8)
         #expect(!SharedOptions.load(from: path).transparent)
     }
+
+    @Test func readsAPressWithItsTime() throws {
+        let folder = temporaryFolder()
+        defer { try? FileManager.default.removeItem(atPath: folder) }
+        let path = "\(folder)/options.json"
+        try #"{"v":1,"transparent":true,"pressedAt":1792600000123}"#.write(toFile: path, atomically: true, encoding: .utf8)
+        #expect(SharedOptions.load(from: path) == SharedOptions(transparent: true, pressedAt: 1792600000123))
+        for text in [#"{"v":1,"transparent":true,"pressedAt":"soon"}"#, #"{"v":1,"transparent":true,"pressedAt":true}"#, #"{"v":1,"transparent":true}"#] {
+            try text.write(toFile: path, atomically: true, encoding: .utf8)
+            #expect(SharedOptions.load(from: path) == SharedOptions(transparent: true), "\(text)")
+        }
+    }
+
+    @Test func aPressWritesTheOtherValueWithItsTime() {
+        #expect(SharedOptions(transparent: false).pressed(at: 1000) == SharedOptions(transparent: true, pressedAt: 1000))
+        #expect(SharedOptions(transparent: true, pressedAt: 5).pressed(at: 1000) == SharedOptions(transparent: false, pressedAt: 1000))
+    }
+
+    @Test func writesTheFileWholeThroughItsOwnTemporaryName() throws {
+        let folder = temporaryFolder()
+        defer { try? FileManager.default.removeItem(atPath: folder) }
+        let path = "\(folder)/options.json"
+        try SharedOptions(transparent: true, pressedAt: 1792600000123).write(to: path)
+        #expect(SharedOptions.load(from: path) == SharedOptions(transparent: true, pressedAt: 1792600000123))
+        let pressed = try JSONSerialization.jsonObject(with: Data(contentsOf: URL(fileURLWithPath: path))) as? [String: Any]
+        #expect(Set(pressed?.keys.map { $0 } ?? []) == ["v", "transparent", "pressedAt"])
+        #expect(!FileManager.default.fileExists(atPath: "\(path).tmp"))
+        try SharedOptions(transparent: false).write(to: path)
+        let plain = try JSONSerialization.jsonObject(with: Data(contentsOf: URL(fileURLWithPath: path))) as? [String: Any]
+        #expect(Set(plain?.keys.map { $0 } ?? []) == ["v", "transparent"])
+        #expect(SharedOptions.load(from: path) == SharedOptions(transparent: false))
+    }
 }

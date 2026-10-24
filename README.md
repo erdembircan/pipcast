@@ -16,8 +16,8 @@ The window shows only while you're in another app. Switch back to Claude and it 
 - **The live board.** Each session on air gets a row with its project on a plate, its title, and its state on a pill: INPUT when it needs you, ERROR when it stopped on an error, READY when it finished, LIVE while it works. With more than four on air, the board shows four at a time and turns to the next four every 8 seconds. Under the listing, two meters show your account's usage limits, the current session's and the week's, from the newest reading any session on air took: gold from 70%, red from 90%.
 - **BREAKING NEWS for every story.** A session that needs your input, that is ready for review, whose work is complete, or that stopped on an error airs as its own segment. Stories air one after another, in the order they land. Nothing cuts in, and KLWD airs only what happens while you're away from Claude: switch to Claude and the stories still waiting are dropped, along with any that land while you're there.
 - **On the hour.** The station clock strikes the hour, Clawd reads the headlines, and THE HOUR IN REVIEW shows what each session did: a row each, named as on the board by its project's plate and its title, with the lines it changed or how long it has waited. If you're in Claude as the hour strikes, that hour is skipped, and the next report covers it.
-- **A window that stays out of the way.** It fills its quarter of the screen, resizes down to 70% from its edges, and moves to another corner when you drag it there. It floats above every app and never takes the keyboard. Run `/pipcast transparency on` and it fades to 40% while the pointer is elsewhere, so you can see what is under it.
-- **Controls on hover.** Close stops tracking every session, the speaker turns the jingles on and off, and Back to Claude brings Claude to the front.
+- **A window that stays out of the way.** It fills its quarter of the screen, resizes down to 70% from its edges, and moves to another corner when you drag it there. It floats above every app and never takes the keyboard. Turn on Transparent window, from its button on the window or with `/pipcast transparency on`, and it fades to 40% while the pointer is elsewhere, so you can see what is under it.
+- **Controls on hover.** Close stops tracking every session, the window button turns Transparent window on and off, the speaker turns the jingles on and off, and Back to Claude brings Claude to the front.
 
 ## Requirements
 
@@ -70,6 +70,8 @@ While it is on, each new session in the desktop app tunes in by itself as it ope
 
 While it is on, the window fades to 40% whenever the pointer is elsewhere, so you can read what is under it, and turns solid again, with its controls, as soon as the pointer is on it. It stays solid while you drag it. Everything airs as before, BREAKING NEWS and its jingle included. A change reaches the window within a second, from any session.
 
+The window has a button for it as well: on hover, the one to the left of the speaker. It shows a window with solid contents while the setting is off, and the same window with a checkerboard while it is on, and a press turns it over at once. It is the same setting `/pipcast transparency` changes, and Claude Code saves it within 10 seconds of the press, so `/pipcast transparency` and every new session see it too.
+
 ```text
 /pipcast transparency on
 ```
@@ -118,7 +120,7 @@ runs every check: lint, types, the unit tests of each part, the station's Swift 
 scripts/verify.sh
 ```
 
-runs the whole thing for real, with no window of yours involved: a headless Claude Code session tunes in, the station starts and shows its window, the session tunes out, and the station quits. With **Transparent window** on, the window server has to show that window at 40%, or whole while the pointer is on it, and whole once it is off. Another session is renamed on air, off air and after the window's close, and its title on air has to follow each time. One more, with **Tune in every new session** on, has to stay off the air until a stand-in for the desktop app shows it, then tune in by itself, and again after a `/clear`. An install into a throwaway configuration then has to hold exactly the files in `plugin/`, with no source or test among them. It also has to turn both settings on and off with `/pipcast auto` and `/pipcast transparency`, each value landing where Claude Code keeps plugin options, and the second in the file the station reads as well.
+runs the whole thing for real, with no window of yours involved: a headless Claude Code session tunes in, the station starts and shows its window, the session tunes out, and the station quits. With **Transparent window** on, the window server has to show that window at 40%, or whole while the pointer is on it, and whole once it is off. Another session is renamed on air, off air and after the window's close, and its title on air has to follow each time. One more, with **Tune in every new session** on, has to stay off the air until a stand-in for the desktop app shows it, then tune in by itself, and again after a `/clear`. An install into a throwaway configuration then has to hold exactly the files in `plugin/`, with no source or test among them. It also has to turn both settings on and off with `/pipcast auto` and `/pipcast transparency`, each value landing where Claude Code keeps plugin options, and the second in the file the station reads as well. Last, a session on that install tunes in, and a press of the window's Transparent window button, written to the file the station reads, has to be saved where Claude Code keeps plugin options by the session's next check-in, and taken off the file.
 
 ### Try a change in the desktop app
 

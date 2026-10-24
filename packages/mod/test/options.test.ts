@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { OPTIONS, installedId, needsSharing, parseRequest, readBoolean, wasSaved } from '../src/core/options.ts'
+import { OPTIONS, answerFor, installedId, needsSharing, parseRequest, readBoolean, stillPressed, wasSaved } from '../src/core/options.ts'
 
 const auto = OPTIONS.find((option) => option.word === 'auto')
 const transparency = OPTIONS.find((option) => option.word === 'transparency')
@@ -73,5 +73,30 @@ describe('needsSharing', () => {
     expect(needsSharing({ v: 1, transparent: true }, false)).toBe(true)
     expect(needsSharing({ v: 1, transparent: false }, false)).toBe(false)
     expect(needsSharing({ v: 1, transparent: true }, true)).toBe(false)
+  })
+
+  it('leaves a press of the window\'s button waiting to be saved, whatever it asks for', () => {
+    expect(needsSharing({ v: 1, transparent: true, pressedAt: 5 }, false)).toBe(false)
+    expect(needsSharing({ v: 1, transparent: false, pressedAt: 5 }, false)).toBe(false)
+  })
+})
+
+describe('a press of the window\'s button', () => {
+  it('is nothing to answer in a file with no press, or no file', () => {
+    expect(answerFor(null, false)).toEqual({ kind: 'none' })
+    expect(answerFor({ v: 1, transparent: true }, false)).toEqual({ kind: 'none' })
+  })
+
+  it('is taken away when it asks for the value the load already has, and saved otherwise', () => {
+    expect(answerFor({ v: 1, transparent: true, pressedAt: 5 }, true)).toEqual({ kind: 'clear', pressedAt: 5, transparent: true })
+    expect(answerFor({ v: 1, transparent: true, pressedAt: 5 }, false)).toEqual({ kind: 'save', pressedAt: 5, transparent: true })
+    expect(answerFor({ v: 1, transparent: false, pressedAt: 5 }, true)).toEqual({ kind: 'save', pressedAt: 5, transparent: false })
+  })
+
+  it('is still there only while the file holds the same press', () => {
+    expect(stillPressed({ v: 1, transparent: true, pressedAt: 5 }, 5)).toBe(true)
+    expect(stillPressed({ v: 1, transparent: true, pressedAt: 6 }, 5)).toBe(false)
+    expect(stillPressed({ v: 1, transparent: true }, 5)).toBe(false)
+    expect(stillPressed(null, 5)).toBe(false)
   })
 })

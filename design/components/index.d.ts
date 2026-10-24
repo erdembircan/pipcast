@@ -105,11 +105,12 @@ export interface PipProps {
   sample?: string;
   scene?: Scene;
   run?: RunStep[];
-  /** Show close, sound and Back to Claude as they look on hover. */
+  /** Show close, Transparent window, sound and Back to Claude as they look on hover. */
   controls?: boolean;
-  /** With `controls`: the state the sound button shows, and the button under the pointer. */
+  /** With `controls`: the states the sound and Transparent window buttons show, and the button under the pointer. */
   sound?: 'on' | 'off';
-  hover?: 'close' | 'sound' | 'back';
+  transparent?: 'on' | 'off';
+  hover?: 'close' | 'transparent' | 'sound' | 'back';
   /** The window with nothing in it: the window itself. */
   blank?: boolean;
   animate?: boolean;
@@ -142,8 +143,10 @@ export interface PipControlsProps {
   width?: number;
   /** The state the sound button shows; "on" by default. */
   sound?: 'on' | 'off';
+  /** The state the Transparent window button shows; "off" by default. */
+  transparent?: 'on' | 'off';
   /** The button under the pointer: its glass brightens. Nothing pops up, no name and no tooltip. */
-  hover?: 'close' | 'sound' | 'back';
+  hover?: 'close' | 'transparent' | 'sound' | 'back';
 }
 
 export interface BroadcastProps { scene?: Scene; sample?: string; run?: RunStep[]; animate?: boolean }

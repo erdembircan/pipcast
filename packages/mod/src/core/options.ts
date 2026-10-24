@@ -20,9 +20,30 @@ export const OPTIONS: readonly OptionSpec[] = [
 export const TRANSPARENT_KEY = 'transparentWindow'
 
 // Whether a session that tunes in, or reloads while tuned in, writes its own
-// value to options.json: when the file is missing, cannot be read or says otherwise
+// value to options.json: when the file is missing, cannot be read or says
+// otherwise, unless it holds a press of the window's button waiting to be saved
 export function needsSharing(file: SharedOptions | null, transparent: boolean): boolean {
-  return file === null || file.transparent !== transparent
+  return file === null || (file.pressedAt === undefined && file.transparent !== transparent)
+}
+
+// What a session on air does with options.json at its check-in: nothing while
+// it holds no press of the window's Transparent window button; take the press
+// away when it asks for the value this load already has; save it otherwise
+export type PressAnswer =
+  | { kind: 'none' }
+  | { kind: 'clear'; pressedAt: number; transparent: boolean }
+  | { kind: 'save'; pressedAt: number; transparent: boolean }
+
+export function answerFor(file: SharedOptions | null, transparent: boolean): PressAnswer {
+  if (file === null || file.pressedAt === undefined) {
+    return { kind: 'none' }
+  }
+  return { kind: file.transparent === transparent ? 'clear' : 'save', pressedAt: file.pressedAt, transparent: file.transparent }
+}
+
+// Whether options.json still holds the press a session is answering
+export function stillPressed(file: SharedOptions | null, pressedAt: number): boolean {
+  return file !== null && file.pressedAt === pressedAt
 }
 
 // What the words after /pipcast ask for

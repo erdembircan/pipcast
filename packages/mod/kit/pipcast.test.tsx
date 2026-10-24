@@ -1263,3 +1263,62 @@ scenario('a session that is not tuned in tells the station nothing as it loads a
   await w.clock.advance(10_000)
   expect(w.shared()).toBeNull()
 })
+
+// A press of the window's Transparent window button, as the station writes it
+const pressed = (transparent: boolean, pressedAt = T0 + 500) => JSON.stringify({ v: 1, transparent, pressedAt })
+
+scenario('a session on air saves a press of the window\'s button at its next check-in', {}, async (w, $) => {
+  await tuneIn($)
+  w.files.set(OPTIONS_FILE, pressed(true))
+  await w.clock.advance(HEARTBEAT_MS)
+  expect(w.saved.transparentWindow).toBe('true')
+  expect(w.engineCalls.find((call) => call.argv.includes('--values-stdin'))?.stdin).toBe(JSON.stringify({ transparentWindow: 'true' }))
+  expect(w.shared()).toEqual({ v: 1, transparent: true })
+  expect(w.toasts).toEqual([])
+  // Answered once: the next check-in finds nothing to save
+  await w.clock.advance(HEARTBEAT_MS)
+  expect(w.engineCalls.filter((call) => call.argv.includes('--values-stdin')).length).toBe(1)
+})
+
+scenario('a press that asks for the value Claude Code already has is only taken away', SEE_THROUGH, async (w, $) => {
+  await tuneIn($)
+  w.files.set(OPTIONS_FILE, pressed(true))
+  await w.clock.advance(HEARTBEAT_MS)
+  expect(w.engineCalls.some((call) => call.argv.includes('--values-stdin'))).toBe(false)
+  expect(w.shared()).toEqual({ v: 1, transparent: true })
+})
+
+scenario('a press Claude Code refuses puts the saved value back and says so', { configureFails: true }, async (w, $) => {
+  await tuneIn($)
+  w.files.set(OPTIONS_FILE, pressed(true))
+  await w.clock.advance(HEARTBEAT_MS)
+  expect(w.shared()).toEqual({ v: 1, transparent: false })
+  expect(w.toasts).toEqual([OPTION_REPLY.cannotSave('transparency', true)])
+  // The press is gone, so no check-in tries again
+  await w.clock.advance(HEARTBEAT_MS)
+  expect(w.toasts.length).toBe(1)
+})
+
+scenario('tuning in leaves a press waiting in options.json alone', {}, async (w, $) => {
+  w.files.set(OPTIONS_FILE, pressed(true))
+  await tuneIn($)
+  expect(w.writes.filter((path) => path.startsWith(OPTIONS_FILE))).toEqual([])
+  expect(w.shared()).toEqual({ v: 1, transparent: true, pressedAt: T0 + 500 })
+})
+
+scenario('a session that is not on air leaves a press alone', {}, async (w) => {
+  w.files.set(OPTIONS_FILE, pressed(true))
+  await w.clock.advance(HEARTBEAT_MS)
+  expect(w.engineCalls).toEqual([])
+  expect(w.shared()).toEqual({ v: 1, transparent: true, pressedAt: T0 + 500 })
+})
+
+scenario('/pipcast transparency after a press of the window\'s button replaces it', {}, async (w, $) => {
+  await tuneIn($)
+  w.files.set(OPTIONS_FILE, pressed(true))
+  expect((await option($, 'transparency off')).text).toBe(optionState('transparency', false))
+  expect(w.shared()).toEqual({ v: 1, transparent: false })
+  await w.clock.advance(HEARTBEAT_MS)
+  expect(w.saved.transparentWindow).toBe('false')
+  expect(w.engineCalls.filter((call) => call.argv.includes('--values-stdin')).map((call) => call.stdin)).toEqual([JSON.stringify({ transparentWindow: 'false' })])
+})

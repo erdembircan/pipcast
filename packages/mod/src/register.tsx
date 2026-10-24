@@ -21,6 +21,7 @@ import type { OptionSpec } from './core/options.ts'
 import { lookAtShells, lookDue, stillWorking } from './core/shells.ts'
 import { waitsOn } from './core/wake.ts'
 import {
+  answerPress,
   checkIn,
   ensureStation,
   readSharedOptions,
@@ -77,6 +78,9 @@ const agentFolders = new Map<string, string | null>()
 let readings: Promise<void> = Promise.resolve()
 // A look at the background commands a held finish waits on is running
 let looking = false
+
+// A press of the window's Transparent window button is being answered
+let answering = false
 
 // The engine's own band is an empty Box; another mod's band has content.
 const hasContent = (drawn: RenderElement) => drawn.type !== 'Box' || (drawn.children?.length ?? 0) > 0
@@ -259,6 +263,34 @@ async function shareOwnTransparency($: EngineInterface): Promise<void> {
     }
   } catch (error) {
     failure($, 'telling the station', error)
+  }
+}
+
+// A session on air answers a press of the window's Transparent window button
+// at its check-in: it saves the value with Claude Code's own command, as
+// /pipcast transparency on and off do, after which every session reloads
+// with it. One answer at a time; a refused save puts the window back to this
+// load's value and says so in a toast.
+async function answerPressNow($: EngineInterface): Promise<void> {
+  if (answering) {
+    return
+  }
+  answering = true
+  try {
+    const io = ioFor($)
+    const save = async (on: boolean): Promise<boolean> => {
+      const home = await optionsHomeOf($)
+      return home !== null && (await writeOption(io, home, TRANSPARENT_KEY, on))
+    }
+    const outcome = await answerPress(io, await io.storeHome(), transparentWindow, await $.session.id(), save)
+    if (outcome === 'refused') {
+      // The press asked for the other value
+      $.ui.toast(OPTION_REPLY.cannotSave('transparency', !transparentWindow))
+    }
+  } catch (error) {
+    failure($, 'answering a press of the window button', error)
+  } finally {
+    answering = false
   }
 }
 
@@ -553,8 +585,9 @@ async function lookAgain($: EngineInterface): Promise<void> {
   }
 }
 
-// The heartbeat: a tuned-in session checks in; a held finish's background
-// commands are looked at again
+// The heartbeat: a tuned-in session checks in and answers a press of the
+// window's Transparent window button; a held finish's background commands
+// are looked at again
 async function beat($: EngineInterface): Promise<void> {
   await lookAgain($)
   try {
@@ -577,6 +610,7 @@ async function beat($: EngineInterface): Promise<void> {
       await setState($, false)
     } else {
       await setState($, true)
+      await answerPressNow($)
     }
   } catch (error) {
     failure($, 'heartbeat', error)

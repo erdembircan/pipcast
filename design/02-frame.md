@@ -1,6 +1,6 @@
 # Frame
 
-The feed plays in our own window, not in macOS's picture-in-picture. The proof of concept built that window; the supplied screenshot gives it the look of macOS's video picture-in-picture. Three controls sit on the picture, on hover only: close, sound, and Back to Claude. The window itself is designed on the PiP Newsroom · Window canvas.
+The feed plays in our own window, not in macOS's picture-in-picture. The proof of concept built that window; the supplied screenshot gives it the look of macOS's video picture-in-picture. Four controls sit on the picture, on hover only: close, Transparent window, sound, and Back to Claude. The window itself is designed on the PiP Newsroom · Window canvas.
 
 ## What the window does
 
@@ -17,6 +17,7 @@ The feed plays in our own window, not in macOS's picture-in-picture. The proof o
 | Back to Claude brings Claude forward | The window then hides by itself, because Claude is in front | `Visibility.swift` |
 | Sound on and off | The sound button on hover switches the jingles on and off. Sound starts on and the window remembers the choice; it plays at the Mac's volume | Your rule |
 | Fades while the pointer is elsewhere, with Transparent window on | The whole window shows at 40% (`pip-faded`), so what is under it reads through, and turns solid with the controls as the pointer reaches it; a drag that starts on it keeps it solid. Every segment airs the same way, BREAKING NEWS included | Your rule; 40% is a first figure |
+| Transparent window on and off | The Transparent window button on hover turns the setting over, and `/pipcast transparency` does the same from Claude: one setting, Claude Code's own plugin option. The button shows what the setting is, and the window takes a press at once | Your rule |
 | Shows only while something is tracked | With no tracked session there is no window at all | Your rule |
 | Tracks every session tuned in | No limit: the listing shows four a page and turns to the next every 8 s | Your rule |
 
@@ -48,6 +49,7 @@ The screenshot's aspect (2000 × 1299, 1.54) matches a 14-inch MacBook Pro displ
 | Close | 33 pt Liquid Glass circle, top left, 8 pt in: clear glass, the picture showing through softened, a thin rim catching the light, a white X | The same, a third bigger: 44 pt (`pip-control`), at your request |
 | Return | 33 pt Liquid Glass circle, top right, 8 pt in, macOS's glyph for leaving picture-in-picture | The same at 44 pt, Back to Claude, with the same glyph |
 | Sound | None | The same glass at 44 pt, top right, 60 pt in: beside Back to Claude, 8 pt apart; a speaker with two waves, or with a slash when muted |
+| Transparent window | None | The same glass at 44 pt, top right, 112 pt in: beside sound, 8 pt apart; a window with solid contents, or its contents a checkerboard while Transparent window is on |
 | While the controls show | The picture dims a little, so white glyphs read on clear glass | The same (`pip-dim`) |
 | Under the pointer | Not in the screenshot | The glass brightens (`pip-glass-hover`). Nothing pops up: no name, no tooltip (your rule) |
 | Play, ±10 s, timeline | Centre and bottom | None |
@@ -59,6 +61,7 @@ The buttons keep their size in points, so they cover the most of the picture in 
 | Zone | 716 pt (full size, 14-inch MacBook Pro) | 420 pt (the smallest on any screen) |
 | --- | --- | --- |
 | Close | x 11–70, y 11–70 | x 18–119, y 18–119 |
+| Transparent window | x 751–810, y 11–70 | x 603–704, y 18–119 |
 | Sound | x 821–880, y 11–70 | x 722–823, y 18–119 |
 | Back to Claude | x 890–949, y 11–70 | x 841–942, y 18–119 |
 
@@ -69,7 +72,7 @@ At full size, close covers the first letters of the KLWD bug and nothing else. I
 1. **One layout, scaled uniformly.** The picture is a TV picture, 960 × 540 (`stage-width`, `stage-height`), and scales with the window without reflowing.
 2. **Text is 28px or larger** (`legibility-floor`): 12.3 pt in the smallest window, 420 pt wide.
 3. **Corners stay empty.** No text inside a 64px square at any corner.
-4. **The bug sits at x 40**, the title-safe inset, level with the listing; on hover, close covers its first letters. Nothing in the top band reaches x 722, where sound sits in the smallest window. The clock lives at the bottom right, in the ticker.
+4. **The bug sits at x 40**, the title-safe inset, level with the listing; on hover, close covers its first letters. Nothing in the top band reaches x 603, where Transparent window sits in the smallest window. The clock lives at the bottom right, in the ticker.
 5. **The window is its quadrant.** It opens filling its quadrant at 16:9, 20 pt in from every side, never gets bigger, and resizes down to 70% of that.
 6. **A smaller size you choose is kept as a share of the quadrant**, so it carries to another screen. The technical reference proposes `$.store` for remembering the corner; the size can sit beside it.
 

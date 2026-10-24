@@ -39,7 +39,7 @@ final class StationController: NSObject, InteractionDelegate, WKNavigationDelega
     /// Whether the window counts as hovered, as the station last looked: the controls show and the window is whole.
     /// Never while it is hidden.
     private var hovered = false
-    /// Transparent window, as options.json last said.
+    /// Transparent window, as options.json last said or the window's button just set it.
     private var transparent = false
     /// The self-capture holds the controls up.
     private var holdingControls = false
@@ -59,6 +59,7 @@ final class StationController: NSObject, InteractionDelegate, WKNavigationDelega
         chrome.interaction.delegate = self
         chrome.interaction.onPointer = { [weak self] in self?.followPointer() }
         chrome.close.onPress = { [weak self] in self?.close() }
+        chrome.transparency.onPress = { [weak self] in self?.toggleTransparency() }
         chrome.sound.onPress = { [weak self] in self?.toggleSound() }
         chrome.back.onPress = { [weak self] in self?.backToClaude() }
         bridge.onMessage = { [weak self] message in self?.receive(message) }
@@ -82,6 +83,7 @@ final class StationController: NSObject, InteractionDelegate, WKNavigationDelega
                   : "error cannot keep the window off the target's own full-screen Spaces; it can show there as you switch to it")
         transparent = SharedOptions.load(from: paths.options).transparent
         log.write(transparent ? "transparent on" : "transparent off")
+        showTransparencyState()
         jingles = Jingles(folder: "\(options.assets)/sounds", onProblem: { [log] in log.write("error \($0)") })
         place(on: NSScreen.main ?? NSScreen.screens[0], animated: false)
 
@@ -377,12 +379,13 @@ final class StationController: NSObject, InteractionDelegate, WKNavigationDelega
 
     // MARK: Hover and Transparent window
 
-    /// Follows options.json: Transparent window, logged as it changes.
+    /// Follows options.json: Transparent window, logged as it changes, on the window's look and on its button.
     private func readOptions() {
         let now = SharedOptions.load(from: paths.options).transparent
         guard now != transparent else { return }
         transparent = now
         log.write(now ? "transparent on" : "transparent off")
+        showTransparencyState()
         showLook(animated: isShown == true)
     }
 
@@ -468,6 +471,28 @@ final class StationController: NSObject, InteractionDelegate, WKNavigationDelega
         } else {
             chrome.sound.set(symbol: "speaker.slash.fill", label: "Unmute")
         }
+    }
+
+    /// Turns Transparent window over: writes the other value to options.json, marked as pressed now, for a session on
+    /// air to save as the plugin's option at its next check-in, and follows it at once. The window stays whole while
+    /// the pointer is on it, so the new look shows as the pointer leaves.
+    private func toggleTransparency() {
+        let next = SharedOptions(transparent: transparent).pressed(at: nowMilliseconds())
+        do {
+            try next.write(to: paths.options)
+        } catch {
+            log.write("error cannot write options.json: \(error)")
+            return
+        }
+        transparent = next.transparent
+        log.write(transparent ? "transparent on: pressed" : "transparent off: pressed")
+        showTransparencyState()
+        showLook(animated: isShown == true)
+    }
+
+    private func showTransparencyState() {
+        chrome.transparency.set(symbol: TransparencyButton.symbol(transparent: transparent),
+                                label: TransparencyButton.label(transparent: transparent))
     }
 
     private func backToClaude() {

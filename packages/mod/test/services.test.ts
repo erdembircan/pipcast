@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { defaultHome, storePaths } from '@pipcast/contract'
 import type { SessionRecord } from '@pipcast/contract'
 import * as m from '../src/core/model.ts'
-import { checkIn, ensureStation, readSharedOptions, recordOf, shareOptions, tuneIn, tuneOut } from '../src/core/services.ts'
+import { answerPress, checkIn, ensureStation, readSharedOptions, recordOf, shareOptions, tuneIn, tuneOut } from '../src/core/services.ts'
 import type { Io, RunResult } from '../src/core/services.ts'
 
 const HOME = '/store'
@@ -266,5 +266,69 @@ describe('the options the station follows', () => {
     expect(await readSharedOptions(state.io, HOME)).toBeNull()
     state.files.set(paths.options, JSON.stringify({ v: 1, transparent: false }))
     expect(await readSharedOptions(state.io, HOME)).toEqual({ v: 1, transparent: false })
+  })
+})
+
+describe('answerPress', () => {
+  const PRESS = 1_792_600_000_500
+  const pressed = (transparent: boolean) => JSON.stringify({ v: 1, transparent, pressedAt: PRESS })
+  const saves = (result: boolean) => {
+    const asked: boolean[] = []
+    const save = async (on: boolean) => {
+      asked.push(on)
+      return result
+    }
+    return { asked, save }
+  }
+
+  it('answers nothing when options.json holds no press, or is missing', async () => {
+    const state = fake()
+    const { asked, save } = saves(true)
+    expect(await answerPress(state.io, HOME, false, 'session-a', save)).toBe('none')
+    state.files.set(paths.options, JSON.stringify({ v: 1, transparent: true }))
+    expect(await answerPress(state.io, HOME, false, 'session-a', save)).toBe('none')
+    expect(asked).toEqual([])
+    expect(JSON.parse(state.files.get(paths.options) ?? '')).toEqual({ v: 1, transparent: true })
+  })
+
+  it('takes away a press that asks for the value the load already has, saving nothing', async () => {
+    const state = fake()
+    state.files.set(paths.options, pressed(true))
+    const { asked, save } = saves(true)
+    expect(await answerPress(state.io, HOME, true, 'session-a', save)).toBe('cleared')
+    expect(asked).toEqual([])
+    expect(JSON.parse(state.files.get(paths.options) ?? '')).toEqual({ v: 1, transparent: true })
+    expect(state.temps).toEqual([`${paths.options}.session-a.tmp`])
+  })
+
+  it('saves the value a press asks for, then takes the press away', async () => {
+    const state = fake()
+    state.files.set(paths.options, pressed(true))
+    const { asked, save } = saves(true)
+    expect(await answerPress(state.io, HOME, false, 'session-a', save)).toBe('saved')
+    expect(asked).toEqual([true])
+    expect(JSON.parse(state.files.get(paths.options) ?? '')).toEqual({ v: 1, transparent: true })
+  })
+
+  it('puts the load\'s value back when Claude Code refuses the save', async () => {
+    const state = fake()
+    state.files.set(paths.options, pressed(true))
+    const { save } = saves(false)
+    expect(await answerPress(state.io, HOME, false, 'session-a', save)).toBe('refused')
+    expect(JSON.parse(state.files.get(paths.options) ?? '')).toEqual({ v: 1, transparent: false })
+  })
+
+  it('leaves a newer press, or a /pipcast transparency, written while it saved', async () => {
+    for (const meanwhile of [JSON.stringify({ v: 1, transparent: false, pressedAt: PRESS + 1 }), JSON.stringify({ v: 1, transparent: false })]) {
+      const state = fake()
+      state.files.set(paths.options, pressed(true))
+      const save = async () => {
+        state.files.set(paths.options, meanwhile)
+        return true
+      }
+      expect(await answerPress(state.io, HOME, false, 'session-a', save)).toBe('overtaken')
+      expect(state.files.get(paths.options)).toBe(meanwhile)
+      expect(state.temps).toEqual([])
+    }
   })
 })
