@@ -14,7 +14,7 @@ import { Paper } from '../look/Paper.tsx'
 import { INK, INK_SOFT, MONO, SANS, SERIF } from '../look/theme.ts'
 import { SCREEN_H, SCREEN_W } from '../desktop/geometry.ts'
 import { FRAME } from '../stage/Frame.tsx'
-import { LOGO_HITS, SCENES } from '../timeline.ts'
+import { DURATION, LOGO_HITS, SCENES } from '../timeline.ts'
 import { CAMERA } from './common.tsx'
 import { DeskScreen } from './Desk.tsx'
 
@@ -127,9 +127,9 @@ function Signal({ T }: { T: number }) {
 }
 
 /** The city rising, nearest towers last, as the desktop finishes dissolving into the dusk */
-const TOWER_AT: Record<string, number> = { l3: 80.3, r3: 80.35, l2: 80.45, r2: 80.5, l1: 80.6, r1: 80.65 }
-const STATION_AT = 80.7
-const MAST = [81.9, 82.75] as const
+const TOWER_AT: Record<string, number> = { l3: F + 1.3, r3: F + 1.35, l2: F + 1.45, r2: F + 1.5, l1: F + 1.6, r1: F + 1.65 }
+const STATION_AT = F + 1.7
+const MAST = [F + 2.9, F + 3.75] as const
 
 function layerStyle(name: LayerName, T: number): CSSProperties {
   const lightsAt: Record<string, number> = { l1: HIT_D, l2: HIT_D + 0.12, l3: HIT_D + 0.22, r1: HIT_A2, r2: HIT_A2 + 0.1, r3: HIT_A2 + 0.2 }
@@ -229,7 +229,7 @@ export function Finale({ T }: { T: number }) {
   const tagline = ease.out(seg(T, SCENES.endCard + 1.15, SCENES.endCard + 1.95))
   const link = ease.out(seg(T, SCENES.endCard + 1.5, SCENES.endCard + 2.3))
   const tuned = ease.out(seg(T, SCENES.endCard + 2.9, SCENES.endCard + 3.7))
-  const end = 1 - ease.inOut(seg(T, 95.2, 96))
+  const end = 1 - ease.inOut(seg(T, DURATION - 0.8, DURATION))
   const lift = ease.inOut(seg(T, HIT_D2, HIT_D2 + 0.8))
   const rise = (p: number): CSSProperties => ({ opacity: p, transform: `translateY(${(1 - p) * 18}px)`, filter: p < 1 ? `blur(${(1 - p) * 8}px)` : undefined })
   return (

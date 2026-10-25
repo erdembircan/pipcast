@@ -12,7 +12,7 @@ import { Paper } from '../look/Paper.tsx'
 import { Frame, WIDE } from '../stage/Frame.tsx'
 import { Screen } from '../stage/Screen.tsx'
 import type { PipState, TabState } from '../stage/Screen.tsx'
-import { ASK, HOUR, SCENES } from '../timeline.ts'
+import { ASK, HOUR, NEWS, SCENES } from '../timeline.ts'
 import { AirAt, cameraPath, pressAt, trackPointer, viewAt } from './common.tsx'
 import type { PointerKey } from './common.tsx'
 
@@ -29,6 +29,8 @@ const GRAB = { x: 1180, y: 700 }
 const DROP = { x: 424, y: 300 }
 const HANDLE_TL = { x: TL.x + TL.w - 8 - 14, y: TL.y + TL.h / 2 }
 const TAB_AT = { x: 14, y: TL.y + TL.h / 2 }
+/** Where the pointer waits, off the window, while the news brings it out of the side */
+const REST = { x: 900, y: 520 }
 const RESIZE_FROM = { x: TL.x + TL.w - 2, y: TL.y + TL.h - 2 }
 const SMALL_W = Math.round(TL.w * 0.75)
 const RESIZE_TO = { x: TL.x + SMALL_W - 2, y: TL.y + Math.round((SMALL_W * 9) / 16) - 2 }
@@ -39,12 +41,15 @@ export const CLICK_BROWSER = 25.6
 export const CLICK_BACK = ASK.back
 export const CLICK_ALLOW = 46.2
 export const CLICK_BROWSER_AGAIN = 49.2
-export const DRAG_DOWN = 66.65
-export const DRAG_UP = 68.0
-export const CLICK_HANDLE = 69.8
-export const CLICK_TAB = 72.5
-export const RESIZE_DOWN = 74.55
-export const RESIZE_UP = 76.0
+/** Over to the second desktop and back again, as a swipe or Control-arrow does it */
+export const DESKTOP_OUT = 65.6
+export const DESKTOP_BACK = 67.4
+export const DRAG_DOWN = 69.3
+export const DRAG_UP = 70.65
+export const CLICK_HANDLE = 72.3
+export const CLICK_TAB = 80.2
+export const RESIZE_DOWN = 82.25
+export const RESIZE_UP = 83.7
 
 const POINTER: PointerKey[] = [
   { t: 16.0, p: { x: 860, y: 560 } },
@@ -65,21 +70,24 @@ const POINTER: PointerKey[] = [
   { t: 48.8, p: BROWSER_AT },
   { t: 49.45, p: BROWSER_AT },
   { t: 50.4, p: PARK },
-  { t: 65.2, p: PARK },
-  { t: 66.3, p: GRAB },
+  // The desktops slide under a pointer that stays where it is
+  { t: 68.0, p: PARK },
+  { t: 69.0, p: GRAB },
   { t: DRAG_DOWN, p: GRAB },
   { t: DRAG_UP - 0.05, p: DROP, e: ease.inOut },
-  { t: 68.4, p: DROP },
-  { t: 69.5, p: HANDLE_TL },
-  { t: 70.2, p: HANDLE_TL },
-  { t: 71.1, p: { x: 160, y: 330 } },
-  { t: 72.1, p: TAB_AT },
-  { t: 72.8, p: TAB_AT },
-  { t: 74.2, p: RESIZE_FROM },
+  { t: 71.0, p: DROP },
+  { t: 72.0, p: HANDLE_TL },
+  { t: 72.6, p: HANDLE_TL },
+  // Off the window while the news brings it out of the side and sends it back
+  { t: 73.5, p: REST },
+  { t: 79.0, p: REST },
+  { t: 79.95, p: TAB_AT },
+  { t: 80.5, p: TAB_AT },
+  { t: 81.9, p: RESIZE_FROM },
   { t: RESIZE_DOWN, p: RESIZE_FROM },
   { t: RESIZE_UP - 0.05, p: RESIZE_TO, e: ease.inOut },
-  { t: 76.3, p: RESIZE_TO },
-  { t: 77.4, p: { x: 860, y: 560 } },
+  { t: 84.0, p: RESIZE_TO },
+  { t: 85.1, p: { x: 860, y: 560 } },
 ]
 
 export const pointerAt = (T: number) => trackPointer(T, POINTER)
@@ -87,8 +95,36 @@ export const pointerAt = (T: number) => trackPointer(T, POINTER)
 const INTO = Easing.bezier(0.65, 0, 0.35, 1)
 const OUT_OF = Easing.bezier(0.2, 0.8, 0.2, 1)
 const APPKIT_OUT = Easing.bezier(0, 0, 0.58, 1)
+/** A desktop sliding in, as Spaces does: quick through the middle, settling at the end */
+const SPACES = Easing.bezier(0.4, 0, 0.15, 1)
 
-/** Where KLWD's window is at T, on the screen: dragged to the top left, tucked into the side and back, then made smaller */
+/** Which desktop shows at T: 0 the first, 1 the second, in between while they slide */
+export function desktopAt(T: number): number {
+  if (T < DESKTOP_BACK) return SPACES(seg(T, DESKTOP_OUT, DESKTOP_OUT + 0.6))
+  return 1 - SPACES(seg(T, DESKTOP_BACK, DESKTOP_BACK + 0.6))
+}
+
+/**
+ * The window's trips into the side of the screen and out again: in by its
+ * handle, out by itself as the news breaks, back in the moment the story's
+ * outro ends, and out by its tab
+ */
+const SIDE: Array<{ at: number; into: boolean; by: 'hand' | 'itself' }> = [
+  { at: CLICK_HANDLE + 0.05, into: true, by: 'hand' },
+  { at: NEWS.stinger, into: false, by: 'itself' },
+  { at: NEWS.board + 0.05, into: true, by: 'itself' },
+  { at: CLICK_TAB, into: false, by: 'hand' },
+]
+
+/** How far into the side the window is at T: 0 out, 1 all the way in */
+function sideAt(T: number): number {
+  let last: { at: number; into: boolean } | null = null
+  for (const move of SIDE) if (move.at <= T) last = move
+  if (!last) return 0
+  return last.into ? INTO(seg(T, last.at, last.at + 0.42)) : 1 - OUT_OF(seg(T, last.at, last.at + 0.46))
+}
+
+/** Where KLWD's window is at T, on the screen: dragged to the top left, tucked into the side and out again, then made smaller */
 export function windowAt(T: number): { x: number; y: number; w: number; h: number } {
   if (T < DRAG_DOWN) return BR
   if (T < DRAG_UP) {
@@ -99,10 +135,7 @@ export function windowAt(T: number): { x: number; y: number; w: number; h: numbe
   const snap = APPKIT_OUT(seg(T, DRAG_UP, DRAG_UP + 0.2))
   let x = mix(dropped.x, TL.x, snap)
   const y = mix(dropped.y, TL.y, snap)
-  let slide = 0
-  if (T >= CLICK_HANDLE + 0.05 && T < CLICK_TAB) slide = INTO(seg(T, CLICK_HANDLE + 0.05, CLICK_HANDLE + 0.47))
-  else if (T >= CLICK_TAB) slide = 1 - OUT_OF(seg(T, CLICK_TAB, CLICK_TAB + 0.46))
-  x -= (TL.x + TL.w) * slide
+  x -= (TL.x + TL.w) * sideAt(T)
   let w = TL.w
   if (T >= RESIZE_DOWN) {
     const p = pointerAt(Math.min(T, RESIZE_UP))
@@ -115,7 +148,7 @@ const inside = (p: { x: number; y: number }, f: { x: number; y: number; w: numbe
 
 /** KLWD's window shows while another app is in front */
 const frontAt = (T: number): 'claude' | 'browser' => (T < CLICK_BROWSER + 0.02 || (T >= CLICK_BACK + 0.02 && T < CLICK_BROWSER_AGAIN + 0.02) ? 'claude' : 'browser')
-const tuckedAt = (T: number) => T >= CLICK_HANDLE + 0.05 && T < CLICK_TAB + 0.46
+const tuckedAt = (T: number) => sideAt(T) > 0
 
 /** The moments the pointer comes onto the window and leaves it, found by walking the script */
 const HOVER: Array<{ at: number; on: boolean }> = (() => {
@@ -167,19 +200,27 @@ export const DESK_LINES: Line[] = [
   { at: 43.85, until: 50.9, text: 'One click takes you back to the question.' },
   { at: 51.0, until: HOUR.strike, text: 'At the top of every hour,' },
   { at: HOUR.strike + 0.1, until: 64.9, text: 'KLWD reports what each session did.' },
-  { at: 65.0, until: 69.6, text: 'Out of your way. Never out of sight.' },
-  { at: 69.7, until: 74.3, text: 'Tuck it into the side, and bring it back.' },
-  { at: 74.4, until: SCENES.finale - 0.2, text: 'Or drag an edge to make it smaller.' },
+  { at: 65.05, until: 68.0, text: 'Switch desktops. KLWD stays put.' },
+  { at: 68.1, until: 71.4, text: 'Out of your way. Never out of sight.' },
+  { at: 71.5, until: 73.9, text: 'Tuck it into the side.' },
+  { at: NEWS.stinger, until: NEWS.outro - 0.1, text: 'It still comes out for', tab: 'BREAKING NEWS' },
+  { at: NEWS.outro, until: 79.9, text: 'Then it tucks itself away again.' },
+  { at: 80.0, until: 82.1, text: 'Click the tab to bring it back.' },
+  { at: 82.2, until: SCENES.finale - 0.2, text: 'Or drag an edge to make it smaller.' },
 ]
 
 const CLICKS = [CLICK_TUNE_IN, CLICK_BROWSER, CLICK_BACK, CLICK_ALLOW, CLICK_BROWSER_AGAIN, CLICK_HANDLE, CLICK_TAB]
+
+/** Each stay in the side, from the trip in to the trip out, and whether the pointer made each trip: the tab shows at the screen's edge */
+const STAYS = SIDE.flatMap((move, i) => (move.into && SIDE[i + 1] ? [{ into: move.at, out: SIDE[i + 1]!.at, inBy: move.by, outBy: SIDE[i + 1]!.by }] : []))
 
 function clockAt(T: number): string {
   if (T < 36) return 'Sat Oct 25  5:43 PM'
   if (T < SCENES.hour) return 'Sat Oct 25  5:47 PM'
   if (T < HOUR.strike) return 'Sat Oct 25  5:59 PM'
   if (T < SCENES.window) return 'Sat Oct 25  6:00 PM'
-  return 'Sat Oct 25  6:02 PM'
+  if (T < NEWS.stinger) return 'Sat Oct 25  6:02 PM'
+  return 'Sat Oct 25  6:03 PM'
 }
 
 /** The desktop at T, for the scenes before and after this one to start from or end on */
@@ -202,11 +243,17 @@ export function DeskScreen({ T }: { T: number }) {
   const pip: PipState | null = shown
     ? { frame, content: <AirAt T={T} />, hover: tuckedAt(T) && T > CLICK_HANDLE + 0.3 ? 0 : hover, under, side, opacity: pop, scale: mix(0.965, 1, pop) }
     : null
+  // The tab docks at the edge as the window goes in, and turns back into the handle as it comes out. Pressed,
+  // the handle is already showing under the pointer; when the window goes in or out by itself, nothing is
+  // hovering, so the tab fades in as the window docks and fades out as it leaves the edge.
   let tab: TabState | null = null
-  if (T >= CLICK_HANDLE + 0.05 && T < CLICK_TAB + 0.75) {
-    const docked = T < CLICK_TAB ? seg(T, CLICK_HANDLE + 0.31, CLICK_HANDLE + 0.47) : 1 - seg(T, CLICK_TAB, CLICK_TAB + 0.16)
-    const fade = T < CLICK_TAB + 0.46 ? 1 : 1 - ease.appkit(seg(T, CLICK_TAB + 0.46, CLICK_TAB + 0.71))
-    tab = { side: 'left', x: Math.max(0, frame.x + frame.w - 8 - 28), cy: TL.y + TL.h / 2, docked, opacity: fade, under: near(TAB_AT, 16) }
+  for (const { into, out, inBy, outBy } of STAYS) {
+    if (T >= into && T < out + 0.75) {
+      const docked = T < out ? seg(T, into + 0.26, into + 0.42) : 1 - seg(T, out, out + 0.16)
+      const fadeIn = inBy === 'itself' ? ease.appkit(seg(T, into + 0.05, into + 0.3)) : 1
+      const fadeOut = T < out ? 1 : outBy === 'itself' ? 1 - ease.appkit(seg(T, out + 0.05, out + 0.3)) : 1 - ease.appkit(seg(T, out + 0.46, out + 0.71))
+      tab = { side: 'left', x: Math.max(0, frame.x + frame.w - 8 - 28), cy: TL.y + TL.h / 2, docked, opacity: fadeIn * fadeOut, under: near(TAB_AT, 16) }
+    }
   }
   const allowed = T >= CLICK_ALLOW ? seg(T, CLICK_ALLOW + 0.05, CLICK_ALLOW + 0.4) : 0
   const onPlate = near(TUNE_IN_AT, 14) && T < CLICK_TUNE_IN + 0.4
@@ -224,9 +271,10 @@ export function DeskScreen({ T }: { T: number }) {
       }}
       clock={clockAt(T)}
       time={T}
+      desktop={desktopAt(T)}
       pip={pip}
       tab={tab}
-      cursor={{ x: pointer.x, y: pointer.y, pressed: press, shape: T >= 74.0 && T < RESIZE_UP + 0.1 ? 'resize' : 'arrow' }}
+      cursor={{ x: pointer.x, y: pointer.y, pressed: press, shape: T >= RESIZE_DOWN - 0.35 && T < RESIZE_UP + 0.1 ? 'resize' : 'arrow' }}
       clicks={[
         { ...TUNE_IN_AT, t: T - CLICK_TUNE_IN },
         { ...BROWSER_AT, t: T - CLICK_BROWSER },

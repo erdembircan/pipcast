@@ -3,19 +3,22 @@
 // outro, the report on the hour, and the board again.
 import type { Scene } from './design/pipnews.ts'
 import {
+  DESK_MIGRATION,
   DESK_READY,
   HOUR_DESK,
   HOUR_REVIEW,
   IDENT,
   STINGER_ASK,
+  STINGER_MIGRATION,
   STINGER_READY,
   boardAfterHour,
+  boardAfterMigration,
   boardReady,
   boardThree,
   deskAsk,
   outroTo,
 } from './stories.ts'
-import { ASK, COLD, HOUR, SCENES } from './timeline.ts'
+import { ASK, COLD, HOUR, NEWS, SCENES } from './timeline.ts'
 
 export interface OnAirStep {
   at: number
@@ -44,6 +47,11 @@ export const PROGRAM: OnAirStep[] = [
   { at: HOUR.outro, scene: outroTo(boardAfterHour('18:00'), 'hour', '18:00') },
   { at: HOUR.board, scene: boardAfterHour('18:00'), crawlFrom: HOUR.outro },
   { at: SCENES.window, scene: boardAfterHour('18:02'), crawlFrom: HOUR.outro },
+  // The window is tucked into the side when the migration finishes: the story brings it out, and it goes back as the outro ends
+  { at: NEWS.stinger, scene: STINGER_MIGRATION },
+  { at: NEWS.desk, scene: DESK_MIGRATION },
+  { at: NEWS.outro, scene: outroTo(boardAfterMigration('18:03')) },
+  { at: NEWS.board, scene: boardAfterMigration('18:03'), crawlFrom: NEWS.outro },
 ]
 
 export interface OnAirNow {

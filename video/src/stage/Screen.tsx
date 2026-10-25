@@ -1,15 +1,21 @@
 // The Mac's screen at one moment: the wallpaper, the two app windows in their
-// order, the station's window and its tab, the menu bar and the pointer.
+// order, the station's window and its tab, the menu bar and the pointer; and a
+// second desktop, with a code editor on it, that slides in beside the first
+// while the station's window stays where it is, as it does on every desktop.
 import type { ReactNode } from 'react'
 
 import { BrowserApp } from '../desktop/BrowserApp.tsx'
 import { ClaudeApp } from '../desktop/ClaudeApp.tsx'
 import type { ClaudeAppProps } from '../desktop/ClaudeApp.tsx'
 import { ClickRing, Cursor } from '../desktop/Cursor.tsx'
-import { BROWSER_WINDOW, CLAUDE_WINDOW, SCREEN_H, SCREEN_W } from '../desktop/geometry.ts'
+import { EditorApp } from '../desktop/EditorApp.tsx'
+import { BROWSER_WINDOW, CLAUDE_WINDOW, EDITOR_WINDOW, SCREEN_H, SCREEN_W } from '../desktop/geometry.ts'
 import { MacWindow } from '../desktop/MacWindow.tsx'
 import { MenuBar } from '../desktop/MenuBar.tsx'
 import { Wallpaper } from '../desktop/Wallpaper.tsx'
+
+/** The dark seam between two desktops as they slide past each other */
+const SEAM = 28
 import { Handle, PipWindow } from '../design/PipWindow.tsx'
 
 export interface PipState {
@@ -44,9 +50,11 @@ export interface ScreenProps {
   time: number
   /** How far the browser's page has scrolled */
   scroll?: number
+  /** Which desktop shows: 0 the first, 1 the second, in between while they slide */
+  desktop?: number
 }
 
-export function Screen({ front, claude, pip, tab, cursor, clicks = [], clock, time, scroll = 0 }: ScreenProps) {
+export function Screen({ front, claude, pip, tab, cursor, clicks = [], clock, time, scroll = 0, desktop = 0 }: ScreenProps) {
   const claudeWindow = (
     <MacWindow key="claude" frame={CLAUDE_WINDOW} active={front === 'claude'}>
       <ClaudeApp active={front === 'claude'} time={time} {...claude} />
@@ -57,10 +65,21 @@ export function Screen({ front, claude, pip, tab, cursor, clicks = [], clock, ti
       <BrowserApp active={front === 'browser'} scroll={scroll} />
     </MacWindow>
   )
+  const shift = desktop * (SCREEN_W + SEAM)
   return (
-    <div style={{ position: 'absolute', left: 0, top: 0, width: SCREEN_W, height: SCREEN_H, overflow: 'hidden' }}>
-      <Wallpaper />
-      {front === 'claude' ? [browserWindow, claudeWindow] : [claudeWindow, browserWindow]}
+    <div style={{ position: 'absolute', left: 0, top: 0, width: SCREEN_W, height: SCREEN_H, overflow: 'hidden', background: '#0e0e10' }}>
+      <div style={{ position: 'absolute', inset: 0, transform: desktop > 0 ? `translateX(${-shift}px)` : undefined }}>
+        <Wallpaper />
+        {front === 'claude' ? [browserWindow, claudeWindow] : [claudeWindow, browserWindow]}
+      </div>
+      {desktop > 0 ? (
+        <div style={{ position: 'absolute', inset: 0, transform: `translateX(${SCREEN_W + SEAM - shift}px)` }}>
+          <Wallpaper tone="dusk" />
+          <MacWindow frame={EDITOR_WINDOW} active={desktop >= 0.5}>
+            <EditorApp active={desktop >= 0.5} />
+          </MacWindow>
+        </div>
+      ) : null}
       {pip && (pip.opacity ?? 1) > 0 ? (
         <div
           style={{
@@ -86,7 +105,7 @@ export function Screen({ front, claude, pip, tab, cursor, clicks = [], clock, ti
         </div>
       ) : null}
       <div style={{ position: 'absolute', inset: 0, zIndex: 15, pointerEvents: 'none' }}>
-        <MenuBar app={front === 'claude' ? 'Claude' : 'Browser'} clock={clock} />
+        <MenuBar app={desktop >= 0.5 ? 'Editor' : front === 'claude' ? 'Claude' : 'Browser'} clock={clock} />
       </div>
       {clicks.map((c, i) => (
         <ClickRing key={i} x={c.x} y={c.y} t={c.t} />

@@ -4,9 +4,12 @@ import { MENU_H, SCREEN_W } from './geometry.ts'
 
 export const SYSTEM_FONT = '-apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif'
 
-const MENUS: Record<string, string[]> = {
+export type MenuApp = 'Claude' | 'Browser' | 'Editor'
+
+const MENUS: Record<MenuApp, string[]> = {
   Claude: ['File', 'Edit', 'View', 'Window', 'Help'],
   Browser: ['File', 'Edit', 'View', 'History', 'Bookmarks', 'Window', 'Help'],
+  Editor: ['File', 'Edit', 'Selection', 'View', 'Go', 'Run', 'Terminal', 'Window', 'Help'],
 }
 
 function Wifi() {
@@ -40,8 +43,8 @@ function Controls() {
   )
 }
 
-export function MenuBar({ app, clock }: { app: 'Claude' | 'Browser'; clock: string }) {
-  const menus = MENUS[app] ?? []
+export function MenuBar({ app, clock }: { app: MenuApp; clock: string }) {
+  const menus = MENUS[app]
   return (
     <div
       style={{
@@ -62,7 +65,7 @@ export function MenuBar({ app, clock }: { app: 'Claude' | 'Browser'; clock: stri
         letterSpacing: '-0.01em',
       }}
     >
-      <span style={{ fontWeight: 700, marginRight: 20 }}>{app === 'Claude' ? 'Claude' : 'Browser'}</span>
+      <span style={{ fontWeight: 700, marginRight: 20 }}>{app}</span>
       {menus.map((m) => (
         <span key={m} style={{ marginRight: 20 }}>
           {m}
