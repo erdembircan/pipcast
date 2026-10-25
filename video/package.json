@@ -1,0 +1,30 @@
+{
+  "name": "pipcast-video",
+  "version": "0.1.0",
+  "private": true,
+  "description": "The Pipcast demo video, made with Remotion from the product's own graphics, jingles and icon layers",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "prepare-assets": "node scripts/prepare.mjs",
+    "studio": "node scripts/prepare.mjs && remotion studio src/index.ts",
+    "still": "node scripts/prepare.mjs && remotion still src/index.ts",
+    "render": "node scripts/prepare.mjs && remotion render src/index.ts Pipcast out/pipcast.mp4",
+    "render:4k": "node scripts/prepare.mjs && remotion render src/index.ts Pipcast out/pipcast-4k.mp4 --scale=2",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@remotion/cli": "4.0.538",
+    "@remotion/google-fonts": "4.0.538",
+    "@remotion/media-utils": "4.0.538",
+    "@remotion/transitions": "4.0.538",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "remotion": "4.0.538"
+  },
+  "devDependencies": {
+    "@types/react": "18.3.31",
+    "@types/react-dom": "18.3.7",
+    "typescript": "6.0.3"
+  }
+}

@@ -2,13 +2,27 @@
 
 # Pipcast
 
-**KLWD, a local TV news channel for your Claude Code sessions.**
+**Picture in picture for Claude Code.**
 
-Pipcast puts a small window in a corner of your screen that airs your Claude Code sessions as a 1990s local news broadcast. The channel is KLWD. Most of the time it shows a live board of the sessions you tuned in. When one of them needs you, finishes, or stops on an error, KLWD cuts to BREAKING NEWS: a stinger, then the anchor desk, where Clawd reads the story, then back to the board. Every hour on the hour it airs a short report on what each session did.
+Pipcast gives Claude Code the picture in picture that macOS gives a video. Pop a video out of its page and it keeps playing in a small window in a corner of the screen, above every app, while you get on with something else. Pipcast does the same for your Claude Code sessions: a window in the corner that floats over whatever you're working in and shows you what Claude is up to. The name is that idea, PiP and broadcast.
+
+What plays in the window is KLWD, a local TV news channel for your sessions, styled as a 1990s local news broadcast. Most of the time it shows a live board of the sessions you tuned in. When one of them needs you, finishes, or stops on an error, KLWD cuts to BREAKING NEWS: a stinger, then the anchor desk, where Clawd reads the story, then back to the board. Every hour on the hour it airs a short report on what each session did.
 
 The window shows only while you're in another app. Switch back to Claude and it gets out of the way.
 
+<!-- The demo video goes here once it is on YouTube: a still from it, linked to the video. -->
+
 <p align="center"><img src="assets/screenshots/breaking.png" width="716" alt="KLWD on air: Clawd at the anchor desk with a READY FOR REVIEW story"></p>
+
+## Picture in picture
+
+The window is modelled on macOS's picture in picture for video, and drawn to look like it: a black 16:9 window with rounded corners and a soft shadow, and clear Liquid Glass controls that show only while the pointer is on it.
+
+- **Above everything.** It floats above every app, the Dock and the menu bar, on every desktop, and never takes the keyboard, so the app you're typing in keeps typing. It hides while Claude is in front, where you can see your sessions for yourself.
+- **In a corner.** It fills its quarter of the screen and starts in the bottom-right corner. Drag it to another corner to move it there, or drag an edge to make it smaller, down to 70%.
+- **Tucked into the side.** Press the handle on its inner edge, or drag a quarter of it past the screen's side, and it slides into that side, leaving a small tab, as picture in picture does on iPhone and iPad. BREAKING NEWS and the report on the hour still bring it out, and it goes back as they end. Click the tab to bring it back.
+- **Controls on hover.** Close stops tracking every session, the speaker turns the jingles on and off, and Back to Claude brings Claude to the front.
+- **See through it.** Run `/pipcast transparency on` and it fades to 40% while the pointer is elsewhere, so you can see what is under it.
 
 ## What it does
 
@@ -16,8 +30,6 @@ The window shows only while you're in another app. Switch back to Claude and it 
 - **The live board.** Each session on air gets a row with its project on a plate, its title, and its state on a pill: INPUT when it needs you, ERROR when it stopped on an error, READY when it finished, LIVE while it works. With more than four on air, the board shows four at a time and turns to the next four every 8 seconds. Under the listing, two meters show your account's usage limits, the current session's and the week's, from the newest reading any session on air took: gold from 70%, red from 90%.
 - **BREAKING NEWS for every story.** A session that needs your input, that is ready for review, whose work is complete, or that stopped on an error airs as its own segment. Stories air one after another, in the order they land. Nothing cuts in, and KLWD airs only what happens while you're away from Claude: switch to Claude and the stories still waiting are dropped, along with any that land while you're there.
 - **On the hour.** The station clock strikes the hour, Clawd reads the headlines, and THE HOUR IN REVIEW shows what each session did: a row each, named as on the board by its project's plate and its title, with the lines it changed or how long it has waited. If you're in Claude as the hour strikes, that hour is skipped, and the next report covers it.
-- **A window that stays out of the way.** It fills its quarter of the screen, resizes down to 70% from its edges, and moves to another corner when you drag it there. It floats above every app and never takes the keyboard. Press the handle on its inner edge, or drag a quarter of it past the screen's side, and it slides into that side, leaving a small tab; BREAKING NEWS and the report on the hour still bring it out, and it goes back as they end. Run `/pipcast transparency on` and it fades to 40% while the pointer is elsewhere, so you can see what is under it.
-- **Controls on hover.** Close stops tracking every session, the speaker turns the jingles on and off, and Back to Claude brings Claude to the front. The handle on the window's inner edge minimizes it to the side.
 
 ## Requirements
 
@@ -137,6 +149,20 @@ scripts/live.sh pr 12
 ```
 
 puts a pull request in the app. `scripts/live.sh <branch or commit>` puts any other commit there, `scripts/live.sh master` puts master back, and `scripts/live.sh` on its own says what the app runs now. Then run `/reload-plugins` in a session, or start a new one. Only committed work reaches the app, so run `scripts/build.sh` and commit what it builds first.
+
+### The demo video
+
+`video/` holds the demo video, made with [Remotion](https://www.remotion.dev) from the product's own pieces: the design system's components, the band's plate, the jingles and the icon's layers, each played frame by frame. Its soundtrack is synthesised from a score in `video/scripts/music`, in Chrome, as the jingles are. It has dependencies of its own:
+
+```bash
+npm --prefix video ci
+```
+
+```bash
+npm --prefix video run studio
+```
+
+opens it in Remotion Studio, rendering the soundtrack first if its score changed. `npm --prefix video run render` renders it to `video/out/pipcast.mp4`, and `render:4k` at twice the size; `video/out/` is not committed.
 
 ## License
 
