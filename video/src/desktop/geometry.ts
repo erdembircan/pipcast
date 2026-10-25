@@ -42,3 +42,5 @@ export function pipFrame(quadrant: Quadrant, scale = 1): { x: number; y: number;
 /** The app windows on the desktop */
 export const CLAUDE_WINDOW = { x: 56, y: 58, w: 1196, h: 876 }
 export const BROWSER_WINDOW = { x: 250, y: 70, w: 1208, h: 868 }
+/** The code editor on the second desktop */
+export const EDITOR_WINDOW = { x: 92, y: 62, w: 1250, h: 870 }

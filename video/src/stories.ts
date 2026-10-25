@@ -165,3 +165,34 @@ export function boardAfterHour(clock: string): Scene {
     ticker: [{ lead: LEAD.onTheHour, text: afterReportLine(2, '18:00', '19:00') }, { lead: LEAD.ready, text: waitingForReviewLine(NOTES.name) }, doing.checkout],
   }
 }
+
+/** The settings migration finishes while the window is tucked into the side */
+export const MIGRATION_EVENT: NewsEvent = {
+  kind: 'ready',
+  session: SQLITE.name,
+  project: SQLITE.project,
+  figure: figure(142, 18),
+  sub: filesChanged(3),
+  foot: finishedFoot('26 min'),
+}
+
+export const STINGER_MIGRATION: Scene = { mode: 'stinger', clock: '18:03', event: MIGRATION_EVENT }
+
+export const DESK_MIGRATION: Scene = {
+  mode: 'desk',
+  clock: '18:03',
+  act: 'cheer',
+  event: MIGRATION_EVENT,
+  ticker: [{ lead: LEAD.breaking, text: storyLine('ready', SQLITE.name) }, { lead: LEAD.ready, text: waitingForReviewLine(NOTES.name) }, doing.checkout],
+}
+
+/** The board once the migration is ready for review too */
+export function boardAfterMigration(clock: string): Scene {
+  return {
+    mode: 'board',
+    clock,
+    sessions: [at(CHECKOUT, 'working'), at(AUTH, 'working'), at(NOTES, 'ready'), at(SQLITE, 'ready')],
+    limits: LIMITS_LATER,
+    ticker: [{ lead: LEAD.ready, text: waitingForReviewLine(SQLITE.name) }, { lead: LEAD.ready, text: waitingForReviewLine(NOTES.name) }, doing.checkout],
+  }
+}

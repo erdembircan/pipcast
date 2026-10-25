@@ -16,12 +16,14 @@ import {
   CLICK_HANDLE,
   CLICK_TAB,
   CLICK_TUNE_IN,
+  DESKTOP_BACK,
+  DESKTOP_OUT,
   DRAG_DOWN,
   DRAG_UP,
   RESIZE_DOWN,
   RESIZE_UP,
 } from './scenes/Desk.tsx'
-import { FPS, JINGLES, SCENES } from './timeline.ts'
+import { FPS, JINGLES, NEWS, SCENES } from './timeline.ts'
 
 const JINGLE_FILES: Record<string, string> = { breaking, 'breaking-out': breakingOut, hour, 'hour-out': hourOut }
 
@@ -36,7 +38,7 @@ const SFX_VOLUME = 0.3
 
 type Sfx = 'click' | 'whoosh' | 'pop' | 'key' | 'thunk' | 'swoosh-up'
 
-/** The sound effects, in global seconds, each with its level: the clicks, the window coming on, docking and landing, and two swishes at the big turns */
+/** The sound effects, in global seconds, each with its level: the clicks, the desktops sliding, the window coming on, docking and landing, and two swishes at the big turns */
 const SFX: Array<{ at: number; name: Sfx; level?: number }> = [
   { at: SCENES.name - 0.3, name: 'swoosh-up', level: 0.5 },
   { at: CLICK_TUNE_IN, name: 'click' },
@@ -46,11 +48,15 @@ const SFX: Array<{ at: number; name: Sfx; level?: number }> = [
   { at: CLICK_ALLOW, name: 'click' },
   { at: CLICK_BROWSER_AGAIN, name: 'click' },
   { at: CLICK_BROWSER_AGAIN + 0.03, name: 'pop', level: 0.8 },
+  { at: DESKTOP_OUT, name: 'whoosh', level: 0.4 },
+  { at: DESKTOP_BACK, name: 'whoosh', level: 0.4 },
   { at: DRAG_DOWN, name: 'click', level: 0.8 },
   { at: DRAG_UP, name: 'click', level: 0.6 },
   { at: DRAG_UP + 0.15, name: 'thunk', level: 0.45 },
   { at: CLICK_HANDLE, name: 'click' },
   { at: CLICK_HANDLE + 0.42, name: 'thunk', level: 0.6 },
+  // The news over, the window docks in the side again by itself
+  { at: NEWS.board + 0.47, name: 'thunk', level: 0.5 },
   { at: CLICK_TAB, name: 'click' },
   { at: CLICK_TAB + 0.05, name: 'whoosh', level: 0.35 },
   { at: RESIZE_DOWN, name: 'click', level: 0.7 },
@@ -58,14 +64,12 @@ const SFX: Array<{ at: number; name: Sfx; level?: number }> = [
   { at: SCENES.finale + 0.2, name: 'swoosh-up', level: 0.55 },
 ]
 
-/** A jingle's level; the BREAKING NEWS that Back to Claude cuts short fades as the window hides */
-function jingleVolume(name: string, at: number) {
-  const level = JINGLE_VOLUME * (JINGLE_TRIM[name] ?? 1)
-  if (at < CLICK_BACK && at + 5.8 > CLICK_BACK) {
-    const cut = (CLICK_BACK - at) * FPS
-    return (f: number) => level * interpolate(f, [cut, cut + 0.25 * FPS], [1, 0], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' })
-  }
-  return level
+/** A jingle's level; one whose story is cut short (Back to Claude, or an outro that comes early) fades out over a quarter of a second */
+function jingleVolume(name: string, at: number, cut?: number, trim = 1) {
+  const level = JINGLE_VOLUME * (JINGLE_TRIM[name] ?? 1) * trim
+  if (cut === undefined) return level
+  const f0 = (cut - at) * FPS
+  return (f: number) => level * interpolate(f, [f0, f0 + 0.25 * FPS], [1, 0], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' })
 }
 
 export function Soundtrack({ music }: { music: boolean }) {
@@ -74,7 +78,7 @@ export function Soundtrack({ music }: { music: boolean }) {
       {music ? <Html5Audio src={staticFile('audio/music.wav')} volume={MUSIC_VOLUME} /> : null}
       {JINGLES.map((j) => (
         <Sequence key={`${j.name}-${j.at}`} from={Math.round(j.at * FPS)} layout="none" name={`jingle: ${j.name}`}>
-          <Html5Audio src={JINGLE_FILES[j.name]!} trimBefore={Math.round(j.from * FPS)} volume={jingleVolume(j.name, j.at)} />
+          <Html5Audio src={JINGLE_FILES[j.name]!} trimBefore={Math.round(j.from * FPS)} volume={jingleVolume(j.name, j.at, 'cut' in j ? j.cut : undefined, 'level' in j ? j.level : 1)} />
         </Sequence>
       ))}
       {music
