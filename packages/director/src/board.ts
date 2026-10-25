@@ -16,6 +16,7 @@ import type { Scene, Session, TickerItem } from '@pipcast/design'
 
 import { movedOn } from './story.ts'
 import { limitMeters } from './limits.ts'
+import { inListingOrder, waitingSince } from './listing.ts'
 import { AFTER_REPORT_MS, BREAKING_MS, HOUR_MS } from './timing.ts'
 import type { BoardState } from './types.ts'
 
@@ -97,7 +98,7 @@ export function boardTicker(now: number, snapshot: Snapshot, state: BoardState, 
   for (const session of snapshot.sessions) {
     if (session.id !== extra.skipWaitingFor && (session.state === 'needs-input' || session.state === 'error')) {
       const newest = newestOfKind(session, session.state)
-      const at = newest?.at ?? session.stateAt
+      const at = waitingSince(session)
       waiting.push({
         at,
         item: {
@@ -181,7 +182,8 @@ export function boardScene(now: number, snapshot: Snapshot | null, state: BoardS
   if (snapshot === null) {
     return { mode: 'board', clock: clock(now), sessions: [], ticker: [] }
   }
-  const sessions: Session[] = snapshot.sessions.map((session) => ({
+  // In the listing's order, which the window keeps within each state
+  const sessions: Session[] = inListingOrder(snapshot.sessions).map((session) => ({
     id: session.id,
     name: session.title,
     project: session.project,
