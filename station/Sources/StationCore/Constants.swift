@@ -20,6 +20,11 @@ public enum Constants {
     public static let stationStartGraceMs: Double = 20_000
     public static let snapshotEveryMs: Double = 1_000
 
+    // The sound: how the beat mixes in and phases out, and how fast a cut fades everything
+    public static let bedInMs: Double = 300
+    public static let bedOutMs: Double = 500
+    public static let hushMs: Double = 80
+
     // Where things live
     public static let storeFolder = "Pipcast"
     public static let claudeBundleID = "com.anthropic.claudefordesktop"

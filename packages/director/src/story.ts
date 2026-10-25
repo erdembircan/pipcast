@@ -135,6 +135,8 @@ export function storySegment(
   const desk: Step = {
     role: 'desk',
     length: DESK_MS,
+    // The beat comes in with the desk, under BREAKING NEWS's ring
+    bed: 'beat-minor',
     scene: ({ now, ticker }): Scene => ({
       mode: 'desk',
       clock: clock(now),

@@ -1,7 +1,8 @@
 // Gets the video ready to preview or render, without touching design/ or
 // plugin/: it copies the design system's stylesheet into src/generated as a
 // string, minus its Google Fonts import (the video loads the repository's own
-// font files instead), and renders the soundtrack when its score changed.
+// font files instead), renders the soundtrack when its score changed, and lays
+// KLWD's beat when its loops or where it plays changed.
 import { createHash } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
@@ -55,4 +56,25 @@ if (existsSync(score)) {
     mkdirSync(dirname(stamp), { recursive: true })
     writeFileSync(stamp, `${hash}\n`)
   }
+}
+
+// KLWD's beat, laid where the station plays it: only when the shipped loops,
+// the contract's mix, how it is laid or the running order changed
+const beatHash = createHash('sha256')
+for (const file of [
+  join(root, 'plugin/station/sounds/beat-minor.caf'),
+  join(root, 'plugin/station/sounds/beat-major.caf'),
+  join(root, 'packages/contract/src/constants.ts'),
+  join(video, 'scripts/render-beat.mjs'),
+  join(video, 'src/timeline.ts'),
+]) {
+  beatHash.update(readFileSync(file))
+}
+const beatSum = beatHash.digest('hex')
+const beatStamp = join(video, 'public/audio/beat.SOURCE')
+if (!existsSync(join(video, 'public/audio/beat.wav')) || !existsSync(beatStamp) || readFileSync(beatStamp, 'utf8').trim() !== beatSum) {
+  const { renderBeat } = await import('./render-beat.mjs')
+  renderBeat()
+  writeFileSync(beatStamp, `${beatSum}\n`)
+  console.log('public/audio/beat.wav')
 }

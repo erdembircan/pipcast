@@ -42,6 +42,9 @@ import Testing
             "STATION_EMPTY_GRACE_MS": String(Int(Constants.stationEmptyGraceMs)),
             "STATION_START_GRACE_MS": String(Int(Constants.stationStartGraceMs)),
             "SNAPSHOT_EVERY_MS": String(Int(Constants.snapshotEveryMs)),
+            "BED_IN_MS": String(Int(Constants.bedInMs)),
+            "BED_OUT_MS": String(Int(Constants.bedOutMs)),
+            "HUSH_MS": String(Int(Constants.hushMs)),
             "STORE_FOLDER": Constants.storeFolder,
             "CLAUDE_BUNDLE_ID": Constants.claudeBundleID,
         ]

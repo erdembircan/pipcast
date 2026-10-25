@@ -1,5 +1,5 @@
 import { hourStart, STORY_FRESH_MS } from '@pipcast/contract'
-import type { Jingle, Snapshot, Story } from '@pipcast/contract'
+import type { Bed, Snapshot, Sound, Story } from '@pipcast/contract'
 import type { Scene } from '@pipcast/design'
 
 import { boardScene, boardTicker } from './board.ts'
@@ -23,8 +23,10 @@ export interface Program {
   scene: Scene
   // 'board' between segments, else `${segmentId}:${stepIndex}`
   key: string
-  // Jingles whose step started this tick
-  cues: Jingle[]
+  // What the station is to play from this tick, as the events happen: the
+  // jingle a step starts with, the beat mixing in or phasing out as a step
+  // starts or the segment ends, and a hush when a segment is cut
+  sounds: Sound[]
   // The hour (ms) whose report started this tick
   reported: number | null
   // Whether a segment needs the window out: one is on air, one is due to
@@ -38,6 +40,8 @@ interface OnAir {
   segment: Segment
   index: number
   stepStartedAt: number
+  // The beat playing under the segment, if one is
+  bed: Bed | undefined
 }
 
 export function createDirector(options: DirectorOptions = {}): { tick(input: Tick): Program } {
@@ -97,21 +101,29 @@ export function createDirector(options: DirectorOptions = {}): { tick(input: Tic
   }
 
   function tick({ now, snapshot }: Tick): Program {
-    const cues: Jingle[] = []
+    const sounds: Sound[] = []
     let reported: number | null = null
 
     function end(at: number, normally: boolean): void {
       if (onAir === null) {
         return
       }
-      const { item, segment } = onAir
+      const { item, segment, bed } = onAir
       if (item.kind === 'story') {
         carried.set(item.story.id, { endedAt: at, kind: item.story.kind, sessionId: item.sessionId })
       } else {
         reportEndedAt = at
       }
-      if (normally && segment.endCue !== undefined) {
-        cues.push(segment.endCue)
+      if (!normally) {
+        // Cut: what it was playing fades out at once
+        sounds.push({ type: 'hush' })
+      } else {
+        if (segment.endCue !== undefined) {
+          sounds.push({ type: 'cue', jingle: segment.endCue })
+        }
+        if (bed !== undefined) {
+          sounds.push({ type: 'bed-out' })
+        }
       }
       onAir = null
       lastEnded = at
@@ -123,9 +135,19 @@ export function createDirector(options: DirectorOptions = {}): { tick(input: Tic
       }
       onAir.index = index
       onAir.stepStartedAt = at
-      const cue = onAir.segment.steps[index]?.cue
-      if (cue !== undefined) {
-        cues.push(cue)
+      const step = onAir.segment.steps[index]
+      if (step?.cue !== undefined) {
+        sounds.push({ type: 'cue', jingle: step.cue })
+      }
+      // The beat mixes in, phases out, or plays on
+      if (step?.bed !== onAir.bed) {
+        if (onAir.bed !== undefined) {
+          sounds.push({ type: 'bed-out' })
+        }
+        if (step?.bed !== undefined) {
+          sounds.push({ type: 'bed', bed: step.bed })
+        }
+        onAir.bed = step?.bed
       }
     }
 
@@ -234,14 +256,14 @@ export function createDirector(options: DirectorOptions = {}): { tick(input: Tic
             if (movedOn(snapshot, item.sessionId, item.story)) {
               continue
             }
-            onAir = { item, segment: storySegment(item.sessionId, item.story, snapshot, reducedMotion), index: 0, stepStartedAt: now }
+            onAir = { item, segment: storySegment(item.sessionId, item.story, snapshot, reducedMotion), index: 0, stepStartedAt: now, bed: undefined }
           } else {
             if (snapshot === null) {
               continue
             }
             const from = lastReport !== null && lastReport.hour < item.hour ? lastReport.hour : item.hour - HOUR_MS
             const report = hourReport(item.hour, from, snapshot, now, reducedMotion)
-            onAir = { item, segment: report.segment, index: 0, stepStartedAt: now }
+            onAir = { item, segment: report.segment, index: 0, stepStartedAt: now, bed: undefined }
             lastReport = { hour: item.hour, stories: report.stories }
             reportEndedAt = null
             reported = item.hour
@@ -261,7 +283,7 @@ export function createDirector(options: DirectorOptions = {}): { tick(input: Tic
     const current: OnAir | null = onAir
     const step = current?.segment.steps[current.index]
     if (current === null || step === undefined) {
-      return { scene: board, key: 'board', cues, reported, wantsWindow }
+      return { scene: board, key: 'board', sounds, reported, wantsWindow }
     }
     // At the desk and the review the ticker also carries the segment's own line
     const extra = current.segment.ticker
@@ -271,7 +293,7 @@ export function createDirector(options: DirectorOptions = {}): { tick(input: Tic
         ? boardTicker(now, snapshot, boardState(), extra(snapshot))
         : (board.ticker ?? [])
     const scene = step.scene({ now, ticker, board })
-    return { scene, key: `${current.segment.id}:${current.index}`, cues, reported, wantsWindow }
+    return { scene, key: `${current.segment.id}:${current.index}`, sounds, reported, wantsWindow }
   }
 
   return { tick }

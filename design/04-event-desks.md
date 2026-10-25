@@ -17,9 +17,9 @@ Every story's desk runs 10 s.
 
 ## The flash, in order
 
-1. **The intro.** BREAKING NEWS, for every story. One progress value drives it over 1.4 s: a red wave crosses the glass wall behind the words and leaves each pane glowing (0–100%), the chrome words slam in one line after another (22–60%), and a glint crosses them (60–92%). There is no title: the session is first named at the desk, on the strap. The jingle plays from the first frame (Sound, in the README). The storyboard frames on the canvas are this same picture at 34%, 74% and 100%.
-2. **The anchor desk.** Clawd behind the desk in front of the city at the hour on the clock (morning, afternoon, evening or night), the wall monitor powering on at the right, the lower third sliding in. Clawd's act starts with the headline, and the key light behind him takes the story's colour.
-3. **The outro.** The intro's last picture, run out over 1.2 s: a glint crosses the words, the words leave to the right, the red wave sweeps back across the wall and darkens it, and the open fades away to the board underneath. Its own jingle closes the segment (Sound, in the README).
+1. **The intro.** BREAKING NEWS, for every story. One progress value drives it over 1.4 s: a red wave crosses the glass wall behind the words and leaves each pane glowing (0–100%), the chrome words slam in one line after another (22–60%), and a glint crosses them (60–92%). There is no title: the session is first named at the desk, on the strap. The jingle plays from the first frame, its last chord ringing on into the desk (Sound, in the README). The storyboard frames on the canvas are this same picture at 34%, 74% and 100%.
+2. **The anchor desk.** Clawd behind the desk in front of the city at the hour on the clock (morning, afternoon, evening or night), the wall monitor powering on at the right, the lower third sliding in. Clawd's act starts with the headline, and the key light behind him takes the story's colour. The beat comes in with it, under the intro's ring, and runs under it.
+3. **The outro.** The intro's last picture, run out over 1.2 s: a glint crosses the words, the words leave to the right, the red wave sweeps back across the wall and darkens it, and the open fades away to the board underneath. Its own jingle closes the segment, and the beat goes under its first chord (Sound, in the README).
 4. **Back to the live board**, with the story carried on in its row and in the ticker.
 
 ## Stacking
@@ -38,9 +38,9 @@ Every hour on the hour the channel airs a short report on the sessions, the way 
 | Segment | What airs | Clawd | Time |
 | --- | --- | --- | --- |
 | Ident | The station clock: a dial in the wall monitor's chrome bezel, a glossy blue face, gold hour marks, chrome hands and a gold seconds hand that steps with each pip. On the long pip the minute hand jumps to the hour and a glint crosses the face; then the clock steps aside and ON THE HOUR slams in in chrome. No strip or subtitle under it. Its jingle: the pips, then a brass fanfare on the logo (Sound, in the README) | — | 7.5 s, from five seconds before the hour |
-| Headlines | The desk. Tab ON THE HOUR, headline 2 STORIES (a story is a session whose state changed this hour), the strap counting them by kind. The wall monitor's THIS HOUR shows the lines changed and the span | talk | 10 s |
-| The hour in review | Full frame. One row per session in the listing's order, four a page, read as the session's row on the board: its project on the listing's plate, its title over one detail (the lines changed, or how long it has waited), and its state pill. With more than four, the pages turn as the listing's do | — | 10 s a page |
-| Outro | The ident's last picture, run out: a glint crosses the words, the words leave to the right, the clock drops back, and the ident fades to the board underneath. Its own jingle closes the report (Sound, in the README) | — | 1.4 s |
+| Headlines | The desk. Tab ON THE HOUR, headline 2 STORIES (a story is a session whose state changed this hour), the strap counting them by kind. The wall monitor's THIS HOUR shows the lines changed and the span. The beat comes in with it, in D major, under the fanfare's ring | talk | 10 s |
+| The hour in review | Full frame. One row per session in the listing's order, four a page, read as the session's row on the board: its project on the listing's plate, its title over one detail (the lines changed, or how long it has waited), and its state pill. With more than four, the pages turn as the listing's do. The beat plays on under it | — | 10 s a page |
+| Outro | The ident's last picture, run out: a glint crosses the words, the words leave to the right, the clock drops back, and the ident fades to the board underneath. Its own jingle closes the report, and the beat goes under its first bell (Sound, in the README) | — | 1.4 s |
 | Back to the board | The ticker leads with ON THE HOUR and says when the next report airs | — | — |
 
 - **A quiet hour**, when no session changed state: the ident, the desk and the outro, headline A QUIET HOUR, the strap saying all is well. No review.

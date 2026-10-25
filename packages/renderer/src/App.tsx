@@ -41,8 +41,9 @@ export function App({ reducedMotion = prefersReducedMotion() }: { reducedMotion?
         wanted = next.wantsWindow
         post({ type: 'window', wanted: next.wantsWindow })
       }
-      for (const jingle of next.cues) {
-        post({ type: 'cue', jingle })
+      // What the station plays changes as the director's events happen
+      for (const sound of next.sounds) {
+        post(sound)
       }
       if (next.reported !== null) {
         post({ type: 'reported', at: next.reported })

@@ -22,6 +22,15 @@ export const SNAPSHOT_EVERY_MS = 1_000
 // A story older than this when the station first sees it does not air
 export const STORY_FRESH_MS = 120_000
 
+// How the station mixes the beat. It comes in over BED_IN_MS on the last notes
+// of its line, rising evenly from silence, so that its first downbeat lands at
+// full, and goes out over BED_OUT_MS falling as the square of what is left,
+// fast at first, so it carries into an outro's first chord and is gone before
+// its second. A cut fades everything evenly over HUSH_MS
+export const BED_IN_MS = 300
+export const BED_OUT_MS = 500
+export const HUSH_MS = 80
+
 // Where things live
 export const STORE_FOLDER = 'Pipcast'
 export const CLAUDE_BUNDLE_ID = 'com.anthropic.claudefordesktop'

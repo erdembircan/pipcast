@@ -239,11 +239,11 @@ export interface PromptSketchProps extends BandProps {
   beside?: 'usage';
 }
 
-/** Review-board furniture, never on the window: the window playing a run, and under it a button that plays the run again from the start with its jingle. */
+/** Review-board furniture, never on the window: the window playing a run, and under it a button that plays the run again from the start with its sound, as the station plays it. */
 export interface PlayWithSoundProps {
   /** A run: "breaking", "breaking-ready", "breaking-complete", "breaking-error", "hour" or "quiet-hour". */
   sample: string;
-  /** Only for a run with no intro or outro: the jingle to play. The run's own intro and outro jingles play where they fall. */
+  /** Only for a run with no intro or outro: the jingle to play. The run's own intro and outro jingles play where they fall, and the beat under its desk and review. */
   jingle?: string;
   /** Only for a run with no intro or outro: seconds into the run when `jingle` starts. Default 2. */
   cue?: number;
@@ -257,8 +257,14 @@ export interface PlayWithSoundProps {
 /**
  * PipNews.playJingle(name, when?) plays a jingle on a shared AudioContext; `when` is on that
  * context's clock. It returns a function that fades the jingle out. Browsers allow it only after a click.
- * PipNews.renderJingle(name, sampleRate?) renders one offline and resolves to an AudioBuffer.
- * PipNews.playJingles([{ name, at }]) plays several in one mix, each at its time: a segment's intro and outro.
+ * PipNews.renderJingle(name, sampleRate?) renders one offline and resolves to an AudioBuffer; a bed's
+ * name renders one turn of its loop, at 48 kHz.
+ * PipNews.playJingles([{ name, at }, { bed, at, until }]) plays several in one mix, each at its time: a
+ * segment's intro and outro, and the beat, mixing in at `at` and phasing out from `until`.
  * PipNews.jingles lists the jingles there are: "breaking" (the intro), "breaking-out" (the outro), "hour" (the ident) and "hour-out" (the hour's outro).
+ * PipNews.beds lists the beds: "beat-minor" (under BREAKING NEWS's desk) and "beat-major" (under the hour's desk and review).
+ * PipNews.beat is the beat's timing, in seconds: `turn`, one turn of its loop; `warm`, the turns rendered
+ * before the one that is kept; `fadeIn` and `fadeOut`, how it mixes in and phases out.
  */
 export type JingleName = 'breaking' | 'breaking-out' | 'hour' | 'hour-out';
+export type BedName = 'beat-minor' | 'beat-major';

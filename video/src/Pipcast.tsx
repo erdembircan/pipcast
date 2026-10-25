@@ -22,15 +22,17 @@ function sceneAt(T: number) {
 export function Pipcast() {
   const frame = useCurrentFrame()
   const T = frame / FPS
-  // The soundtrack and its effects are rendered by scripts/prepare.mjs; until
-  // they are, the video plays with KLWD's jingles alone
+  // The soundtrack, its effects and KLWD's beat are made by
+  // scripts/prepare.mjs; until they are, the video plays with KLWD's jingles
+  // alone
   const hasSoundtrack = getStaticFiles().some((file) => file.name === 'audio/music.wav')
+  const hasBeat = getStaticFiles().some((file) => file.name === 'audio/beat.wav')
   return (
     <AbsoluteFill style={{ overflow: 'hidden' }}>
       <DesignStyles />
       <Paper />
       {sceneAt(T)}
-      <Soundtrack music={hasSoundtrack} />
+      <Soundtrack music={hasSoundtrack} beat={hasBeat} />
     </AbsoluteFill>
   )
 }

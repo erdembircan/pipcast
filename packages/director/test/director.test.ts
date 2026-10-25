@@ -5,7 +5,7 @@ import type { TickerItem } from '@pipcast/design'
 import { createDirector } from '@pipcast/director'
 import type { Program } from '@pipcast/director'
 
-import { at, harness, session, story, T0 } from './helpers.ts'
+import { at, harness, jingles, session, story, T0 } from './helpers.ts'
 
 function lines(program: Program): string[] {
   return (program.scene.ticker ?? []).map((item: TickerItem) =>
@@ -38,7 +38,7 @@ describe('the board', () => {
     ])
     const { program } = h.until(T0)
     expect(program.key).toBe('board')
-    expect(program.cues).toEqual([])
+    expect(program.sounds).toEqual([])
     expect(program.reported).toBeNull()
     expect(program.scene.mode).toBe('board')
     expect(program.scene.clock).toBe('14:30')
@@ -64,7 +64,7 @@ describe('a story', () => {
   it('airs BREAKING NEWS, the desk and the outro, then leaves the board', () => {
     const h = harness(T0, [session('a')])
     const start = h.land([asking('a', T0 + 5000)], T0 + 5000).program
-    expect(start.cues).toEqual(['breaking'])
+    expect(jingles(start)).toEqual(['breaking'])
     expect(start.key).toBe('story:a:1:0')
     expect(start.scene).toMatchObject({ mode: 'stinger', progress: 1, event: { kind: 'needs-input' } })
 
@@ -72,7 +72,7 @@ describe('a story', () => {
 
     const desk = h.until(T0 + 5000 + 2000).program
     expect(desk.key).toBe('story:a:1:1')
-    expect(desk.cues).toEqual([])
+    expect(desk.sounds).toEqual([{ type: 'bed', bed: 'beat-minor' }])
     expect(desk.scene).toMatchObject({
       mode: 'desk',
       act: 'urgent',
@@ -89,7 +89,7 @@ describe('a story', () => {
     expect(h.until(T0 + 5000 + 11_750).program.key).toBe('story:a:1:1')
     const outro = h.until(T0 + 5000 + 12_000).program
     expect(outro.key).toBe('story:a:1:2')
-    expect(outro.cues).toEqual(['breaking-out'])
+    expect(outro.sounds).toEqual([{ type: 'cue', jingle: 'breaking-out' }, { type: 'bed-out' }])
     expect(outro.scene.mode).toBe('outro')
     expect(outro.scene.board?.mode).toBe('board')
 
@@ -141,7 +141,7 @@ describe('a story', () => {
     expect(h.until(T0 + 1000 + 15_250).program.key).toBe('board')
     const second = h.until(T0 + 1000 + 15_500).program
     expect(second.key).toBe('story:b:1:0')
-    expect(second.cues).toEqual(['breaking'])
+    expect(jingles(second)).toEqual(['breaking'])
   })
 
   it('cuts the desk when the session answers, and the outro starts on the next tick', () => {
@@ -152,7 +152,7 @@ describe('a story', () => {
     h.world.sessions = [answered('a', T0 + 4100)]
     const cut = h.until(T0 + 4250).program
     expect(cut.key).toBe('story:a:1:2')
-    expect(cut.cues).toEqual(['breaking-out'])
+    expect(jingles(cut)).toEqual(['breaking-out'])
     expect(h.until(T0 + 4250 + 1250).program.key).toBe('story:a:1:2')
     expect(h.until(T0 + 4250 + 1500).program.key).toBe('board')
     // A story cut short is not restarted
@@ -270,7 +270,7 @@ describe('when the window is hidden', () => {
     h.world.visible = true
     const start = h.land([asking('a', T0 + 6000)], T0 + 6000).program
     expect(start.key).toBe('story:a:1:0')
-    expect(start.cues).toEqual(['breaking'])
+    expect(jingles(start)).toEqual(['breaking'])
   })
 
   it('drops the stories waiting their turn when it hides', () => {
@@ -304,7 +304,7 @@ describe('when the window is hidden', () => {
 
     h.world.visible = true
     const ident = h.until(at(15, 2, 0) + 250).program
-    expect(ident.cues).toEqual(['hour'])
+    expect(jingles(ident)).toEqual(['hour'])
     expect(ident.reported).toBe(at(15))
     h.until(at(15, 3, 0))
     expect(h.keys().some((key) => key.startsWith('story:b'))).toBe(false)
@@ -323,7 +323,7 @@ describe('when the window is hidden', () => {
 
     h.world.visible = true
     const ident = h.until(at(15, 59, 56) + 250).program
-    expect(ident.cues).toEqual(['hour'])
+    expect(jingles(ident)).toEqual(['hour'])
     expect(ident.reported).toBe(at(16))
     const desk = h.until(at(16, 0, 4)).program
     expect(desk.scene).toMatchObject({ mode: 'desk', event: { foot: '14:00 to 16:00' } })
@@ -340,7 +340,7 @@ describe('when the window is hidden', () => {
     h.world.visible = false
     const hidden = h.until(T0 + 4250).program
     expect(hidden.key).toBe('board')
-    expect(hidden.cues).toEqual([])
+    expect(hidden.sounds).toEqual([{ type: 'hush' }])
 
     h.world.visible = true
     h.until(T0 + 60_000)
@@ -354,18 +354,18 @@ describe('a window minimized to the side', () => {
     h.world.windowOut = false
     const landed = h.land([asking('a', T0 + 1000)], T0 + 1000).program
     expect(landed.key).toBe('board')
-    expect(landed.cues).toEqual([])
+    expect(jingles(landed)).toEqual([])
     expect(landed.wantsWindow).toBe(true)
 
     const waiting = h.until(T0 + 3000).program
     expect(waiting.key).toBe('board')
-    expect(waiting.cues).toEqual([])
+    expect(jingles(waiting)).toEqual([])
     expect(waiting.wantsWindow).toBe(true)
 
     h.world.windowOut = true
     const out = h.until(T0 + 3250).program
     expect(out.key).toBe('story:a:1:0')
-    expect(out.cues).toEqual(['breaking'])
+    expect(jingles(out)).toEqual(['breaking'])
     expect(out.wantsWindow).toBe(true)
   })
 
@@ -393,7 +393,7 @@ describe('a window minimized to the side', () => {
     const secondStart = h.history.findIndex((sample) => sample.program.key === 'story:b:1:0')
     expect(firstEnd).toBeGreaterThan(0)
     expect(secondStart).toBeGreaterThan(firstEnd)
-    expect(h.history[secondStart]?.program.cues).toEqual(['breaking'])
+    expect(jingles(h.history[secondStart]?.program)).toEqual(['breaking'])
     const gap = h.history.slice(firstEnd, secondStart)
     expect(gap.length).toBeGreaterThan(1)
     for (const sample of gap) {
@@ -413,7 +413,7 @@ describe('a window minimized to the side', () => {
     h.world.windowOut = false
     const cut = h.until(T0 + 5250)
     expect(cut.program.key).toBe('board')
-    expect(cut.program.cues).toEqual([])
+    expect(cut.program.sounds).toEqual([{ type: 'hush' }])
     expect(cut.program.wantsWindow).toBe(false)
     const cutAt = cut.now
     expect(h.until(cutAt + 1750).program.wantsWindow).toBe(false)
@@ -423,7 +423,7 @@ describe('a window minimized to the side', () => {
     h.world.windowOut = true
     const back = h.until(cutAt + 5250).program
     expect(back.key).toBe('story:b:1:0')
-    expect(back.cues).toEqual(['breaking'])
+    expect(jingles(back)).toEqual(['breaking'])
     h.until(T0 + 60_000)
     expect(h.cues().filter((cue) => cue.jingle === 'breaking-out').length).toBe(1)
     expect(h.history.slice(h.history.findIndex((sample) => sample.now === cutAt + 250)).some((sample) => sample.program.key.startsWith('story:a:1'))).toBe(false)
@@ -447,7 +447,7 @@ describe('a window minimized to the side', () => {
     h.world.windowOut = true
     const out = h.until(at(14, 59, 55) + 250).program
     expect(out.reported).toBe(at(15))
-    expect(out.cues).toEqual(['hour'])
+    expect(jingles(out)).toEqual(['hour'])
   })
 
   it('never wants the window while it is hidden', () => {
@@ -462,7 +462,7 @@ describe('a window minimized to the side', () => {
     const h = harness(T0, [session('a')])
     const start = h.land([asking('a', T0 + 1000)], T0 + 1000).program
     expect(start.key).toBe('story:a:1:0')
-    expect(start.cues).toEqual(['breaking'])
+    expect(jingles(start)).toEqual(['breaking'])
     expect(start.wantsWindow).toBe(true)
   })
 })
@@ -488,7 +488,7 @@ describe('the hour', () => {
   it('airs the ident, the desk, the review and the outro, then ON THE HOUR', () => {
     const h = harness(at(14, 59, 0), afternoon())
     const ident = h.until(at(14, 59, 55))
-    expect(ident.program.cues).toEqual(['hour'])
+    expect(jingles(ident.program)).toEqual(['hour'])
     expect(ident.program.reported).toBe(at(15))
     expect(ident.program.scene).toMatchObject({ mode: 'ident', hour: '15:00', progress: 1 })
     expect(ident.program.key).toBe(`hour:${at(15)}:0`)
@@ -521,7 +521,7 @@ describe('the hour', () => {
     expect(lines(review).some((line) => line.startsWith('STILL WAITING Title a'))).toBe(true)
 
     const outro = h.until(at(15, 0, 22) + 500).program
-    expect(outro.cues).toEqual(['hour-out'])
+    expect(jingles(outro)).toEqual(['hour-out'])
     expect(outro.scene).toMatchObject({ mode: 'outro', open: 'hour', hour: '15:00' })
 
     const board = h.until(at(15, 0, 26)).program
@@ -549,7 +549,7 @@ describe('the hour', () => {
     // The story's outro ends at 14:59:52 + 13.3 s; the report starts 2 s later
     expect(h.until(at(15, 0, 7)).program.key).toBe('board')
     const ident = h.until(at(15, 0, 7) + 500).program
-    expect(ident.cues).toEqual(['hour'])
+    expect(jingles(ident)).toEqual(['hour'])
     expect(ident.reported).toBe(at(15))
     expect(ident.scene.mode).toBe('ident')
   })
@@ -584,7 +584,7 @@ describe('the hour', () => {
     h.until(at(14, 59, 54) + 750)
     h.world.visible = true
     const ident = h.until(at(14, 59, 55)).program
-    expect(ident.cues).toEqual(['hour'])
+    expect(jingles(ident)).toEqual(['hour'])
     expect(ident.reported).toBe(at(15))
     expect(ident.scene.mode).toBe('ident')
   })
@@ -595,7 +595,7 @@ describe('the hour', () => {
     h.until(at(14, 59, 56))
     h.world.visible = true
     const ident = h.until(at(14, 59, 56) + 250).program
-    expect(ident.cues).toEqual(['hour'])
+    expect(jingles(ident)).toEqual(['hour'])
     expect(ident.reported).toBe(at(15))
     expect(ident.scene.mode).toBe('ident')
   })
@@ -669,24 +669,114 @@ describe('the hour', () => {
 describe('reduced motion', () => {
   it('shortens the openers to 1 s and leaves the outro out', () => {
     const h = harness(T0, [session('a')], { reducedMotion: true })
-    expect(h.land([asking('a', T0 + 1000)], T0 + 1000).program.cues).toEqual(['breaking'])
+    expect(jingles(h.land([asking('a', T0 + 1000)], T0 + 1000).program)).toEqual(['breaking'])
     expect(h.until(T0 + 1750).program.key).toBe('story:a:1:0')
     expect(h.until(T0 + 2000).program.key).toBe('story:a:1:1')
     expect(h.until(T0 + 11_750).program.key).toBe('story:a:1:1')
     const back = h.until(T0 + 12_000).program
     expect(back.key).toBe('board')
-    expect(back.cues).toEqual(['breaking-out'])
+    expect(jingles(back)).toEqual(['breaking-out'])
     expect(h.history.some((sample) => sample.program.scene.mode === 'outro')).toBe(false)
   })
 
   it('does the same for the report on the hour', () => {
     const h = harness(at(14, 59, 0), [session('a')], { reducedMotion: true })
     h.until(at(14, 59, 55))
-    expect(h.history.at(-1)?.program.cues).toEqual(['hour'])
+    expect(jingles(h.history.at(-1)?.program)).toEqual(['hour'])
     expect(h.until(at(14, 59, 56)).program.key).toBe(`hour:${at(15)}:1`)
     h.until(at(15, 0, 30))
     expect(h.history.some((sample) => sample.program.scene.mode === 'outro')).toBe(false)
     expect(h.cues().map((cue) => cue.jingle)).toEqual(['hour', 'hour-out'])
     expect(h.history.at(-1)?.program.key).toBe('board')
+  })
+})
+
+describe('the beat', () => {
+  // The hour's sessions: one waiting since 14:20, one ready since 14:40
+  function afternoon() {
+    const asked = story('a:1', 'needs-input', at(14, 20), { command: 'npm install' })
+    const ready = story('b:1', 'ready', at(14, 40), { added: 100, removed: 20, files: 3 })
+    return [
+      session('a', { state: 'needs-input', stateAt: asked.at, stories: [asked] }),
+      session('b', { state: 'ready', stateAt: ready.at, stories: [ready] }),
+    ]
+  }
+
+  it('mixes in as BREAKING NEWS cuts to the desk, and phases out as the outro starts', () => {
+    const h = harness(T0, [session('a')])
+    expect(h.land([asking('a', T0 + 5000)], T0 + 5000).program.sounds).toEqual([{ type: 'cue', jingle: 'breaking' }])
+    const desk = h.until(T0 + 5000 + 2000).program
+    expect(desk.scene.mode).toBe('desk')
+    expect(desk.sounds).toEqual([{ type: 'bed', bed: 'beat-minor' }])
+    const outro = h.until(T0 + 5000 + 12_000).program
+    expect(outro.scene.mode).toBe('outro')
+    expect(outro.sounds).toEqual([{ type: 'cue', jingle: 'breaking-out' }, { type: 'bed-out' }])
+    h.until(T0 + 5000 + 20_000)
+    expect(h.sounds().map((entry) => entry.sound.type)).toEqual(['cue', 'bed', 'cue', 'bed-out'])
+  })
+
+  it('phases out on the tick the session answers, as the outro starts', () => {
+    const h = harness(T0, [session('a')])
+    h.land([asking('a', T0 + 1000)], T0 + 1000)
+    expect(h.until(T0 + 4000).program.key).toBe('story:a:1:1')
+    h.world.sessions = [answered('a', T0 + 4100)]
+    const cut = h.until(T0 + 4250).program
+    expect(cut.key).toBe('story:a:1:2')
+    expect(cut.sounds).toEqual([{ type: 'cue', jingle: 'breaking-out' }, { type: 'bed-out' }])
+  })
+
+  it('plays on in D major from the hour’s desk through its review, and phases out as the outro starts', () => {
+    const h = harness(at(14, 59, 0), afternoon())
+    h.until(at(14, 59, 55))
+    const desk = h.until(at(15, 0, 2) + 500).program
+    expect(desk.scene.mode).toBe('desk')
+    expect(desk.sounds).toEqual([{ type: 'bed', bed: 'beat-major' }])
+    const review = h.until(at(15, 0, 12) + 500).program
+    expect(review.scene.mode).toBe('review')
+    expect(review.sounds).toEqual([])
+    const outro = h.until(at(15, 0, 22) + 500).program
+    expect(outro.scene.mode).toBe('outro')
+    expect(outro.sounds).toEqual([{ type: 'cue', jingle: 'hour-out' }, { type: 'bed-out' }])
+  })
+
+  it('phases out after the desk in a quiet hour', () => {
+    const h = harness(at(14, 59, 0), [session('a'), session('b', { state: 'ready' })])
+    h.until(at(15, 0, 2) + 250)
+    const outro = h.until(at(15, 0, 12) + 500).program
+    expect(outro.scene.mode).toBe('outro')
+    expect(outro.sounds).toEqual([{ type: 'cue', jingle: 'hour-out' }, { type: 'bed-out' }])
+  })
+
+  it('with reduced motion, phases out as the board returns with the outro’s jingle', () => {
+    const h = harness(T0, [session('a')], { reducedMotion: true })
+    h.land([asking('a', T0 + 1000)], T0 + 1000)
+    expect(h.until(T0 + 2000).program.sounds).toEqual([{ type: 'bed', bed: 'beat-minor' }])
+    const back = h.until(T0 + 12_000).program
+    expect(back.key).toBe('board')
+    expect(back.sounds).toEqual([{ type: 'cue', jingle: 'breaking-out' }, { type: 'bed-out' }])
+  })
+
+  it('hushes a segment cut by the window hiding, or going into the side, once', () => {
+    const hidden = harness(T0, [session('a')])
+    hidden.land([asking('a', T0 + 1000)], T0 + 1000)
+    hidden.until(T0 + 4000)
+    hidden.world.visible = false
+    expect(hidden.until(T0 + 4250).program.sounds).toEqual([{ type: 'hush' }])
+    hidden.until(T0 + 30_000)
+    expect(hidden.sounds().filter((entry) => entry.sound.type === 'hush')).toHaveLength(1)
+
+    const tucked = harness(T0, [session('a')])
+    tucked.land([asking('a', T0 + 1000)], T0 + 1000)
+    tucked.until(T0 + 4000)
+    tucked.world.windowOut = false
+    expect(tucked.until(T0 + 4250).program.sounds).toEqual([{ type: 'hush' }])
+  })
+
+  it('plays nothing for a story that never aired', () => {
+    const h = harness(T0, [session('a')])
+    h.world.visible = false
+    h.land([asking('a', T0 + 1000)], T0 + 1000)
+    h.until(T0 + 20_000)
+    expect(h.sounds()).toEqual([])
   })
 })
