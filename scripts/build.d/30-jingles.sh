@@ -1,9 +1,9 @@
 #!/bin/bash
-# Renders the four jingles into plugin/station/sounds, only when one of them or
-# the stamp scripts/build.d/jingles.SOURCE is missing, or the stamp (the
-# SHA-256 of the design system's bundle they were rendered from) differs from
-# the bundle's hash now. They render only on a Mac: anywhere else, as on CI,
-# stale jingles are an error.
+# Renders the jingles and the beat into plugin/station/sounds, only when one of
+# their files or the stamp scripts/build.d/jingles.SOURCE is missing, or the
+# stamp (the SHA-256 of the design system's bundle they were rendered from)
+# differs from the bundle's hash now. They render only on a Mac: anywhere else,
+# as on CI, stale sounds are an error.
 set -euo pipefail
 
 root="$(cd "$(dirname "$0")/../.." && pwd)"
@@ -11,11 +11,11 @@ cd "$root"
 
 sounds="plugin/station/sounds"
 stamp="scripts/build.d/jingles.SOURCE"
-names=(breaking breaking-out hour hour-out)
+files=(breaking.m4a breaking-out.m4a hour.m4a hour-out.m4a beat-minor.caf beat-major.caf)
 
 stale=0
-for name in "${names[@]}"; do
-  if [ ! -f "$sounds/$name.m4a" ]; then
+for file in "${files[@]}"; do
+  if [ ! -f "$sounds/$file" ]; then
     stale=1
   fi
 done
@@ -28,10 +28,10 @@ fi
 
 if [ "$stale" = 1 ]; then
   if [ "$(uname -s)" != Darwin ]; then
-    echo "The jingles in plugin/station/sounds were rendered from another design/components/bundle.js. Run scripts/build.sh on a Mac and commit what it builds." >&2
+    echo "The sounds in plugin/station/sounds were rendered from another design/components/bundle.js. Run scripts/build.sh on a Mac and commit what it builds." >&2
     exit 1
   fi
   npm run build:jingles
 else
-  echo "jingles are up to date"
+  echo "the jingles and the beat are up to date"
 fi

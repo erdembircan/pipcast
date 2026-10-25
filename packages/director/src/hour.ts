@@ -125,6 +125,8 @@ export function hourReport(
   const desk: Step = {
     role: 'desk',
     length: DESK_MS,
+    // The beat, in D major, comes in with the desk and plays on under the review
+    bed: 'beat-major',
     scene: ({ now: at, ticker }): Scene => ({
       mode: 'desk',
       clock: clock(at),
@@ -144,6 +146,7 @@ export function hourReport(
     role: 'review',
     // A desk's 10 s for each page of four rows
     length: REVIEW_MS * Math.max(1, Math.ceil(rows.length / REVIEW_ROWS)),
+    bed: 'beat-major',
     scene: ({ now: at, ticker }): Scene => ({
       mode: 'review',
       clock: clock(at),

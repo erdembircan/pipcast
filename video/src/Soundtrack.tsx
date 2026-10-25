@@ -1,8 +1,11 @@
 // Everything the video sounds like: the soundtrack (scripts/music/score.js,
 // rendered into public/audio by scripts/prepare.mjs), KLWD's own four jingles
-// from plugin/station/sounds where the station plays them, and small sound
-// effects for clicks, windows and camera moves.
+// from plugin/station/sounds where the station plays them, its beat, laid where
+// the station plays it from the same folder's loops (scripts/render-beat.mjs),
+// and small sound effects for clicks, windows and camera moves.
 import { Html5Audio, Sequence, interpolate, staticFile } from 'remotion'
+
+import { HUSH_MS } from '../../packages/contract/src/constants.ts'
 
 import breaking from '../../plugin/station/sounds/breaking.m4a'
 import breakingOut from '../../plugin/station/sounds/breaking-out.m4a'
@@ -28,8 +31,9 @@ import { FPS, JINGLES, NEWS, SCENES } from './timeline.ts'
 const JINGLE_FILES: Record<string, string> = { breaking, 'breaking-out': breakingOut, hour, 'hour-out': hourOut }
 
 // Measured on the rendered video: about -16.4 LUFS integrated, with the true
-// peak under -1 dBFS. The jingles keep their own level; under each one the
-// soundtrack breaks down instead of stopping.
+// peak under -1 dBFS. The jingles and the beat keep their own level, as the
+// station plays them; under them the soundtrack breaks down instead of
+// stopping.
 const MUSIC_VOLUME = 0.87
 const JINGLE_VOLUME = 0.9
 /** The hour's sign-off ends on its loudest chord, which lands on the music's fill into the groove: a little lower, so the encoded peak stays under -1 dBFS */
@@ -64,18 +68,19 @@ const SFX: Array<{ at: number; name: Sfx; level?: number }> = [
   { at: SCENES.finale + 0.2, name: 'swoosh-up', level: 0.55 },
 ]
 
-/** A jingle's level; one whose story is cut short (Back to Claude, or an outro that comes early) fades out over a quarter of a second */
+/** A jingle's level; one whose story is cut (Back to Claude) fades out as the station hushes it */
 function jingleVolume(name: string, at: number, cut?: number, trim = 1) {
   const level = JINGLE_VOLUME * (JINGLE_TRIM[name] ?? 1) * trim
   if (cut === undefined) return level
   const f0 = (cut - at) * FPS
-  return (f: number) => level * interpolate(f, [f0, f0 + 0.25 * FPS], [1, 0], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' })
+  return (f: number) => level * interpolate(f, [f0, f0 + (HUSH_MS / 1000) * FPS], [1, 0], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' })
 }
 
-export function Soundtrack({ music }: { music: boolean }) {
+export function Soundtrack({ music, beat }: { music: boolean; beat: boolean }) {
   return (
     <>
       {music ? <Html5Audio src={staticFile('audio/music.wav')} volume={MUSIC_VOLUME} /> : null}
+      {beat ? <Html5Audio src={staticFile('audio/beat.wav')} volume={JINGLE_VOLUME} /> : null}
       {JINGLES.map((j) => (
         <Sequence key={`${j.name}-${j.at}`} from={Math.round(j.at * FPS)} layout="none" name={`jingle: ${j.name}`}>
           <Html5Audio src={JINGLE_FILES[j.name]!} trimBefore={Math.round(j.from * FPS)} volume={jingleVolume(j.name, j.at, 'cut' in j ? j.cut : undefined, 'level' in j ? j.level : 1)} />

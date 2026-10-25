@@ -9,6 +9,10 @@ export type Quadrant = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right'
 
 export type Jingle = 'breaking' | 'breaking-out' | 'hour' | 'hour-out'
 
+// The beat under a desk, in its segment's key: D minor under BREAKING NEWS, D
+// major under the hour. The station loops it for as long as it plays
+export type Bed = 'beat-minor' | 'beat-major'
+
 // The kinds of error a turn can stop on, as the engine names them
 export type ErrorKind =
   | 'authentication_failed'
@@ -142,9 +146,22 @@ export interface StillMessage {
 
 export type HostMessage = SnapshotMessage | StillMessage
 
+// What the page tells the station to play, as each event happens. The station
+// acts on each at once, and mixes: the beat comes in and goes out with a fade,
+// and a cut fades everything (BED_IN_MS, BED_OUT_MS, HUSH_MS)
+export type Sound =
+  // A jingle starts
+  | { type: 'cue'; jingle: Jingle }
+  // The beat mixes in, and loops until it is told to go
+  | { type: 'bed'; bed: Bed }
+  // The beat phases out
+  | { type: 'bed-out' }
+  // The segment was cut: everything playing fades out
+  | { type: 'hush' }
+
 export type PageMessage =
   | { type: 'ready' }
-  | { type: 'cue'; jingle: Jingle }
+  | Sound
   | { type: 'reported'; at: number }
   | { type: 'window'; wanted: boolean }
   | { type: 'rendered' }

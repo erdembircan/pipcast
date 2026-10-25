@@ -1,4 +1,4 @@
-import type { Jingle, Story } from '@pipcast/contract'
+import type { Bed, Jingle, Story } from '@pipcast/contract'
 import type { Scene, TickerItem } from '@pipcast/design'
 
 export type QueueItem =
@@ -44,6 +44,11 @@ export interface StepContext {
 export interface Step {
   role: 'opener' | 'desk' | 'review' | 'outro'
   length: number
+  // A jingle that starts with the step
   cue?: Jingle
+  // The beat under the step: it mixes in as the first step that has it starts,
+  // plays on through the steps after it that have it too, and phases out as a
+  // step without it starts, or as the segment ends
+  bed?: Bed
   scene(context: StepContext): Scene
 }

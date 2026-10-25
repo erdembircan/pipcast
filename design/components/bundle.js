@@ -2161,7 +2161,8 @@
   /* BREAKING NEWS, 5.8 s. It is cut to the stinger's own marks (1.4 s): a
      riser and a timpani roll before the words, the logo's four notes on
      four hits as BREAKING and NEWS slam in, the last and biggest as NEWS
-     lands, then the beat runs on under the desk and fades. */
+     lands, ringing on into the desk, where the beat comes in under it (The
+     beat, below). */
   function scoreBreaking(m, t0) {
     var roll = [0, 0.06, 0.11, 0.155, 0.195, 0.23, 0.26, 0.285];
     riser(m, t0, 0.31, 0.12);
@@ -2184,18 +2185,6 @@
     brass(m, t0 + 0.84, HZ.D2, 1.0, 0.12);
     tremolo(m, t0 + 0.84, HZ.D5, 1.7, 0.05);
     tremolo(m, t0 + 0.84, HZ.A5, 1.7, 0.035);
-    /* the beat runs on after the melody, under the cut to the desk (1.9 s),
-       holds for two bars, then fades out by about 5.1 s: sixteenths on the
-       logo's notes and a soft drum on every beat */
-    var step = 60 / 132 / 4;
-    var line = [HZ.D4, HZ.D4, HZ.A4, HZ.D4, HZ.F4, HZ.D4, HZ.A4, HZ.D4];
-    var ticks = 36;
-    var hold = 16;
-    for (var k = 0; k < ticks; k++) {
-      var fade = k < hold ? 1 : Math.pow(1 - (k - hold) / (ticks - hold), 1.5);
-      tick(m, t0 + 1.02 + k * step, line[k % line.length], 0.13 * fade + 0.003);
-      if (k % 4 === 0) { timpani(m, t0 + 1.02 + k * step, HZ.D2, 0.34 * fade + 0.02, 0.5); }
-    }
   }
 
   /* BREAKING NEWS, the outro, 3.4 s. The logo brought back down: its four
@@ -2294,6 +2283,52 @@
     tremolo(m, end, HZ.D5, 2.2, 0.025);
   }
 
+  /* The beat: the newsroom pulse under the desks, sixteenths on the logo's
+     notes and a soft drum on every beat, about 132 to the minute. It comes in
+     with a desk and plays on under the review, for as long as they run, and
+     goes when the outro comes: it mixes in over `fadeIn` seconds on the last
+     notes of its line, rising evenly from silence, so that its first downbeat
+     lands at full, and phases out over `fadeOut`, falling as the square of
+     what is left, so it carries into the outro's first chord and is gone
+     before its second. The station loops one turn of it, its line of eight
+     notes: 43,648 frames at 48 kHz, a whole number of frames and of Web
+     Audio's 128-frame blocks, so every turn renders the same and the loop
+     comes round to the frame. `third` is the line's one note that sets the
+     key: F in D minor under BREAKING NEWS, F sharp in D major under the hour. */
+  var BEAT = { turn: 43648 / 48000, warm: 6, fadeIn: 0.3, fadeOut: 0.5 };
+  var BEDS = { 'beat-minor': HZ.F4, 'beat-major': HZ.Fs4 };
+  /* `turns` of the line from `t0`, leaving out what falls before `from` */
+  function beat(m, t0, turns, third, from) {
+    var step = BEAT.turn / 8;
+    var line = [HZ.D4, HZ.D4, HZ.A4, HZ.D4, third, HZ.D4, HZ.A4, HZ.D4];
+    for (var k = 0; k < turns * 8; k++) {
+      var t = t0 + k * step;
+      if (from !== undefined && t < from - 1e-6) { continue; }
+      tick(m, t, line[k % 8], 0.133);
+      if (k % 4 === 0) { timpani(m, t, HZ.D2, 0.36, 0.5); }
+    }
+  }
+  /* The beat live, from `at` until `until`, through gains of its own that mix
+     it in and phase it out as the station does, its first downbeat as it
+     reaches full; the hall rings on after it */
+  function playBed(m, name, at, until) {
+    var ctx = m.ctx;
+    var dry = ctx.createGain();
+    var send = ctx.createGain();
+    dry.connect(m.dry);
+    send.connect(m.send);
+    var end = Math.max(until, at + BEAT.fadeIn);
+    var out = new Float32Array(32);
+    for (var i = 0; i < out.length; i++) { out[i] = Math.pow(1 - i / (out.length - 1), 2); }
+    [dry.gain, send.gain].forEach(function (g) {
+      g.setValueAtTime(0, at);
+      g.linearRampToValueAtTime(1, at + BEAT.fadeIn);
+      g.setValueCurveAtTime(out, end, BEAT.fadeOut);
+    });
+    var from = at + BEAT.fadeIn - BEAT.turn;
+    beat({ ctx: ctx, dry: dry, send: send, white: m.white }, from, Math.ceil((end + BEAT.fadeOut - from) / BEAT.turn), BEDS[name], at);
+  }
+
   var JINGLES = {
     breaking: { duration: 5.8, score: scoreBreaking },
     'breaking-out': { duration: 3.4, score: scoreBreakingOut },
@@ -2316,7 +2351,9 @@
     return playJingles([{ name: name, at: num(when, 0) }]);
   }
   /* Several jingles in one mix, each at its time (`at`, on the context's
-     clock): a segment's intro and outro. Returns a function that fades all. */
+     clock): a segment's intro and outro. An entry with `bed` plays the beat
+     from `at`, mixing in, and phases it out from `until`. Returns a function
+     that fades all. */
   function playJingles(list) {
     var ctx = audioContext();
     if (!ctx) { return function () {}; }
@@ -2325,8 +2362,13 @@
     out.connect(ctx.destination);
     var m = mixer(ctx, out);
     list.forEach(function (x) {
+      var at = Math.max(ctx.currentTime + 0.02, num(x.at, 0));
+      if (x.bed && BEDS[x.bed]) {
+        playBed(m, x.bed, at, Math.max(at, num(x.until, at)));
+        return;
+      }
       var j = JINGLES[x.name];
-      if (j) { j.score(m, Math.max(ctx.currentTime + 0.02, num(x.at, 0))); }
+      if (j) { j.score(m, at); }
     });
     PLAYING = function () {
       var now = ctx.currentTime;
@@ -2336,8 +2378,10 @@
     };
     return PLAYING;
   }
-  /* Renders a jingle offline, for files and tests: resolves to an AudioBuffer. */
+  /* Renders a jingle offline, for files and tests: resolves to an AudioBuffer.
+     A bed's name renders its loop (renderBed). */
   function renderJingle(name, sampleRate) {
+    if (BEDS[name]) { return renderBed(name); }
     var j = JINGLES[name];
     var C = window.OfflineAudioContext || window.webkitOfflineAudioContext;
     if (!j || !C) { return Promise.reject(new Error('no jingle or no offline audio')); }
@@ -2348,11 +2392,34 @@
     return ctx.startRendering();
   }
 
+  /* A bed's loop: one turn of the beat at 48 kHz, the last of a run of
+     `warm` + 1 turns, so the hall and the mix have settled and the turn
+     carries the ring of the ones before it, as it does when it comes round
+     again. */
+  function renderBed(name) {
+    var C = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+    var third = BEDS[name];
+    if (!third || !C) { return Promise.reject(new Error('no bed or no offline audio')); }
+    var rate = 48000;
+    var turn = Math.round(BEAT.turn * rate);
+    var ctx = new C(2, (BEAT.warm + 1) * turn, rate);
+    var m = mixer(ctx, ctx.destination);
+    beat(m, 0, BEAT.warm + 1, third);
+    return ctx.startRendering().then(function (all) {
+      var part = ctx.createBuffer(2, turn, rate);
+      for (var ch = 0; ch < 2; ch++) {
+        part.getChannelData(ch).set(all.getChannelData(ch).subarray(BEAT.warm * turn, (BEAT.warm + 1) * turn));
+      }
+      return part;
+    });
+  }
+
   /* Review-board furniture, never part of the window: the window playing a
      run, and under it a button that plays the run again from the start with
-     its jingles: BREAKING NEWS as each intro starts, the outro's as each
-     outro starts, and the hour's as its ident and its outro start. A run
-     with none of them plays `jingle` at `cue`. */
+     its sound, as the station plays it: BREAKING NEWS as each intro starts,
+     the hour's jingle as its ident starts, the beat mixing in as their desk
+     starts, in D minor or D major, and phasing out as the outro starts with
+     its own jingle. A run with none of them plays `jingle` at `cue`. */
   function PlayWithSound(props) {
     var w = num(props.width, 716);
     var st = useState(0);
@@ -2365,10 +2432,20 @@
       if (!ctx) { return; }
       var list = [];
       var at = 0;
+      var key = null;
+      var bed = null;
       (RUNS[props.sample] || []).forEach(function (step) {
-        if (step.scene.mode === 'stinger') { list.push({ name: 'breaking', at: ctx.currentTime + at }); }
-        if (step.scene.mode === 'outro') { list.push({ name: step.scene.open === 'hour' ? 'hour-out' : 'breaking-out', at: ctx.currentTime + at }); }
-        if (step.scene.mode === 'ident') { list.push({ name: 'hour', at: ctx.currentTime + at }); }
+        var mode = step.scene.mode;
+        var t = ctx.currentTime + at;
+        if (mode === 'stinger') { list.push({ name: 'breaking', at: t }); key = 'beat-minor'; }
+        if (mode === 'ident') { list.push({ name: 'hour', at: t }); key = 'beat-major'; }
+        if ((mode === 'desk' || mode === 'review') && key && !bed) { bed = { bed: key, at: t }; }
+        if (mode === 'outro') {
+          list.push({ name: step.scene.open === 'hour' ? 'hour-out' : 'breaking-out', at: t });
+          if (bed) { bed.until = t; list.push(bed); }
+          key = null;
+          bed = null;
+        }
         at += num(step.dur, 4);
       });
       if (!list.length) { list.push({ name: props.jingle || 'breaking', at: ctx.currentTime + cue }); }
@@ -2488,6 +2565,8 @@
     playJingle: playJingle,
     playJingles: playJingles,
     renderJingle: renderJingle,
-    jingles: Object.keys(JINGLES)
+    jingles: Object.keys(JINGLES),
+    beds: Object.keys(BEDS),
+    beat: BEAT
   };
 })();

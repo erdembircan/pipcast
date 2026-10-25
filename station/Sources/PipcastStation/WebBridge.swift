@@ -1,4 +1,5 @@
 import AppKit
+import StationSound
 import WebKit
 
 /// The messages the page posts to the station, as packages/contract/src/types.ts
@@ -6,12 +7,13 @@ import WebKit
 enum PageMessage {
     case ready
     case cue(String)
+    case bed(String)
+    case bedOut
+    case hush
     case reported(at: Double)
     case window(wanted: Bool)
     case rendered
     case log(level: String, text: String)
-
-    static let jingles: Set<String> = ["breaking", "breaking-out", "hour", "hour-out"]
 
     init?(body: Any) {
         guard let object = body as? [String: Any], let type = object["type"] as? String else { return nil }
@@ -19,8 +21,15 @@ enum PageMessage {
         case "ready":
             self = .ready
         case "cue":
-            guard let jingle = object["jingle"] as? String, Self.jingles.contains(jingle) else { return nil }
+            guard let jingle = object["jingle"] as? String, SoundDesk.jingles.contains(jingle) else { return nil }
             self = .cue(jingle)
+        case "bed":
+            guard let bed = object["bed"] as? String, SoundDesk.beds.contains(bed) else { return nil }
+            self = .bed(bed)
+        case "bed-out":
+            self = .bedOut
+        case "hush":
+            self = .hush
         case "reported":
             guard let at = (object["at"] as? NSNumber)?.doubleValue, at.isFinite else { return nil }
             self = .reported(at: at)

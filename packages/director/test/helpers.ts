@@ -1,4 +1,4 @@
-import type { Jingle, SessionRecord, Snapshot, Story } from '@pipcast/contract'
+import type { Jingle, SessionRecord, Snapshot, Sound, Story } from '@pipcast/contract'
 import { createDirector } from '@pipcast/director'
 import type { DirectorOptions, Program } from '@pipcast/director'
 
@@ -39,6 +39,11 @@ export interface World {
 export interface Sample {
   now: number
   program: Program
+}
+
+// The jingles a tick started, by name; none for a tick that is not there
+export function jingles(program: Program | undefined): Jingle[] {
+  return (program?.sounds ?? []).flatMap((sound) => (sound.type === 'cue' ? [sound.jingle] : []))
 }
 
 // A director with a world it reads from, and a clock that moves in 250 ms ticks
@@ -90,8 +95,13 @@ export function harness(start: number, sessions: SessionRecord[] = [], options: 
       now = to
       return tick()
     },
+    // Every jingle started so far, with the tick it started on
     cues(): { now: number; jingle: Jingle }[] {
-      return history.flatMap((sample) => sample.program.cues.map((jingle) => ({ now: sample.now, jingle })))
+      return history.flatMap((sample) => jingles(sample.program).map((jingle) => ({ now: sample.now, jingle })))
+    },
+    // Every sound so far, with the tick it came on
+    sounds(): { now: number; sound: Sound }[] {
+      return history.flatMap((sample) => sample.program.sounds.map((sound) => ({ now: sample.now, sound })))
     },
     keys(): string[] {
       return [...new Set(history.map((sample) => sample.program.key))]

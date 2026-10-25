@@ -1,8 +1,10 @@
-// Renders the design system's four jingles to plugin/station/sounds/*.m4a.
-// A small local server hands headless Chrome a page that renders each score
+// Renders the design system's sounds into plugin/station/sounds: the four
+// jingles as AAC (.m4a), and each bed's loop, one turn of the beat, as Apple
+// Lossless in CAF (.caf), since a loop has to come round to the frame. A
+// small local server hands headless Chrome a page that renders each score
 // offline with PipNews.renderJingle, encodes it as a WAV and posts it back;
-// afconvert turns each WAV into AAC. (--dump-dom does not wait for an offline
-// audio render, so the page reports back instead.)
+// afconvert turns each WAV into its file. (--dump-dom does not wait for an
+// offline audio render, so the page reports back instead.)
 import { execFileSync, spawn } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
@@ -13,24 +15,31 @@ import { fileURLToPath } from 'node:url'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const chrome = process.env.CHROME_BIN ?? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
-const names = ['breaking', 'breaking-out', 'hour', 'hour-out']
+const jingles = ['breaking', 'breaking-out', 'hour', 'hour-out']
+const beds = ['beat-minor', 'beat-major']
+const names = [...jingles, ...beds]
 const sampleRate = 48000
 const timeoutMs = 120_000
 
 // A WAV is scaled down only when its peak is above 0.891 (-1 dBFS), never up,
-// so the levels stay as the design composed them.
+// so the levels stay as the design composed them. The beat was part of BREAKING
+// NEWS's jingle, so its files are scaled as that jingle is: it keeps the level
+// it had under it.
 const page = `<!doctype html>
 <html><head><meta charset="utf-8"><title>jingles</title>
 <script src="/react.js"></script>
 <script src="/bundle.js"></script></head>
 <body>
 <script>
-function wav(buf) {
-  var ch = 2, n = buf.length, sr = buf.sampleRate, peak = 0, i, c;
+function gainFor(buf) {
+  var peak = 0, i, c;
+  for (c = 0; c < 2; c++) { var d = buf.getChannelData(c); for (i = 0; i < buf.length; i++) { var a = Math.abs(d[i]); if (a > peak) { peak = a; } } }
+  return peak > 0.891 ? 0.891 / peak : 1;
+}
+function wav(buf, gain) {
+  var ch = 2, n = buf.length, sr = buf.sampleRate, i, c;
   var data = [];
   for (c = 0; c < ch; c++) { data.push(buf.getChannelData(c)); }
-  for (c = 0; c < ch; c++) { for (i = 0; i < n; i++) { var a = Math.abs(data[c][i]); if (a > peak) { peak = a; } } }
-  var gain = peak > 0.891 ? 0.891 / peak : 1;
   var bytes = 44 + n * ch * 2, ab = new ArrayBuffer(bytes), v = new DataView(ab), o = 0;
   function s(str) { for (var k = 0; k < str.length; k++) { v.setUint8(o++, str.charCodeAt(k)); } }
   s('RIFF'); v.setUint32(o, bytes - 8, true); o += 4; s('WAVE'); s('fmt '); v.setUint32(o, 16, true); o += 4;
@@ -46,11 +55,15 @@ function wav(buf) {
   return ab;
 }
 var names = ${JSON.stringify(names)};
+var beatGain = 1;
 var chain = Promise.resolve();
 names.forEach(function (name) {
   chain = chain.then(function () {
     return PipNews.renderJingle(name, ${sampleRate}).then(function (buf) {
-      return fetch('/save?name=' + name + '.wav', { method: 'POST', body: wav(buf) });
+      var gain = gainFor(buf);
+      if (name === 'breaking') { beatGain = gain; }
+      if (/^beat-/.test(name)) { gain = beatGain; }
+      return fetch('/save?name=' + name + '.wav', { method: 'POST', body: wav(buf, gain) });
     });
   });
 });
@@ -141,8 +154,13 @@ try {
   for (const name of names) {
     const wavPath = join(work, `${name}.wav`)
     writeFileSync(wavPath, received.get(name))
-    execFileSync('afconvert', ['-f', 'm4af', '-d', 'aac', '-b', '160000', wavPath, join(out, `${name}.m4a`)])
-    console.log(`${name}.m4a`)
+    if (jingles.includes(name)) {
+      execFileSync('afconvert', ['-f', 'm4af', '-d', 'aac', '-b', '160000', wavPath, join(out, `${name}.m4a`)])
+      console.log(`${name}.m4a`)
+    } else {
+      execFileSync('afconvert', ['-f', 'caff', '-d', 'alac', wavPath, join(out, `${name}.caf`)])
+      console.log(`${name}.caf`)
+    }
   }
   // The hash of the scores these files were rendered from, kept out of plugin/:
   // build.d/30-jingles.sh renders again only when it changes

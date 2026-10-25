@@ -1,5 +1,6 @@
 import AppKit
 import StationCore
+import StationSound
 import WebKit
 
 func nowMilliseconds() -> Double {
@@ -26,7 +27,8 @@ final class StationController: NSObject, InteractionDelegate, WKNavigationDelega
     private let web: StationWebView
     private let chrome: ChromeView
     private let content: PanelContent
-    private var jingles: Jingles?
+    /// The jingles and the beat, played as the page's events come.
+    private var sound: SoundDesk?
 
     private(set) var quadrant: Quadrant
     private var frontmostID: String?
@@ -109,7 +111,7 @@ final class StationController: NSObject, InteractionDelegate, WKNavigationDelega
         transparent = SharedOptions.load(from: paths.options).transparent
         log.write(transparent ? "transparent on" : "transparent off")
         if model.mode == .minimized { log.write("minimized") }
-        jingles = Jingles(folder: "\(options.assets)/sounds", onProblem: { [log] in log.write("error \($0)") })
+        sound = SoundDesk(folder: URL(fileURLWithPath: "\(options.assets)/sounds"), log: { [log] in log.write($0) })
         place(on: NSScreen.main ?? NSScreen.screens[0], animated: false)
 
         let page = pageURL(assets: options.assets)
@@ -237,16 +239,29 @@ final class StationController: NSObject, InteractionDelegate, WKNavigationDelega
         switch message {
         case .ready:
             pageReady = true
+            // A page that has loaded again has nothing playing yet
+            sound?.hush()
             act(.pageReady(hovered: hovered))
             sendSnapshot()
         case let .cue(jingle):
-            if prefs.sound { jingles?.play(jingle) }
+            if prefs.sound { sound?.cue(jingle) }
+        case let .bed(bed):
+            if prefs.sound { sound?.bedIn(bed) }
+        case .bedOut:
+            sound?.bedOut()
+        case .hush:
+            sound?.hush()
         case let .reported(at):
             prefs.lastReportAt = at
             savePrefs()
         case let .log(level, text):
             log.write("page \(level) \(text)")
         case let .window(wanted):
+            if wanted {
+                if prefs.sound { sound?.warm() }
+            } else {
+                sound?.windowLetGo()
+            }
             act(.wanted(wanted, hovered: hovered))
         case .rendered:
             break
@@ -835,6 +850,8 @@ final class StationController: NSObject, InteractionDelegate, WKNavigationDelega
 
     private func toggleSound() {
         prefs.sound.toggle()
+        // Off stops what is playing; on plays from the next segment
+        if !prefs.sound { sound?.hush() }
         savePrefs()
         log.write(prefs.sound ? "sound on" : "sound off")
         showSoundState()

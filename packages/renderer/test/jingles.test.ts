@@ -3,11 +3,13 @@
 import '../src/react-global.ts'
 import '../src/design.ts'
 
+import { BED_IN_MS, BED_OUT_MS } from '@pipcast/contract'
 import { beforeAll, describe, expect, it } from 'vitest'
 
 // A stand-in for the browser's OfflineAudioContext. It plays nothing and keeps
 // what a score asks of it: every oscillator, filter and buffer source, each
-// parameter's scheduled values, and when each source starts.
+// parameter's scheduled values, and when each source starts. Its render is
+// silence as long as the context.
 interface Step {
   kind: 'set' | 'exp' | 'lin'
   value: number
@@ -88,11 +90,18 @@ interface Heard {
 // What the last render asked for
 let heard: Heard = { oscillators: [], filters: [], sources: [] }
 
+interface FakeBuffer {
+  length: number
+  getChannelData: (channel: number) => Float32Array
+}
+
 class FakeOfflineAudioContext {
   readonly destination = new FakeNode()
   readonly sampleRate: number
+  readonly length: number
   constructor(channels: number, length: number, sampleRate: number) {
     this.sampleRate = sampleRate
+    this.length = length
     heard = { oscillators: [], filters: [], sources: [] }
   }
   createGain(): FakeGain {
@@ -104,9 +113,9 @@ class FakeOfflineAudioContext {
   createConvolver(): FakeConvolver {
     return new FakeConvolver()
   }
-  createBuffer(channels: number, length: number): { getChannelData: (channel: number) => Float32Array } {
+  createBuffer(channels: number, length: number): FakeBuffer {
     const data = Array.from({ length: channels }, () => new Float32Array(length))
-    return { getChannelData: (channel: number) => data[channel] ?? new Float32Array(length) }
+    return { length, getChannelData: (channel: number) => data[channel] ?? new Float32Array(length) }
   }
   createOscillator(): FakeOscillator {
     const node = new FakeOscillator()
@@ -123,21 +132,31 @@ class FakeOfflineAudioContext {
     heard.sources.push(node)
     return node
   }
-  startRendering(): Promise<null> {
-    return Promise.resolve(null)
+  startRendering(): Promise<FakeBuffer> {
+    return Promise.resolve(this.createBuffer(2, this.length))
   }
 }
 
-interface Renderer {
-  renderJingle: (name: string, sampleRate?: number) => Promise<unknown>
+interface Beat {
+  turn: number
+  warm: number
+  fadeIn: number
+  fadeOut: number
 }
 
-// renderJingle starts every score 0.02 s into its render
+interface Renderer {
+  renderJingle: (name: string, sampleRate?: number) => Promise<FakeBuffer>
+  beat: Beat
+}
+
+const news = (): Renderer => (window as unknown as { PipNews: Renderer }).PipNews
+
+// renderJingle starts every jingle's score 0.02 s into its render, and the
+// beat's at the very start
 const T0 = 0.02
 
 async function render(name: string): Promise<Heard> {
-  const news = (window as unknown as { PipNews: Renderer }).PipNews
-  await news.renderJingle(name, 8000)
+  await news().renderJingle(name, 8000)
   return heard
 }
 
@@ -149,15 +168,21 @@ function bells(score: Heard): { at: number; note: number }[] {
     .sort((a, b) => a.at - b.at)
 }
 
-// When the timpani strikes: its sine partials drop to their pitch from 1.45 times it
-function strokes(score: Heard): number[] {
+// When the timpani strikes: its sine partials drop to their pitch from 1.45
+// times it. `from`: when the score starts in its render
+function strokes(score: Heard, from = T0): number[] {
   const times = score.oscillators
     .filter((o) => {
-      const [from, to] = o.frequency.steps
-      return o.type === 'sine' && from?.kind === 'set' && to?.kind === 'exp' && Math.abs(from.value / to.value - 1.45) < 1e-6
+      const [start, end] = o.frequency.steps
+      return o.type === 'sine' && start?.kind === 'set' && end?.kind === 'exp' && Math.abs(start.value / end.value - 1.45) < 1e-6
     })
-    .map((o) => Math.round((o.startedAt - T0) * 1000) / 1000)
+    .map((o) => Math.round((o.startedAt - from) * 1000) / 1000)
   return [...new Set(times)].sort((a, b) => a - b)
+}
+
+// The beat's ticks: its only square voice, in the order they start
+function ticks(score: Heard): FakeOscillator[] {
+  return score.oscillators.filter((o) => o.type === 'square').sort((a, b) => a.startedAt - b.startedAt)
 }
 
 // The brass notes that start at a moment: sawtooth voices that slide up to
@@ -221,5 +246,41 @@ describe('the BREAKING NEWS intro, for contrast', () => {
     expect(roll(score)).toBe(true)
     expect(boom(score)).toBe(true)
     expect(crash(score)).toBe(true)
+  })
+})
+
+describe('the BREAKING NEWS intro', () => {
+  it('leaves the beat to the desk: none of its ticks is in the jingle', async () => {
+    expect(ticks(await render('breaking'))).toEqual([])
+  })
+})
+
+describe('the beat', () => {
+  it('loops one turn of 43,648 frames at 48 kHz, a whole number of 128-frame blocks', async () => {
+    expect(Math.round(news().beat.turn * 48_000)).toBe(43_648)
+    expect(43_648 % 128).toBe(0)
+    expect((await news().renderJingle('beat-minor')).length).toBe(43_648)
+  })
+
+  it('plays sixteenths on the line D D A D F D A D in D minor, with a drum on every beat', async () => {
+    const score = await render('beat-minor')
+    const played = ticks(score)
+    const step = news().beat.turn / 8
+    expect(played).toHaveLength((news().beat.warm + 1) * 8)
+    played.forEach((o, k) => {
+      expect(o.startedAt).toBeCloseTo(k * step, 9)
+      expect(o.frequency.value).toBe([293.66, 293.66, 440, 293.66, 349.23, 293.66, 440, 293.66][k % 8])
+    })
+    expect(strokes(score, 0)).toEqual(played.filter((_, k) => k % 4 === 0).map((o) => Math.round(o.startedAt * 1000) / 1000))
+  })
+
+  it('takes F sharp for F in D major, under the hour', async () => {
+    const notes = ticks(await render('beat-major')).map((o) => o.frequency.value)
+    expect(notes.slice(0, 8)).toEqual([293.66, 293.66, 440, 293.66, 369.99, 293.66, 440, 293.66])
+  })
+
+  it('mixes in and phases out over the station’s own lengths', () => {
+    expect(Math.round(news().beat.fadeIn * 1000)).toBe(BED_IN_MS)
+    expect(Math.round(news().beat.fadeOut * 1000)).toBe(BED_OUT_MS)
   })
 })
