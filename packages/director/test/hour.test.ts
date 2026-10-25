@@ -130,4 +130,21 @@ describe('hourReport', () => {
       ['b', 'pipcast', 'Marketplace plugin distribution'],
     ])
   })
+
+  it("lists the review rows in the listing's order", () => {
+    const report = hourReport(
+      at(15),
+      at(14),
+      snap(
+        session('working', { state: 'working', stateAt: at(14, 40) }),
+        session('finished-early', { state: 'ready', stateAt: at(14, 10), stories: [story('finished-early:1', 'ready', at(14, 10))] }),
+        session('asking', { state: 'needs-input', stateAt: at(14, 50), stories: [story('asking:1', 'needs-input', at(14, 50))] }),
+        session('finished-late', { state: 'ready', stateAt: at(14, 30), stories: [story('finished-late:1', 'complete', at(14, 30))] }),
+      ),
+      at(14, 59, 55),
+      false,
+    )
+    const rows = report.segment.steps[2]?.scene(context).rows
+    expect(rows?.map((row) => row.id)).toEqual(['asking', 'finished-late', 'finished-early', 'working'])
+  })
 })

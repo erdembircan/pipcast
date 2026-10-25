@@ -30,13 +30,18 @@ function keys(items: TickerItem[]): (string | undefined)[] {
 }
 
 describe('the board scene', () => {
-  it('lists the sessions in the snapshot order, unsorted', () => {
+  it("lists the sessions in the listing's order", () => {
     const scene = boardScene(
       T0,
-      snap(session('b', { state: 'ready' }), session('a', { state: 'needs-input' })),
+      snap(
+        session('working', { state: 'working', stateAt: at(14, 25) }),
+        session('finished-early', { state: 'ready', stateAt: at(14, 0) }),
+        session('finished-late', { state: 'ready', stateAt: at(14, 20) }),
+        session('asking', { state: 'needs-input', stateAt: at(14, 10) }),
+      ),
       empty,
     )
-    expect(scene.sessions?.map((row) => row.id)).toEqual(['b', 'a'])
+    expect(scene.sessions?.map((row) => row.id)).toEqual(['asking', 'finished-late', 'finished-early', 'working'])
     expect(scene.clock).toBe('14:30')
   })
 

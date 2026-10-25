@@ -18,6 +18,7 @@ import type { SessionRecord, Snapshot, StoryCounts } from '@pipcast/contract'
 import type { HourRow, Scene } from '@pipcast/design'
 
 import type { TickerExtra } from './board.ts'
+import { inListingOrder, waitingSince } from './listing.ts'
 import type { Segment } from './story.ts'
 import { DESK_MS, HOUR_OUTRO_MS, IDENT_MS, REDUCED_OPENER_MS, REVIEW_MS, REVIEW_ROWS } from './timing.ts'
 import type { Step } from './types.ts'
@@ -67,16 +68,6 @@ function linesIn(session: SessionRecord, from: number, hour: number): { added: n
   return sum
 }
 
-function waitingSince(session: SessionRecord): number {
-  let at = session.stateAt
-  for (const story of session.stories) {
-    if (story.kind === session.state) {
-      at = story.at
-    }
-  }
-  return at
-}
-
 // A session's row in THE HOUR IN REVIEW, named as the board names it: its
 // title, and its project on the plate
 function rowFor(session: SessionRecord, from: number, hour: number, now: number): HourRow {
@@ -121,7 +112,8 @@ export function hourReport(
     removed += lines.removed
   }
   const working = sessions.filter((session) => session.state === 'working').length
-  const rows = sessions.map((session) => rowFor(session, from, hour, now))
+  // In the listing's order, so the review reads as the board does
+  const rows = inListingOrder(sessions).map((session) => rowFor(session, from, hour, now))
   const label = hourLabel(hour)
 
   const ident: Step = {
