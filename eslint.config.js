@@ -14,6 +14,8 @@ export default tseslint.config(
       'station/.build/**',
       'artifacts/**',
       'packages/mod/src/core/*.generated.ts',
+      'video/src/generated/**',
+      'video/out/**',
     ],
   },
   {
@@ -25,7 +27,15 @@ export default tseslint.config(
     languageOptions: { globals: globals.node },
   },
   {
-    files: ['packages/renderer/**'],
+    files: ['packages/renderer/**', 'video/src/**'],
+    languageOptions: { globals: globals.browser },
+  },
+  {
+    files: ['video/scripts/**', 'video/remotion.config.ts'],
+    languageOptions: { globals: globals.node },
+  },
+  {
+    files: ['video/scripts/music/**'],
     languageOptions: { globals: globals.browser },
   },
   {
