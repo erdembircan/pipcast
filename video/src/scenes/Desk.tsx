@@ -223,8 +223,8 @@ function clockAt(T: number): string {
   return 'Sat Oct 25  6:03 PM'
 }
 
-/** The desktop at T, for the scenes before and after this one to start from or end on */
-export function DeskScreen({ T }: { T: number }) {
+/** The desktop at T, for the scenes before and after this one to start from or end on; `crawl` as AirAt takes it */
+export function DeskScreen({ T, crawl }: { T: number; crawl?: number }) {
   const front = frontAt(T)
   const pointer = pointerAt(T)
   const frame = windowAt(T)
@@ -241,7 +241,7 @@ export function DeskScreen({ T }: { T: number }) {
   const since = T >= CLICK_BROWSER_AGAIN ? CLICK_BROWSER_AGAIN : CLICK_BROWSER
   const pop = ease.out(seg(T, since + 0.03, since + 0.3))
   const pip: PipState | null = shown
-    ? { frame, content: <AirAt T={T} />, hover: tuckedAt(T) && T > CLICK_HANDLE + 0.3 ? 0 : hover, under, side, opacity: pop, scale: mix(0.965, 1, pop) }
+    ? { frame, content: <AirAt T={T} crawl={crawl} />, hover: tuckedAt(T) && T > CLICK_HANDLE + 0.3 ? 0 : hover, under, side, opacity: pop, scale: mix(0.965, 1, pop) }
     : null
   // The tab docks at the edge as the window goes in, and turns back into the handle as it comes out. Pressed,
   // the handle is already showing under the pointer; when the window goes in or out by itself, nothing is

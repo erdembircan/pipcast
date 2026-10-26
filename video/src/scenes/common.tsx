@@ -9,10 +9,10 @@ import { onAir } from '../program.ts'
 import { settle } from '../stage/Frame.tsx'
 import type { View } from '../stage/Frame.tsx'
 
-/** What KLWD airs at the video's second T */
-export function AirAt({ T }: { T: number }) {
+/** What KLWD airs at the video's second T; `crawl`, when given, is how long its crawl has run (0 draws it from its first item) */
+export function AirAt({ T, crawl }: { T: number; crawl?: number }) {
   const now = onAir(T)
-  return <OnAir scene={now.scene} t={now.t} crawl={now.crawl} clock={T} identFrom={now.identFrom} />
+  return <OnAir scene={now.scene} t={now.t} crawl={crawl ?? now.crawl} clock={T} identFrom={now.identFrom} />
 }
 
 /** A camera move: an even ease in and out that slows to a stop on its last frames, with no long creep at its end */

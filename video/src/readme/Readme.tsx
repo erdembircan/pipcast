@@ -145,11 +145,11 @@ function Grid({ columns, size, tiles }: { columns: number; size: number; tiles: 
   )
 }
 
-/** A moment of the video's desktop scene, framed by `view` */
+/** A moment of the video's desktop scene, framed by `view`, with its crawl drawn from its first item */
 function desk(T: number, view: View): Tile['picture'] {
   return (width) => (
     <ScreenView width={width} view={view}>
-      <DeskScreen T={T} />
+      <DeskScreen T={T} crawl={0} />
     </ScreenView>
   )
 }
