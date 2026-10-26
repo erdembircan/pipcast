@@ -1,6 +1,6 @@
 #!/bin/bash
-# What the Claude desktop app runs: the published release of Pipcast or the
-# live checkout, one of them and never both.
+# What the Claude desktop app runs: the published release of Pipcast, or the
+# live checkout while a change is tried, never both.
 #
 # The published release is pipcast@erdembircan-plugins, from the
 # erdembircan-plugins marketplace (erdembircan/plugin-marketplace on GitHub).
@@ -9,16 +9,19 @@
 # ~/Developer/JS/pipcast), installed as pipcast@pipcast from the pipcast
 # marketplace, this repository's own, which points at that folder. The
 # checkout you work in never changes what the app runs. PIPCAST_LIVE names
-# another folder.
+# another folder, and PIPCAST_HOME another store for the station.
 #
 #   scripts/live.sh               says what the app runs now
 #   scripts/live.sh setup         makes the live checkout on master, installs
-#                                 it and puts it in the app; run it once
+#                                 it and puts it in the app
 #   scripts/live.sh pr <number>   puts a pull request's head in the app
 #   scripts/live.sh master        puts master in the app
 #   scripts/live.sh <ref>         puts any branch or commit in the app
-#   scripts/live.sh published     updates the published release and puts it
-#                                 back in the app
+#   scripts/live.sh published     updates the published release, or installs
+#                                 it, and puts it back in the app
+#   scripts/live.sh remove        uninstalls the live checkout and removes it
+#                                 with the pipcast marketplace, leaving the
+#                                 published release alone in the app
 #
 # Putting a commit in the app takes the published release out of it, and
 # published takes the live checkout out. Sessions pick a change up on
@@ -29,11 +32,15 @@ root="$(cd "$(dirname "$0")/.." && pwd)"
 # The main checkout, also when this runs from one of its worktrees
 main="$(dirname "$(git -C "$root" rev-parse --path-format=absolute --git-common-dir)")"
 live="${PIPCAST_LIVE:-$(dirname "$main")/$(basename "$main")-live}"
+# The store the sessions and the station share
+store="${PIPCAST_HOME:-$HOME/Library/Application Support/Pipcast}"
 claude="$("$root/scripts/claude-bin.sh")"
 
-# The two installs the app can run
+# The two installs the app can run, and the marketplaces they come from
 live_id="pipcast@pipcast"
+live_market="pipcast"
 published_id="pipcast@erdembircan-plugins"
+published_market="erdembircan-plugins"
 
 # The live checkout's commit and subject, on one line
 describe() {
@@ -50,6 +57,15 @@ listed() { # state|version <id>
     if (process.argv[1] === "version") process.stdout.write(plugin?.version ?? "")
     else process.stdout.write(plugin === undefined ? "missing" : plugin.enabled ? "enabled" : "disabled")
   ' "$1" "$2"
+}
+
+# Whether Claude Code has a marketplace by that name
+known() { # <marketplace>
+  { "$claude" plugin marketplace list --json 2>/dev/null || true; } | node -e '
+    let markets = []
+    try { markets = JSON.parse(require("node:fs").readFileSync(0, "utf8")) } catch {}
+    process.exit(markets.some((market) => market.name === process.argv[1]) ? 0 : 1)
+  ' "$1"
 }
 
 # Turns an install on or off, unless it already is. A missing install is never
@@ -90,6 +106,15 @@ need_live() {
   fi
 }
 
+# A live checkout with changes of its own is neither moved nor removed
+need_clean() { # <what did not happen>
+  if [[ -n "$(git -C "$live" status --porcelain)" ]]; then
+    echo "The live checkout at $live has changes of its own, so nothing $1:" >&2
+    git -C "$live" status --short >&2
+    exit 1
+  fi
+}
+
 # Brings what origin has; carries on with what this clone has when it cannot
 fetch() {
   git -C "$main" fetch -q origin "$@" || echo "Could not fetch from origin: using what this clone already has." >&2
@@ -102,16 +127,11 @@ moved() { # <what it ran> [<what was put there>]
   echo "Run /reload-plugins in a session to pick it up, or start a new one."
 }
 
-# Puts the live checkout on a commit and in the app; refuses while the live
-# checkout holds changes of its own
+# Puts the live checkout on a commit and in the app
 put() {
   local commit="$1" what="$2" before
   need_live
-  if [[ -n "$(git -C "$live" status --porcelain)" ]]; then
-    echo "The live checkout at $live has changes of its own, so nothing moved:" >&2
-    git -C "$live" status --short >&2
-    exit 1
-  fi
+  need_clean moved
   before="$(running)"
   git -C "$live" checkout -q --detach "$commit"
   turn off "$published_id"
@@ -168,18 +188,51 @@ case "${1:-}" in
     put "$(git -C "$main" rev-parse origin/master)" "master"
     ;;
   published)
-    if [[ "$(listed state "$published_id")" == missing ]]; then
-      echo "The published release, $published_id, is not installed, so nothing moved. Install it from a terminal, then run scripts/live.sh published again:" >&2
+    if [[ "$(listed state "$published_id")" == missing ]] && ! known "$published_market"; then
+      echo "The published release comes from the $published_market marketplace, which Claude Code doesn't have, so nothing moved. Add it from a terminal, then run scripts/live.sh published again:" >&2
       echo "  claude plugin marketplace add erdembircan/plugin-marketplace" >&2
-      echo "  claude plugin install $published_id" >&2
       exit 1
     fi
     before="$(running)"
-    if ! "$claude" plugin update "$published_id" --scope user >/dev/null 2>&1; then
-      echo "Could not update the published release: it stays at $(listed version "$published_id")." >&2
+    if [[ "$(listed state "$published_id")" == missing ]]; then
+      "$claude" plugin marketplace update "$published_market" >/dev/null
+      turn off "$live_id"
+      "$claude" plugin install "$published_id" --scope user >/dev/null
+    else
+      if ! "$claude" plugin update "$published_id" --scope user >/dev/null 2>&1; then
+        echo "Could not update the published release: it stays at $(listed version "$published_id")." >&2
+      fi
+      turn off "$live_id"
     fi
+    turn on "$published_id"
+    moved "$before"
+    ;;
+  remove)
+    if [[ ! -e "$live/.git" && "$(listed state "$live_id")" == missing ]] && ! known "$live_market"; then
+      echo "There is no live checkout to remove: the app runs $(running)."
+      exit 0
+    fi
+    if [[ -e "$live/.git" ]]; then
+      need_clean "was removed"
+    fi
+    before="$(running)"
     turn off "$live_id"
     turn on "$published_id"
+    if [[ "$(listed state "$live_id")" != missing ]]; then
+      "$claude" plugin uninstall "$live_id" --scope user >/dev/null
+    fi
+    if known "$live_market"; then
+      "$claude" plugin marketplace remove "$live_market" >/dev/null
+    fi
+    if [[ -e "$live/.git" ]]; then
+      # A station started from the live checkout runs from its folder: stop it
+      # first, and a session on air starts the one it runs within half a minute
+      if [[ -x "$live/plugin/station/pipcast-station" ]]; then
+        "$live/plugin/station/pipcast-station" stop --home "$store" >/dev/null
+      fi
+      git -C "$main" worktree remove "$live"
+    fi
+    echo "Removed the live checkout at $live, with $live_id and the $live_market marketplace. scripts/live.sh setup makes them again."
     moved "$before"
     ;;
   *)

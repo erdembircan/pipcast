@@ -57,7 +57,7 @@ runs the whole thing for real, with no window of yours involved: a headless Clau
 
 ## Try a change in the desktop app
 
-The desktop app runs one of two installs of Pipcast, never both:
+The desktop app runs the published release of Pipcast, or the live checkout while a change is tried, never both:
 
 - **The published release**, `pipcast@erdembircan-plugins`, which everyone who installs Pipcast gets.
 - **The live checkout**, `pipcast@pipcast`: a second checkout of this repository in a folder beside your clone, named after it (`~/Developer/JS/pipcast-live` beside `~/Developer/JS/pipcast`). The `pipcast` marketplace points at it, and every session reads the plugin from its `plugin/` folder when it starts or on `/reload-plugins`. Your clone never changes what the app runs, so you can switch branches in it freely.
@@ -66,7 +66,7 @@ The desktop app runs one of two installs of Pipcast, never both:
 scripts/live.sh setup
 ```
 
-makes the live checkout on master, installs it from the `pipcast` marketplace and puts it in the app. Run it once.
+makes the live checkout on master, installs it from the `pipcast` marketplace and puts it in the app.
 
 ```bash
 scripts/live.sh pr 12
@@ -78,7 +78,13 @@ puts a pull request in the app. `scripts/live.sh <branch or commit>` puts any ot
 scripts/live.sh published
 ```
 
-updates the published release and puts it back, taking the live checkout out. `scripts/live.sh` on its own says what the app runs now. After any of them, run `/reload-plugins` in a session, or start a new one. Only committed work reaches the app, so run `scripts/build.sh` and commit what it builds first.
+updates the published release, or installs it from erdembircan-plugins, and puts it back, taking the live checkout out. `scripts/live.sh` on its own says what the app runs now. After any of them, run `/reload-plugins` in a session, or start a new one. Only committed work reaches the app, so run `scripts/build.sh` and commit what it builds first.
+
+```bash
+scripts/live.sh remove
+```
+
+takes the live checkout out of Claude Code altogether: it uninstalls `pipcast@pipcast`, removes the `pipcast` marketplace and the live checkout's folder, and leaves the published release alone in the app. A station started from the live checkout runs from that folder, so `remove` stops the station first, and a session on air starts it again from the published release within half a minute. `scripts/live.sh setup` makes the live checkout again.
 
 Each install keeps its own settings, since Claude Code saves a plugin's options under its id.
 
