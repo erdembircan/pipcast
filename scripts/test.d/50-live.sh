@@ -1,11 +1,12 @@
 #!/bin/bash
 # scripts/live.sh in a throwaway world: a bare copy of this repository as origin,
 # with a pull request's ref, a clone of it as the main checkout, the live
-# checkout beside that clone, a stand-in for the erdembircan-plugins
-# marketplace holding the published release, a store of its own for the
-# station, and a throwaway Claude configuration for both marketplaces. Your
-# clone, your live checkout, your station and your configuration are never
-# read or changed. The temporary folder is removed on exit.
+# checkout beside that clone, two stand-ins for the erdembircan-plugins
+# marketplace, one holding the published release and one whose release cannot
+# be installed, a store of its own for the station, and a throwaway Claude
+# configuration for the marketplaces. Your clone, your live checkout, your
+# station and your configuration are never read or changed. The temporary
+# folder is removed on exit.
 set -euo pipefail
 
 root="$(cd "$(dirname "$0")/../.." && pwd)"
@@ -34,6 +35,18 @@ cat >"$published/.claude-plugin/marketplace.json" <<'EOF'
 {
   "name": "erdembircan-plugins",
   "description": "A stand-in for erdembircan/plugin-marketplace",
+  "owner": { "name": "Erdem Bircan" },
+  "plugins": [{ "name": "pipcast", "source": "./pipcast" }]
+}
+EOF
+
+# Another, whose release cannot be installed: its plugin's folder is missing
+broken="$tmp/broken-plugins"
+mkdir -p "$broken/.claude-plugin"
+cat >"$broken/.claude-plugin/marketplace.json" <<'EOF'
+{
+  "name": "erdembircan-plugins",
+  "description": "A stand-in for erdembircan/plugin-marketplace, with nothing to install",
   "owner": { "name": "Erdem Bircan" },
   "plugins": [{ "name": "pipcast", "source": "./pipcast" }]
 }
@@ -96,6 +109,16 @@ check "setup points the pipcast marketplace at it" grep -qE 'Folder \(.*/pipcast
 check "setup installs pipcast@pipcast and turns it on" test "$(state pipcast@pipcast)" = enabled
 check "it says the app runs master" grep -q "That is master." <<<"$("$live")"
 check "setup again keeps the live checkout" grep -q "already at" <<<"$("$live" setup)"
+
+check "with no published release, remove says to run published first" grep -q "scripts/live.sh published first" <<<"$("$live" remove 2>&1 || true)"
+check "and removes nothing" test "$(state pipcast@pipcast)" = enabled
+check "not even the folder" test -e "$tmp/pipcast-live"
+
+"$claude" plugin marketplace add "$broken" >/dev/null
+check "published fails when the release does not install" not quietly "$live" published
+check "and says nothing moved" grep -q "so nothing moved" <<<"$("$live" published 2>&1 || true)"
+check "leaving the live checkout in the app" test "$(state pipcast@pipcast)" = enabled
+"$claude" plugin marketplace remove erdembircan-plugins >/dev/null
 
 "$claude" plugin marketplace add "$published" >/dev/null
 "$live" published >/dev/null

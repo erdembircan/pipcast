@@ -24,8 +24,8 @@
 #                                 published release alone in the app
 #
 # Putting a commit in the app takes the published release out of it, and
-# published takes the live checkout out. Sessions pick a change up on
-# /reload-plugins, or when they start.
+# published takes the live checkout out. An install that fails moves nothing.
+# Sessions pick a change up on /reload-plugins, or when they start.
 set -euo pipefail
 
 root="$(cd "$(dirname "$0")/.." && pwd)"
@@ -93,6 +93,12 @@ running() {
   else
     echo "no Pipcast"
   fi
+}
+
+# Stops with a reason when a step fails, before anything moved
+unmoved() { # <what failed>
+  echo "$1, so nothing moved: the app runs $(running)." >&2
+  exit 1
 }
 
 need_live() {
@@ -166,11 +172,13 @@ case "${1:-}" in
       echo "Made the live checkout at $live, on master."
     fi
     before="$(running)"
-    turn off "$published_id"
-    "$claude" plugin marketplace add "$live" >/dev/null
-    if [[ "$(listed state "$live_id")" == missing ]]; then
-      "$claude" plugin install "$live_id" --scope user >/dev/null
+    if ! "$claude" plugin marketplace add "$live" >/dev/null; then
+      unmoved "Could not point the $live_market marketplace at $live"
     fi
+    if [[ "$(listed state "$live_id")" == missing ]] && ! "$claude" plugin install "$live_id" --scope user >/dev/null; then
+      unmoved "Could not install $live_id from the live checkout"
+    fi
+    turn off "$published_id"
     turn on "$live_id"
     moved "$before"
     ;;
@@ -195,15 +203,16 @@ case "${1:-}" in
     fi
     before="$(running)"
     if [[ "$(listed state "$published_id")" == missing ]]; then
-      "$claude" plugin marketplace update "$published_market" >/dev/null
-      turn off "$live_id"
-      "$claude" plugin install "$published_id" --scope user >/dev/null
-    else
-      if ! "$claude" plugin update "$published_id" --scope user >/dev/null 2>&1; then
-        echo "Could not update the published release: it stays at $(listed version "$published_id")." >&2
+      if ! "$claude" plugin marketplace update "$published_market" >/dev/null; then
+        unmoved "Could not update the $published_market marketplace"
       fi
-      turn off "$live_id"
+      if ! "$claude" plugin install "$published_id" --scope user >/dev/null; then
+        unmoved "Could not install $published_id"
+      fi
+    elif ! "$claude" plugin update "$published_id" --scope user >/dev/null 2>&1; then
+      echo "Could not update the published release: it stays at $(listed version "$published_id")." >&2
     fi
+    turn off "$live_id"
     turn on "$published_id"
     moved "$before"
     ;;
@@ -211,6 +220,10 @@ case "${1:-}" in
     if [[ ! -e "$live/.git" && "$(listed state "$live_id")" == missing ]] && ! known "$live_market"; then
       echo "There is no live checkout to remove: the app runs $(running)."
       exit 0
+    fi
+    if [[ "$(listed state "$published_id")" == missing ]]; then
+      echo "The published release is not installed, so nothing was removed: without the live checkout the app would run no Pipcast. Run scripts/live.sh published first, then scripts/live.sh remove." >&2
+      exit 1
     fi
     if [[ -e "$live/.git" ]]; then
       need_clean "was removed"
@@ -225,8 +238,9 @@ case "${1:-}" in
       "$claude" plugin marketplace remove "$live_market" >/dev/null
     fi
     if [[ -e "$live/.git" ]]; then
-      # A station started from the live checkout runs from its folder: stop it
-      # first, and a session on air starts the one it runs within half a minute
+      # The station may be running from the live checkout's folder, so stop it,
+      # whichever install started it: a session on air starts it again from the
+      # install it runs within half a minute
       if [[ -x "$live/plugin/station/pipcast-station" ]]; then
         "$live/plugin/station/pipcast-station" stop --home "$store" >/dev/null
       fi

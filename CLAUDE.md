@@ -28,7 +28,7 @@ The main checkout and its worktrees change nothing the app runs.
   - With no live checkout yet, `scripts/live.sh setup` makes one on master, installs it and puts it in the app.
   - `scripts/live.sh pr <number>` puts a pull request's head in the app, `scripts/live.sh <branch or commit>` puts any other commit there, and `scripts/live.sh master` puts master there. Each takes the published release out of the app.
   - `scripts/live.sh published` updates the published release, or installs it, and puts it back, taking the live checkout out.
-  - `scripts/live.sh remove` uninstalls the live checkout and removes it with the `pipcast` marketplace, leaving the published release alone in the app.
+  - `scripts/live.sh remove` uninstalls the live checkout and removes it with the `pipcast` marketplace, leaving the published release alone in the app. With no published release installed, it removes nothing.
   - Then ask the user to run `/reload-plugins` in a session, or to start a new one.
 - Only committed work reaches the app. Run `scripts/build.sh` and commit what it builds before you put a branch there.
 - Every session shares the live checkout and what the app runs. Run `scripts/live.sh` first, and do not move the app off another session's pull request unless the user asks you to.

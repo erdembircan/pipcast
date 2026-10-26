@@ -78,13 +78,13 @@ puts a pull request in the app. `scripts/live.sh <branch or commit>` puts any ot
 scripts/live.sh published
 ```
 
-updates the published release, or installs it from erdembircan-plugins, and puts it back, taking the live checkout out. `scripts/live.sh` on its own says what the app runs now. After any of them, run `/reload-plugins` in a session, or start a new one. Only committed work reaches the app, so run `scripts/build.sh` and commit what it builds first.
+updates the published release, or installs it from erdembircan-plugins, and puts it back, taking the live checkout out. `scripts/live.sh` on its own says what the app runs now. After any of them, run `/reload-plugins` in a session, or start a new one. An install that fails moves nothing. Only committed work reaches the app, so run `scripts/build.sh` and commit what it builds first.
 
 ```bash
 scripts/live.sh remove
 ```
 
-takes the live checkout out of Claude Code altogether: it uninstalls `pipcast@pipcast`, removes the `pipcast` marketplace and the live checkout's folder, and leaves the published release alone in the app. A station started from the live checkout runs from that folder, so `remove` stops the station first, and a session on air starts it again from the published release within half a minute. `scripts/live.sh setup` makes the live checkout again.
+takes the live checkout out of Claude Code altogether: it uninstalls `pipcast@pipcast`, removes the `pipcast` marketplace and the live checkout's folder, and leaves the published release alone in the app. With no published release installed it removes nothing, since the app would be left with no Pipcast: run `scripts/live.sh published` first. A station started from the live checkout runs from that folder, so `remove` stops the station first, and a session on air starts it again from the published release within half a minute. `scripts/live.sh setup` makes the live checkout again.
 
 Each install keeps its own settings, since Claude Code saves a plugin's options under its id.
 
