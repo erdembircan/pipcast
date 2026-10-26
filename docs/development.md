@@ -32,9 +32,14 @@ The plugin's icon is KLWD's tower over the city at dusk, its beacon sending out 
 
 ## The manifest and the listing
 
-The plugin's manifest is `packages/mod/plugin.json`, which the build copies to `plugin/.claude-plugin/plugin.json`. Its `version` is the plugin's version, and the manifest is the only place it is set: the marketplace's entry in `.claude-plugin/marketplace.json` leaves it out, the station's `Constants.version` and the root `package.json` repeat it, and tests fail when either of them differs. The entry does repeat the manifest's display fields, `displayName`, `description`, `author`, `homepage`, `repository`, `license` and `keywords`, because Claude Code shows the entry's own value wherever it sets one, and a test fails when they differ from the manifest's.
+The plugin's manifest is `packages/mod/plugin.json`, which the build copies to `plugin/.claude-plugin/plugin.json`. Its `version` is the plugin's version, and the manifest is the only place it is set: the marketplaces' entries leave it out, the station's `Constants.version` and the root `package.json` repeat it, and tests fail when either of them differs.
 
-The manifest also carries what Anthropic's plugin directory lists and Claude Code itself ignores: the icon, `assets/icon-1024.png` copied to `plugin/assets/icon.png`; links to the README, the issues and the README's privacy section; and the screenshots, as links to `assets/screenshots` on the master branch, which show once the repository is public.
+Two marketplaces list Pipcast. Each entry repeats the manifest's display fields, `displayName`, `description`, `author`, `homepage`, `repository`, `license` and `keywords`, because Claude Code shows an entry's own value wherever it sets one:
+
+- **erdembircan-plugins**, in [erdembircan/plugin-marketplace](https://github.com/erdembircan/plugin-marketplace), is where Pipcast is published. Its entry is a `git-subdir` source that installs `plugin/` from this repository's master branch. Until a plugin is installed, Claude Code shows only what its entry says, so when a display field changes in the manifest, change it in that entry too.
+- **pipcast**, in this repository's `.claude-plugin/marketplace.json`, is for development: `scripts/live.sh` installs the live checkout from it, and `scripts/verify-install.sh` installs this clone from it. Its entry names `./plugin`, and a test fails when its display fields differ from the manifest's.
+
+The manifest also carries what Anthropic's plugin directory lists and Claude Code itself ignores: the icon, `assets/icon-1024.png` copied to `plugin/assets/icon.png`; links to the README, the issues and the README's privacy section; and the screenshots, as links to `assets/screenshots` on the master branch.
 
 ## Test
 
@@ -52,19 +57,44 @@ runs the whole thing for real, with no window of yours involved: a headless Clau
 
 ## Try a change in the desktop app
 
-The desktop app runs pipcast from the live checkout: a second checkout of this repository in a folder beside your clone, named after it (`~/Developer/JS/pipcast-live` beside `~/Developer/JS/pipcast`). The `pipcast` marketplace points at it, and every session reads the plugin from its `plugin/` folder when it starts or on `/reload-plugins`. Your clone never changes what the app runs, so you can switch branches in it freely.
+The desktop app runs one of two installs of Pipcast, never both:
+
+- **The published release**, `pipcast@erdembircan-plugins`, which everyone who installs Pipcast gets.
+- **The live checkout**, `pipcast@pipcast`: a second checkout of this repository in a folder beside your clone, named after it (`~/Developer/JS/pipcast-live` beside `~/Developer/JS/pipcast`). The `pipcast` marketplace points at it, and every session reads the plugin from its `plugin/` folder when it starts or on `/reload-plugins`. Your clone never changes what the app runs, so you can switch branches in it freely.
 
 ```bash
 scripts/live.sh setup
 ```
 
-makes the live checkout on master and points the marketplace at it. Run it once.
+makes the live checkout on master, installs it from the `pipcast` marketplace and puts it in the app. Run it once.
 
 ```bash
 scripts/live.sh pr 12
 ```
 
-puts a pull request in the app. `scripts/live.sh <branch or commit>` puts any other commit there, `scripts/live.sh master` puts master back, and `scripts/live.sh` on its own says what the app runs now. Then run `/reload-plugins` in a session, or start a new one. Only committed work reaches the app, so run `scripts/build.sh` and commit what it builds first.
+puts a pull request in the app. `scripts/live.sh <branch or commit>` puts any other commit there and `scripts/live.sh master` puts master there, each taking the published release out of the app.
+
+```bash
+scripts/live.sh published
+```
+
+updates the published release and puts it back, taking the live checkout out. `scripts/live.sh` on its own says what the app runs now. After any of them, run `/reload-plugins` in a session, or start a new one. Only committed work reaches the app, so run `scripts/build.sh` and commit what it builds first.
+
+Each install keeps its own settings, since Claude Code saves a plugin's options under its id.
+
+`/reload-plugins` leaves the station running. After a change to `plugin/station`, stop it, and a session on air starts it again from the live checkout within half a minute:
+
+```bash
+~/Developer/JS/pipcast-live/plugin/station/pipcast-station stop --home ~/Library/Application\ Support/Pipcast
+```
+
+## Release
+
+What master holds is what a new install gets: Pipcast's entry in erdembircan-plugins names no commit, so Claude Code installs `plugin/` from master's newest one. An install already made moves only with the version: `claude plugin update pipcast@erdembircan-plugins` keeps the copy it has while `version` stays the same, whatever changed in `plugin/`.
+
+So a pull request that changes what `plugin/` holds raises the version too: the patch for a fix, as in 1.0.1, and the minor for something new, as in 1.1.0. Raise it in `packages/mod/plugin.json`, in `Constants.version` in `station/Sources/StationCore/Constants.swift`, and in the root `package.json` and `package-lock.json`; tests fail when they differ. The station's binary carries its version, so run `scripts/build.sh` on a Mac and commit what it builds.
+
+Once the new version is on master, tag that commit `v<version>`, as in `v1.1.0`, and publish a GitHub release from the tag. `scripts/live.sh published` brings it to your app. Everyone else gets it with `claude plugin update pipcast@erdembircan-plugins`, or by itself if they turned on auto-update for erdembircan-plugins.
 
 ## The demo video
 

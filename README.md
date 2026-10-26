@@ -19,16 +19,18 @@ What plays in the window is KLWD, a local TV news channel for your sessions, sty
 
 ## Install
 
-In the Claude desktop app, click **+** next to the prompt box, then **Plugins**. Choose **Add marketplace**, enter `erdembircan/pipcast`, and add **Pipcast**.
+Pipcast is published in [erdembircan-plugins](https://github.com/erdembircan/plugin-marketplace), a marketplace of Claude Code plugins.
+
+In the Claude desktop app, click **+** next to the prompt box, then **Plugins**. Choose **Add marketplace**, enter `erdembircan/plugin-marketplace`, and add **Pipcast**.
 
 Or from a terminal:
 
 ```bash
-claude plugin marketplace add erdembircan/pipcast
+claude plugin marketplace add erdembircan/plugin-marketplace
 ```
 
 ```bash
-claude plugin install pipcast@pipcast
+claude plugin install pipcast@erdembircan-plugins
 ```
 
 Sessions you start after that have it.
@@ -100,7 +102,7 @@ The window is there while at least one session is on air, and closes a few secon
 
 Run `/pipcast auto` or `/pipcast transparency` on its own to see whether that setting is on. A change to **Tune in every new session** applies to sessions that start after it; a change to **Transparent window** reaches the window within a second.
 
-The desktop app's plugin page doesn't list these settings, so `/pipcast` is the way to change them there. In Claude Code in a terminal, `/plugin configure pipcast@pipcast` shows them too.
+The desktop app's plugin page doesn't list these settings, so `/pipcast` is the way to change them there. In Claude Code in a terminal, `/plugin configure pipcast@erdembircan-plugins` shows them too.
 
 ### Commands
 
@@ -119,11 +121,11 @@ KLWD is an ordinary window, so it appears in screen shares and recordings, with 
 ## Update and uninstall
 
 ```bash
-claude plugin update pipcast@pipcast
+claude plugin update pipcast@erdembircan-plugins
 ```
 
 ```bash
-claude plugin uninstall pipcast@pipcast
+claude plugin uninstall pipcast@erdembircan-plugins
 ```
 
 Start a new session after either one.
