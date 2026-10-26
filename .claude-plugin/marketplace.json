@@ -1,6 +1,6 @@
 {
   "name": "pipcast",
-  "description": "Pipcast: picture in picture for Claude Code. Your sessions, on a small TV news window in the corner of your Mac's screen.",
+  "description": "Pipcast's development marketplace, for trying Pipcast straight from this repository. Install Pipcast itself from erdembircan/plugin-marketplace.",
   "owner": {
     "name": "Erdem Bircan",
     "url": "https://github.com/erdembircan"
