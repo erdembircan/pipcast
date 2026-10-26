@@ -32,7 +32,7 @@ import { DeskScreen } from '../scenes/Desk.tsx'
 import { WIDE } from '../stage/Frame.tsx'
 import type { View } from '../stage/Frame.tsx'
 import { Screen } from '../stage/Screen.tsx'
-import { AUTH, CHECKOUT, NOTES, SQLITE } from '../stories.ts'
+import { AUTH, CHECKOUT, DESK_READY, HOUR_DESK, HOUR_REVIEW, NOTES, SQLITE, boardReady, deskAsk } from '../stories.ts'
 
 /** Every grid is 1920 wide; its height follows from its rows */
 export const GRID_W = 1920
@@ -183,7 +183,7 @@ function Staged({ hover = 0, opacity = 1, pointer }: StagedProps) {
       claude={{ tuned: true }}
       clock="Sat Oct 25  5:43 PM"
       time={33}
-      pip={{ frame: BR, content: <AirAt T={33} />, hover, opacity, side: 'right' }}
+      pip={{ frame: BR, content: <OnAir scene={boardReady('17:43', true)} t={5} clock={33} crawl={0} />, hover, opacity, side: 'right' }}
       cursor={pointer}
     />
   )
@@ -277,16 +277,17 @@ const IN_USE: Tile[] = [
   { caption: { text: 'One click takes you back to the question.' }, picture: desk(45.95, { x: 780, y: 560, zoom: 1.4 }) },
 ]
 
+// Every crawl here is drawn from its first item, so no word is cut at its left edge
 const ON_AIR: Tile[] = [
   { caption: { text: 'Every session, live on one board.' }, picture: air(<OnAir scene={BOARD} t={3} clock={4.2} crawl={0} />) },
   { caption: { text: 'Stories open with', tab: 'BREAKING NEWS' }, picture: air(<AirAt T={39.45} />) },
-  { caption: { text: 'A session needs your input.' }, picture: air(<AirAt T={42.5} />) },
-  { caption: { text: 'A session is ready for review.' }, picture: air(<AirAt T={6.9} />) },
+  { caption: { text: 'A session needs your input.' }, picture: air(<OnAir scene={deskAsk(5.6)} t={2.6} clock={42.5} crawl={0} />) },
+  { caption: { text: 'A session is ready for review.' }, picture: air(<OnAir scene={DESK_READY} t={3} clock={6.9} crawl={0} />) },
   { caption: { text: 'A session’s work is complete.' }, picture: air(<OnAir scene={DESK_COMPLETE} t={3} clock={3} crawl={0} />) },
   { caption: { text: 'A session stopped on an error.' }, picture: air(<OnAir scene={DESK_ERROR} t={3} clock={3} crawl={0} />) },
   { caption: { text: 'At the top of every hour,' }, picture: air(<AirAt T={56.5} />) },
-  { caption: { text: 'Clawd reads the headlines,' }, picture: air(<AirAt T={59.8} />) },
-  { caption: { text: 'and what each session did.' }, picture: air(<AirAt T={61.5} />) },
+  { caption: { text: 'Clawd reads the headlines,' }, picture: air(<OnAir scene={HOUR_DESK} t={2.3} clock={59.8} crawl={0} />) },
+  { caption: { text: 'and what each session did.' }, picture: air(<OnAir scene={HOUR_REVIEW} t={1.5} clock={61.5} crawl={0} />) },
 ]
 
 const WINDOW: Tile[] = [
