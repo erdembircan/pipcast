@@ -1,9 +1,9 @@
 {
   "name": "pipcast",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "KLWD, a local TV news channel for your Claude Code sessions",
+  "description": "Picture in picture for Claude Code",
   "license": "MIT",
   "engines": {
     "node": ">=22"

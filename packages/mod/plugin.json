@@ -1,8 +1,8 @@
 {
   "name": "pipcast",
   "displayName": "Pipcast",
-  "version": "0.1.0",
-  "description": "KLWD, a local TV news channel for your Claude Code sessions: a window in the corner of your screen that airs BREAKING NEWS when a session needs you or finishes, and a report every hour on the hour",
+  "version": "1.0.0",
+  "description": "Picture in picture for Claude Code. While you work in other apps, a small window in the corner of your Mac's screen shows a live board of your sessions, and cuts to BREAKING NEWS, the way a 1990s local TV station would, when one needs you, finishes or stops on an error.",
   "author": {
     "name": "Erdem Bircan",
     "url": "https://github.com/erdembircan"
@@ -10,8 +10,17 @@
   "homepage": "https://github.com/erdembircan/pipcast",
   "repository": "https://github.com/erdembircan/pipcast",
   "license": "MIT",
-  "keywords": ["picture-in-picture", "notifications", "sessions", "macos", "mod"],
+  "keywords": ["picture-in-picture", "pip", "notifications", "sessions", "status", "overlay", "macos", "mod"],
   "icon": "./assets/icon.png",
+  "documentationUrl": "https://github.com/erdembircan/pipcast#readme",
+  "supportUrl": "https://github.com/erdembircan/pipcast/issues",
+  "privacyPolicyUrl": "https://github.com/erdembircan/pipcast#privacy",
+  "screenshots": [
+    "https://raw.githubusercontent.com/erdembircan/pipcast/master/assets/screenshots/breaking.png",
+    "https://raw.githubusercontent.com/erdembircan/pipcast/master/assets/screenshots/in-use.jpg",
+    "https://raw.githubusercontent.com/erdembircan/pipcast/master/assets/screenshots/on-air.jpg",
+    "https://raw.githubusercontent.com/erdembircan/pipcast/master/assets/screenshots/window.jpg"
+  ],
   "types": "./types/index.d.ts",
   "userConfig": {
     "autoTuneIn": {

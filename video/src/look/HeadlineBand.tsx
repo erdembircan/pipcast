@@ -13,7 +13,7 @@ export interface Line {
 }
 
 /** BREAKING NEWS in the lower third's tab: red, slanted, gold-edged */
-function StationTab({ text, t, size }: { text: string; t: number; size: number }) {
+export function StationTab({ text, t, size }: { text: string; t: number; size: number }) {
   const p = ease.out(seg(t, 0, 0.46))
   const glint = seg(t, 0.7, 1.3)
   return (

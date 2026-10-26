@@ -1,23 +1,24 @@
 {
   "name": "pipcast",
-  "description": "Pipcast: KLWD, a local TV news channel for your Claude Code sessions",
+  "description": "Pipcast: picture in picture for Claude Code. Your sessions, on a small TV news window in the corner of your Mac's screen.",
   "owner": {
-    "name": "Erdem Bircan"
+    "name": "Erdem Bircan",
+    "url": "https://github.com/erdembircan"
   },
   "plugins": [
     {
       "name": "pipcast",
-      "displayName": "Pipcast",
       "source": "./plugin",
-      "description": "KLWD, a local TV news channel for your Claude Code sessions: a window in the corner of your screen that airs BREAKING NEWS when a session needs you or finishes, and a report every hour on the hour",
-      "version": "0.1.0",
+      "displayName": "Pipcast",
+      "description": "Picture in picture for Claude Code. While you work in other apps, a small window in the corner of your Mac's screen shows a live board of your sessions, and cuts to BREAKING NEWS, the way a 1990s local TV station would, when one needs you, finishes or stops on an error.",
       "author": {
-        "name": "Erdem Bircan"
+        "name": "Erdem Bircan",
+        "url": "https://github.com/erdembircan"
       },
       "homepage": "https://github.com/erdembircan/pipcast",
       "repository": "https://github.com/erdembircan/pipcast",
       "license": "MIT",
-      "keywords": ["picture-in-picture", "notifications", "sessions", "macos", "mod"],
+      "keywords": ["picture-in-picture", "pip", "notifications", "sessions", "status", "overlay", "macos", "mod"],
       "category": "productivity"
     }
   ]

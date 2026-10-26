@@ -87,7 +87,7 @@ import Testing
         #expect(Set(object.keys) == ["v", "pid", "startedAt", "heartbeatAt", "version"])
         #expect(object["v"] as? Int == 1)
         #expect(object["pid"] as? Int == 4242)
-        #expect(object["version"] as? String == "0.1.0")
+        #expect(object["version"] as? String == Constants.version)
         #expect(!FileManager.default.fileExists(atPath: path + ".tmp"))
         StationStatus.delete(at: path)
         #expect(!FileManager.default.fileExists(atPath: path))
@@ -147,11 +147,11 @@ import Testing
         defer { try? FileManager.default.removeItem(atPath: folder) }
         let path = "\(folder)/station.log"
         let log = StationLog(path: path)
-        log.write("start 0.1.0")
+        log.write("start \(Constants.version)")
         log.write("shown")
         let lines = try String(contentsOfFile: path, encoding: .utf8).split(separator: "\n").map(String.init)
         #expect(lines.count == 2)
-        #expect(lines[0].hasSuffix(" start 0.1.0"))
+        #expect(lines[0].hasSuffix(" start \(Constants.version)"))
         #expect(lines[1].hasSuffix(" shown"))
         let stamp = String(lines[0].split(separator: " ")[0])
         let formatter = ISO8601DateFormatter()

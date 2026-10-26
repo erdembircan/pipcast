@@ -2,7 +2,7 @@ import Foundation
 import Testing
 @testable import StationCore
 
-/// Reads the contract's TypeScript and fails when a mirrored value differs.
+/// Reads the contract's TypeScript and the plugin's manifest, and fails when a mirrored value differs.
 @Suite struct ConstantsTests {
     static let repository = URL(fileURLWithPath: #filePath)
         .deletingLastPathComponent() // StationCoreTests
@@ -58,8 +58,10 @@ import Testing
         #expect(validate["CLOCK_SKEW_MS"] == String(Int(Constants.clockSkewMs)))
     }
 
-    @Test func theVersionIsZeroPointOnePointZero() {
-        #expect(Constants.version == "0.1.0")
+    @Test func theVersionIsTheManifests() throws {
+        let url = Self.repository.appendingPathComponent("packages/mod/plugin.json")
+        let manifest = try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any]
+        #expect(Constants.version == manifest?["version"] as? String)
     }
 
     @Test func theReaderFindsTheValuesItChecks() throws {
