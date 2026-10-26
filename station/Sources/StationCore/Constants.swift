@@ -1,9 +1,10 @@
 // The numbers every part agrees on, mirrored from packages/contract/src/constants.ts
-// (and the one clock-skew allowance in validate.ts). A test reads those files and
-// fails when any of these differ. Times are in milliseconds.
+// (and the one clock-skew allowance in validate.ts), and the plugin's version,
+// from packages/mod/plugin.json. A test reads those files and fails when any of
+// these differ. Times are in milliseconds.
 
 public enum Constants {
-    public static let version = "0.1.0"
+    public static let version = "1.0.0"
 
     public static let schemaVersion = 1
 

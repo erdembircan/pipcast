@@ -229,7 +229,7 @@ An install copies `plugin/`, the folder the marketplace names, as it is. Claude 
 | `hooks/register.js` | `packages/mod/src` and `packages/contract/src`, bundled into one ES module |
 | `hooks/hooks.json` | Written by the build: it names `register.js` |
 | `.claude-plugin/plugin.json`, `types/index.d.ts` | `packages/mod/plugin.json` and `packages/mod/types/index.d.ts`, copied |
-| `assets/icon.png`, `LICENSE` | `assets/icon-512.png`, rendered on a Mac from the icon `scripts/build-icon.mjs` draws, and `LICENSE`, copied |
+| `assets/icon.png`, `LICENSE` | `assets/icon-1024.png`, rendered on a Mac from the icon `scripts/build-icon.mjs` draws, and `LICENSE`, copied |
 | `station/pipcast-station` | `station/`, built on a Mac |
 | `station/web` | `packages/renderer`, `packages/director`, `packages/contract`, `design/components` and `assets/fonts` |
 | `station/sounds` | The design system's scores in `design/components/bundle.js`, rendered on a Mac: the jingles as AAC, the beat's two loops as Apple Lossless |

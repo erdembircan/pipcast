@@ -244,7 +244,7 @@ describe('trimRecord', () => {
 })
 
 describe('the station files', () => {
-  const status = { v: 1, pid: 4242, startedAt: NOW - 100_000, heartbeatAt: NOW - 1000, version: '0.1.0' }
+  const status = { v: 1, pid: 4242, startedAt: NOW - 100_000, heartbeatAt: NOW - 1000, version: '1.0.0' }
 
   it('parses a station status', () => {
     expect(parseStationStatus(status)).toEqual(status)

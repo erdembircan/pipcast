@@ -4,43 +4,24 @@
 
 **Picture in picture for Claude Code.**
 
-Pipcast gives Claude Code the picture in picture that macOS gives a video. Pop a video out of its page and it keeps playing in a small window in a corner of the screen, above every app, while you get on with something else. Pipcast does the same for your Claude Code sessions: a window in the corner that floats over whatever you're working in and shows you what Claude is up to. The name is that idea, PiP and broadcast.
+Start Claude on something, switch to another app, and keep an eye on it from the corner of your screen. Pipcast puts a small window there that floats over whatever you're working in, the way a video does when you pop it out into picture in picture, and shows you what your Claude Code sessions are up to. When one needs you, finishes, or stops on an error, you see it and hear it, without going back to check.
 
-What plays in the window is KLWD, a local TV news channel for your sessions, styled as a 1990s local news broadcast. Most of the time it shows a live board of the sessions you tuned in. When one of them needs you, finishes, or stops on an error, KLWD cuts to BREAKING NEWS: a stinger, then the anchor desk, where Clawd reads the story, then back to the board. Every hour on the hour it airs a short report on what each session did.
-
-The window shows only while you're in another app. Switch back to Claude and it gets out of the way.
+What plays in the window is KLWD, a local TV news channel for your sessions, styled as a 1990s local news broadcast. Most of the time it shows a live board of your sessions. When something happens, KLWD cuts to BREAKING NEWS and Clawd reads the story from the anchor desk. Every hour on the hour, it airs a short report on what each session did.
 
 <!-- The demo video goes here once it is on YouTube: a still from it, linked to the video. -->
 
 <p align="center"><img src="assets/screenshots/breaking.png" width="716" alt="KLWD on air: Clawd at the anchor desk with a READY FOR REVIEW story"></p>
 
-## Picture in picture
-
-The window is modelled on macOS's picture in picture for video, and drawn to look like it: a black 16:9 window with rounded corners and a soft shadow, and clear Liquid Glass controls that show only while the pointer is on it.
-
-- **Above everything.** It floats above every app, the Dock and the menu bar, on every desktop, and never takes the keyboard, so the app you're typing in keeps typing. It hides while Claude is in front, where you can see your sessions for yourself.
-- **In a corner.** It fills its quarter of the screen and starts in the bottom-right corner. Drag it to another corner to move it there, or drag an edge to make it smaller, down to 70%.
-- **Tucked into the side.** Press the handle on its inner edge, or drag a quarter of it past the screen's side, and it slides into that side, leaving a small tab, as picture in picture does on iPhone and iPad. BREAKING NEWS and the report on the hour still bring it out, and it goes back as they end. Click the tab to bring it back.
-- **Controls on hover.** Close stops tracking every session, the speaker turns the jingles on and off, and Back to Claude brings Claude to the front.
-- **See through it.** Run `/pipcast transparency on` and it fades to 40% while the pointer is elsewhere, so you can see what is under it.
-
-## What it does
-
-- **Tune in from Claude.** Each new session in the desktop app tunes in by itself as it opens. Any other session tunes in when you press **TUNE IN** in the band above the prompt box, or run `/pipcast`. Run `/pipcast auto off` and new sessions wait for **TUNE IN** too. There is no limit on how many sessions can be on air.
-- **The live board.** Each session on air gets a row with its project on a plate, its title, and its state on a pill: INPUT when it needs you, ERROR when it stopped on an error, READY when it finished, LIVE while it works. The rows go INPUT, ERROR, READY, LIVE: within INPUT and ERROR the session waiting longest comes first, and within READY and LIVE the one that changed last. With more than four on air, the board shows four at a time and turns to the next four every 8 seconds. Under the listing, two meters show your account's usage limits, the current session's and the week's, from the newest reading any session on air took: gold from 70%, red from 90%.
-- **BREAKING NEWS for every story.** A session that needs your input, that is ready for review, whose work is complete, or that stopped on an error airs as its own segment. Stories air one after another, in the order they land. Nothing cuts in, and KLWD airs only what happens while you're away from Claude: switch to Claude and the stories still waiting are dropped, along with any that land while you're there.
-- **On the hour.** The station clock strikes the hour, Clawd reads the headlines, and THE HOUR IN REVIEW shows what each session did: a row each, named as on the board by its project's plate and its title, with the lines it changed or how long it has waited. If you're in Claude as the hour strikes, that hour is skipped, and the next report covers it.
-
 ## Requirements
 
-- macOS 14 or later, on Apple silicon. The window's controls use Liquid Glass on macOS 26 and later.
-- The Claude desktop app, with Claude Code.
+- A Mac with Apple silicon, on macOS 14 or later. The window's controls use Liquid Glass on macOS 26 and later.
+- The Claude desktop app, with Claude Code. Sessions you run in Claude Code in a terminal can tune in with `/pipcast` too.
 
 ## Install
 
 In the Claude desktop app, click **+** next to the prompt box, then **Plugins**. Choose **Add marketplace**, enter `erdembircan/pipcast`, and add **Pipcast**.
 
-From a shell:
+Or from a terminal:
 
 ```bash
 claude plugin marketplace add erdembircan/pipcast
@@ -50,119 +31,106 @@ claude plugin marketplace add erdembircan/pipcast
 claude plugin install pipcast@pipcast
 ```
 
-New sessions load it.
+Sessions you start after that have it.
 
-## Use it
+## Get started
 
-1. Start a new Claude Code session in the desktop app. It tunes in to KLWD by itself. A session that was already open, or one you resume, tunes in when you press **TUNE IN** in the band above the prompt box, or run `/pipcast`.
-2. Switch to another app. KLWD appears in the bottom-right corner of the screen.
-3. When the session needs you or finishes, KLWD airs it as BREAKING NEWS.
-4. Hover over the window for its controls. Drag it to move it to another corner, drag an edge to make it smaller, or press the handle on its inner edge to minimize it to the side of the screen; dragging a quarter of it past the screen's left or right edge does the same. Click the tab it leaves there to bring it back.
-5. Press **TUNE OUT**, or run `/pipcast`, to take the session off the air.
+1. Start a new session in the Claude desktop app. It goes on air by itself.
+2. Give Claude something to do, then switch to another app. KLWD appears in the bottom-right corner of your screen.
+3. When the session needs your input, finishes, or stops on an error, KLWD airs it as BREAKING NEWS.
+4. Click **Back to Claude** on the window, or switch to Claude yourself, and the window gets out of the way.
 
-The band shows KLWD and what pressing it does: **TUNE IN** in gold while this session is off the air, **TUNE OUT** in blue while it is on.
+A session that was already open, or one you resume, goes on air when you press **TUNE IN** in the band above the prompt box, or run `/pipcast`. The band shows **TUNE IN** in gold while the session is off the air and **TUNE OUT** in blue while it's on. Press **TUNE OUT**, or run `/pipcast` again, to take the session off the air.
 
-### Settings
+![TUNE IN under the pointer in the band above Claude's prompt box; KLWD's board in the corner of the screen, over a browser; a session that needs your input, on air at the anchor desk; and Back to Claude bringing up the question Claude asked](assets/screenshots/in-use.jpg)
 
-Pipcast has two settings, kept with Claude Code's other plugin options. **Tune in every new session** is on until you turn it off, and **Transparent window** is off until you turn it on. Turn either on or off with `/pipcast` from any session, in the desktop app or in a terminal; `/pipcast auto` or `/pipcast transparency` on its own says whether that one is on, and `/pipcast` with nothing after it still tunes the session in or out. The desktop app's plugin page doesn't list the settings, so `/pipcast` is the way to change them there. In Claude Code in a terminal, `/plugin configure pipcast@pipcast` shows the same two.
+## What's on
 
-#### Tune in every new session
+![Nine of KLWD's pictures: the board, with every state and the usage meters; BREAKING NEWS; the anchor desk with a session that needs input, one ready for review, one whose work is complete and one stopped on an error; the station clock striking the hour; the hour's headlines; and THE HOUR IN REVIEW](assets/screenshots/on-air.jpg)
 
-It is on until you turn it off. While it is on, each new session in the desktop app tunes in by itself as it opens, so there is no **TUNE IN** to press, and a `/clear` starts a new session that tunes in again. A session that resumes, such as an older one you open again, waits for **TUNE IN**, and **TUNE OUT** still takes any session off the air. With it off, every session waits for **TUNE IN**. The setting changes the sessions that start after it, not the ones already open.
+### The board
 
-```text
-/pipcast auto off
-```
+The board is KLWD's live picture of every session on air, one row each: its project, its title, and where it stands.
 
-```text
-/pipcast auto on
-```
+| State | Means |
+| --- | --- |
+| **INPUT** | It's waiting on you: a question, or a permission to give |
+| **ERROR** | It stopped on an error |
+| **READY** | It finished, and it's ready for you to look at |
+| **LIVE** | Claude is working on it |
 
-#### Transparent window
+The sessions that need you come first: INPUT, then ERROR, READY and LIVE. Within INPUT and ERROR, the session that has waited longest is at the top; within READY and LIVE, the one that changed last. There's no limit on how many sessions can be on air: with more than four, the board shows four at a time and turns to the next four every 8 seconds.
 
-While it is on, the window fades to 40% whenever the pointer is elsewhere, so you can read what is under it, and turns solid again, with its controls, as soon as the pointer is on it. It stays solid while you drag it. Everything airs as before, BREAKING NEWS and its jingle included. A change reaches the window within a second, from any session.
+Under the board, two meters show your account's usage limits: the current session's and the week's. They turn gold from 70% and red from 90%.
 
-```text
-/pipcast transparency on
-```
+### BREAKING NEWS
 
-```text
-/pipcast transparency off
-```
+Every story gets its own segment: the BREAKING NEWS stinger and its jingle, then Clawd reading what happened at the anchor desk, with a beat under the story, then back to the board. A session has a story when it needs your input, when it finishes with changes ready for review, when it finishes without changing anything (WORK COMPLETE, with Claude's last words), and when it stops on an error.
 
-## How it works
+Stories air one after another, in the order they land, and nothing cuts in. KLWD only airs what happens while you're away from Claude: switch back to Claude, and the stories still waiting are dropped, since you can see them for yourself.
 
-Pipcast has three parts.
+### On the hour
 
-- **The mod**, in `packages/mod`, runs inside each Claude Code session. It draws the band, answers `/pipcast`, follows the session's events, and writes what it sees to a small file for that session.
-- **The station**, in `station/`, is a native macOS app with one always-on-top window. It reads every session's file and plays the broadcast in that window.
-- **The broadcast**, in `packages/director` and `packages/renderer`, is what plays in the window: the director that decides what airs and when, and the KLWD graphics from the design system in `design/`.
+At the top of every hour, the station clock strikes, Clawd reads the headlines, and THE HOUR IN REVIEW shows what each session did: the lines it changed, or how long it has been waiting on you. If you're in Claude as the hour strikes, that hour is skipped, and the next report covers it.
 
-The sessions and the station talk only through files in `~/Library/Application Support/Pipcast`. [docs/architecture.md](docs/architecture.md) has the details.
+## The window
 
-An install gets none of this source. It copies `plugin/`, which holds only what runs, all of it built from the source: the mod bundled into one file, the station's binary, the broadcast's page and the jingles, and the plugin's manifest, icon and license.
+![The window's controls on hover; the window dragged to the top-left corner; tucked into the side of the screen, leaving a small tab; back out of the side for BREAKING NEWS; staying put while another desktop slides in; and faded to 40% over a browser](assets/screenshots/window.jpg)
+
+The window looks and works like macOS's picture in picture for video: a 16:9 window with rounded corners that floats above every app, the Dock and the menu bar, on every desktop.
+
+- **It never takes the keyboard.** Whatever you're typing in keeps typing.
+- **It hides while Claude is in front**, where you can see your sessions anyway, and comes back when you switch away.
+- **Move it** by dragging it to another corner. **Resize it** by dragging an edge, down to 70%.
+- **Tuck it away** by pressing the handle on its inner edge, or by dragging a quarter of it past the side of the screen. It slides into that side and leaves a small tab, as picture in picture does on iPhone and iPad. BREAKING NEWS and the hour still bring it out, and it goes back when they end. Click the tab to bring it back for good.
+- **Hover over it** for its controls:
+  - **Close** takes every session off the air and closes the window. Tune a session in again to bring it back.
+  - **Mute** turns the jingles and the beat off, and **Unmute** turns them back on. The window remembers which. Sound plays at your Mac's volume.
+  - **Back to Claude** brings the Claude desktop app to the front.
+- **Let it fade** with **Transparent window**, under Settings: it fades to 40% while the pointer is elsewhere, so you can see what's under it.
+
+The window is there while at least one session is on air, and closes a few seconds after the last one tunes out.
+
+## Settings
+
+| Setting | Default | What it does | Change it |
+| --- | --- | --- | --- |
+| **Tune in every new session** | On | Each new session in the desktop app goes on air as it opens, and so does the new session a `/clear` starts. With it off, every session waits for **TUNE IN** | `/pipcast auto on` or `/pipcast auto off` |
+| **Transparent window** | Off | The window fades to 40% while the pointer is elsewhere, so you can see what's under it, and turns solid again as soon as the pointer is on it. Everything still airs as before | `/pipcast transparency on` or `/pipcast transparency off` |
+
+Run `/pipcast auto` or `/pipcast transparency` on its own to see whether that setting is on. A change to **Tune in every new session** applies to sessions that start after it; a change to **Transparent window** reaches the window within a second.
+
+The desktop app's plugin page doesn't list these settings, so `/pipcast` is the way to change them there. In Claude Code in a terminal, `/plugin configure pipcast@pipcast` shows them too.
+
+### Commands
+
+| Command | Does |
+| --- | --- |
+| `/pipcast` | Tunes this session in, or out if it's on air |
+| `/pipcast auto [on\|off]` | Shows or sets **Tune in every new session** |
+| `/pipcast transparency [on\|off]` | Shows or sets **Transparent window** |
 
 ## Privacy
 
-KLWD is an ordinary window. It appears in screen shares and recordings, with session titles and Claude's questions on it. Everything stays on your Mac: nothing is sent anywhere.
+Everything stays on your Mac. Pipcast sends nothing anywhere: your sessions and the window talk only through files in `~/Library/Application Support/Pipcast`.
 
-## Develop
+KLWD is an ordinary window, so it appears in screen shares and recordings, with your session titles and Claude's questions on it. Tune sessions out, or close the window, before you share your screen.
 
-Pipcast builds with Node.js 22 or later and the Swift toolchain that comes with Xcode or its Command Line Tools.
+## Update and uninstall
 
 ```bash
-npm ci
+claude plugin update pipcast@pipcast
 ```
 
 ```bash
-scripts/build.sh
+claude plugin uninstall pipcast@pipcast
 ```
 
-builds everything an install gets into `plugin/`: the mod bundled into one file, the station, the broadcast's page and the jingles, with the plugin's manifest, icon and license. `plugin/` belongs to the build. Don't edit it by hand or keep anything else in it: the build stops when it finds a file there that it doesn't make. Commit what it builds, since an install copies `plugin/` as it is, and CI fails a pull request whose `plugin/` differs from what its sources build.
+Start a new session after either one.
 
-The plugin's icon is KLWD's tower over the city at dusk, its beacon sending out the board's signal. `scripts/build-icon.mjs` draws it in layers from the design system's colours and the band's letters: `assets/icon.svg` stacks them, and `assets/icon-layers` holds each one on its own, as an SVG and as a 2048-pixel PNG, with `layers.json` saying how they stack, for animating the icon. The build draws them every time; their PNGs render only on a Mac, with Chrome, and on CI the build stops when the PNGs were rendered from another drawing.
+## Development
 
-```bash
-scripts/test.sh
-```
-
-runs every check: lint, types, the unit tests of each part, the station's Swift tests, the built plugin's manifest and the mod's kit tests against it on the engine bundled with the Claude desktop app, and `scripts/live.sh` in a throwaway copy of the repository.
-
-```bash
-scripts/verify.sh
-```
-
-runs the whole thing for real, with no window of yours involved: a headless Claude Code session tunes in, the station starts and shows its window, the session tunes out, and the station quits. With **Transparent window** on, the window server has to show that window at 40%, or whole while the pointer is on it, and whole once it is off. Another session is renamed on air, off air and after the window's close, and its title on air has to follow each time. One more, with nothing saved for **Tune in every new session**, which leaves it on, has to stay off the air until a stand-in for the desktop app shows it, then tune in by itself, and again after a `/clear`. An install into a throwaway configuration then has to hold exactly the files in `plugin/`, with no source or test among them. There `/pipcast auto` has to say **Tune in every new session** is on before anything is saved, and `/pipcast auto` and `/pipcast transparency` have to turn both settings on and off, each value landing where Claude Code keeps plugin options, and the second in the file the station reads as well.
-
-### Try a change in the desktop app
-
-The desktop app runs pipcast from the live checkout: a second checkout of this repository in a folder beside your clone, named after it (`~/Developer/JS/pipcast-live` beside `~/Developer/JS/pipcast`). The `pipcast` marketplace points at it, and every session reads the plugin from its `plugin/` folder when it starts or on `/reload-plugins`. Your clone never changes what the app runs, so you can switch branches in it freely.
-
-```bash
-scripts/live.sh setup
-```
-
-makes the live checkout on master and points the marketplace at it. Run it once.
-
-```bash
-scripts/live.sh pr 12
-```
-
-puts a pull request in the app. `scripts/live.sh <branch or commit>` puts any other commit there, `scripts/live.sh master` puts master back, and `scripts/live.sh` on its own says what the app runs now. Then run `/reload-plugins` in a session, or start a new one. Only committed work reaches the app, so run `scripts/build.sh` and commit what it builds first.
-
-### The demo video
-
-`video/` holds the demo video, made with [Remotion](https://www.remotion.dev) from the product's own pieces: the design system's components, the band's plate, the jingles and the icon's layers, each played frame by frame. Its soundtrack is synthesised from a score in `video/scripts/music`, in Chrome, as the jingles are. It has dependencies of its own:
-
-```bash
-npm --prefix video ci
-```
-
-```bash
-npm --prefix video run studio
-```
-
-opens it in Remotion Studio, rendering the soundtrack first if its score changed. `npm --prefix video run render` renders it to `video/out/pipcast.mp4`, and `render:4k` at twice the size; `video/out/` is not committed.
+Pipcast is built from the source in this repository: a mod that runs in each Claude Code session, a native macOS station that owns the window, and the broadcast that plays in it. To work on it, see [docs/development.md](docs/development.md): how the parts fit together, how to build and test it, how to try a change in the desktop app, and how the demo video and the README's screenshots are made. [docs/architecture.md](docs/architecture.md) has the details.
 
 ## License
 

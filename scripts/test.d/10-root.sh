@@ -1,6 +1,7 @@
 #!/bin/bash
-# The root checks: lint, both type projects, Vitest, the licence, and both
-# manifests validated by the engine bundled with the Claude desktop app.
+# The root checks: lint, both type projects, Vitest, the licence, both
+# manifests validated strictly by the engine bundled with the Claude desktop
+# app, and the plugin against the plugin directory's submission checks.
 set -euo pipefail
 
 root="$(cd "$(dirname "$0")/../.." && pwd)"
@@ -14,3 +15,4 @@ npx license-wizard --verify --strict
 claude="$(bash scripts/claude-bin.sh)"
 "$claude" plugin validate --strict .
 "$claude" plugin validate --strict ./plugin
+"$claude" plugin validate --profile directory ./plugin

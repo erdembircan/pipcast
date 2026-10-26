@@ -1,5 +1,7 @@
 # Notes for agents working on pipcast
 
+The README is for people who install Pipcast. How to build, test and try a change is in `docs/development.md`, and how the parts fit together in `docs/architecture.md`.
+
 ## plugin/ is built
 
 `plugin/` is what an install copies, and only that: the mod bundled into one file, its manifest, its state contract, its icon, the license, and the station with its page and jingles. `scripts/build.sh` writes all of it from the sources, and its last step stops when `plugin/` holds a file it does not make.

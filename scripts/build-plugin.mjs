@@ -63,7 +63,7 @@ writeFileSync(join(out, 'hooks/hooks.json'), '{ "modules": ["./register.js"] }\n
 for (const [from, to] of [
   ['packages/mod/plugin.json', '.claude-plugin/plugin.json'],
   ['packages/mod/types/index.d.ts', 'types/index.d.ts'],
-  ['assets/icon-512.png', 'assets/icon.png'],
+  ['assets/icon-1024.png', 'assets/icon.png'],
   ['LICENSE', 'LICENSE'],
 ]) {
   mkdirSync(dirname(join(out, to)), { recursive: true })
