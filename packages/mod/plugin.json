@@ -2,7 +2,7 @@
   "name": "pipcast",
   "displayName": "Pipcast",
   "version": "1.0.0",
-  "description": "Picture in picture for Claude Code. While you work in other apps, a small window in the corner of your Mac's screen shows a live board of your sessions, and cuts to BREAKING NEWS, the way a 1990s local TV station would, when one needs you, finishes or stops on an error.",
+  "description": "Picture in picture for Claude Code. While you work in other apps, a small window in the corner of your Mac's screen shows a live board of your sessions, and cuts to BREAKING NEWS, the way a 1990s local TV station would, when one needs you, finishes or stops on an error. A small macOS app that comes with Pipcast runs the window, and nothing leaves your Mac.",
   "author": {
     "name": "Erdem Bircan",
     "url": "https://github.com/erdembircan"

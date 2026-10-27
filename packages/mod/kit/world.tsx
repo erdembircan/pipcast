@@ -92,6 +92,8 @@ export function world(on: On, options: WorldOptions = {}) {
   mock.env(on, { HOME: '/Users/me', PIPCAST_HOME: HOME, PIPCAST_STATION_BIN: STATION, ...options.env })
 
   const files = new Map<string, string>()
+  // Each file's last write, by the kit's clock, as the engine's fs.stat reports it
+  const mtimes = new Map<string, number>()
   const ran: (readonly string[])[] = []
   const writes: string[] = []
   // Every path read, and the title of every record written, in order
@@ -211,6 +213,7 @@ export function world(on: On, options: WorldOptions = {}) {
   on('fs.write', (_, e) => {
     writes.push(e.path)
     files.set(e.path, e.text)
+    mtimes.set(e.path, clock.now())
     if (e.path === `${RECORD}.tmp`) {
       written.push((JSON.parse(e.text) as SessionRecord).title)
     }
@@ -224,13 +227,13 @@ export function world(on: On, options: WorldOptions = {}) {
     const names = [...files.keys()].filter((path) => path.startsWith(prefix) && !path.slice(prefix.length).includes('/'))
     return names.length === 0
       ? { deny: 'ENOENT' }
-      : { value: names.map((path) => ({ name: path.slice(prefix.length), kind: 'file' as const, size: 0, mtimeMs: 0, isLink: false })) }
+      : { value: names.map((path) => ({ name: path.slice(prefix.length), kind: 'file' as const, size: 0, mtimeMs: mtimes.get(path) ?? clock.now(), isLink: false })) }
   })
   on('fs.stat', (_, e) => {
     const text = files.get(e.path)
     return text === undefined
       ? { deny: 'ENOENT' }
-      : { value: { kind: 'file' as const, size: text.length, mtimeMs: 0, isLink: false } }
+      : { value: { kind: 'file' as const, size: text.length, mtimeMs: mtimes.get(e.path) ?? clock.now(), isLink: false } }
   })
 
   // Which tree holds a folder: the longest worktree that is or holds it, else the session's own, when the session has a repository
@@ -283,6 +286,8 @@ export function world(on: On, options: WorldOptions = {}) {
         if (from === undefined || to === undefined || text === undefined) {
           return done(1, '', 'no such file')
         }
+        mtimes.set(to, mtimes.get(from) ?? clock.now())
+        mtimes.delete(from)
         files.delete(from)
         files.set(to, text)
         return done(0)
@@ -290,6 +295,7 @@ export function world(on: On, options: WorldOptions = {}) {
       case '/bin/rm':
         for (const path of args.filter((arg) => arg !== '-f')) {
           files.delete(path)
+          mtimes.delete(path)
         }
         return done(0)
       case STATION:
@@ -410,6 +416,11 @@ export function world(on: On, options: WorldOptions = {}) {
         hours: [],
       }
       files.set(`${SESSIONS}/${id}.json`, JSON.stringify(record))
+      mtimes.set(`${SESSIONS}/${id}.json`, checkedInAt)
+    },
+    // Whether the store holds the record of the session `id`
+    hasRecord(id: string): boolean {
+      return files.has(`${SESSIONS}/${id}.json`)
     },
   }
 }

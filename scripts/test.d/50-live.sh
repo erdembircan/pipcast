@@ -1,12 +1,14 @@
 #!/bin/bash
 # scripts/live.sh in a throwaway world: a bare copy of this repository as origin,
 # with a pull request's ref, a clone of it as the main checkout, the live
-# checkout beside that clone, two stand-ins for the erdembircan-plugins
-# marketplace, one holding the published release and one whose release cannot
-# be installed, a store of its own for the station, and a throwaway Claude
-# configuration for the marketplaces. Your clone, your live checkout, your
-# station and your configuration are never read or changed. The temporary
-# folder is removed on exit.
+# checkout beside that clone, two stand-in marketplaces with master's plugin/ as
+# a release of Pipcast, which the test installs the way the app would, a store
+# of its own for the station, and a throwaway Claude configuration for the
+# marketplaces. A copy from Anthropic's plugin directory can't be made here,
+# neither a terminal's pipcast@synced nor the one the desktop app hands in, and
+# neither can an upload, pipcast@local-desktop-app-uploads: those go untested.
+# Your clone, your live checkout, your station and your configuration are never
+# read or changed. The temporary folder is removed on exit.
 set -euo pipefail
 
 root="$(cd "$(dirname "$0")/../.." && pwd)"
@@ -25,13 +27,14 @@ git clone -q "$tmp/origin.git" "$tmp/pipcast"
 # The script under test, in the throwaway main checkout
 cp "$root/scripts/live.sh" "$tmp/pipcast/scripts/live.sh"
 live="$tmp/pipcast/scripts/live.sh"
+# Where live.sh keeps the releases it turned off
+record="$tmp/pipcast/.git/pipcast-live-releases"
 
-# A stand-in for erdembircan-plugins, with master's plugin/ as the published
-# release
-published="$tmp/erdembircan-plugins"
-mkdir -p "$published/.claude-plugin"
-cp -R "$tmp/pipcast/plugin" "$published/pipcast"
-cat >"$published/.claude-plugin/marketplace.json" <<'EOF'
+# A stand-in for erdembircan-plugins, with master's plugin/ as a release
+erdembircan="$tmp/erdembircan-plugins"
+mkdir -p "$erdembircan/.claude-plugin"
+cp -R "$tmp/pipcast/plugin" "$erdembircan/pipcast"
+cat >"$erdembircan/.claude-plugin/marketplace.json" <<'EOF'
 {
   "name": "erdembircan-plugins",
   "description": "A stand-in for erdembircan/plugin-marketplace",
@@ -40,13 +43,14 @@ cat >"$published/.claude-plugin/marketplace.json" <<'EOF'
 }
 EOF
 
-# Another, whose release cannot be installed: its plugin's folder is missing
-broken="$tmp/broken-plugins"
-mkdir -p "$broken/.claude-plugin"
-cat >"$broken/.claude-plugin/marketplace.json" <<'EOF'
+# Another place that lists Pipcast
+other="$tmp/other-plugins"
+mkdir -p "$other/.claude-plugin"
+cp -R "$tmp/pipcast/plugin" "$other/pipcast"
+cat >"$other/.claude-plugin/marketplace.json" <<'EOF'
 {
-  "name": "erdembircan-plugins",
-  "description": "A stand-in for erdembircan/plugin-marketplace, with nothing to install",
+  "name": "other-plugins",
+  "description": "A stand-in for another place that lists Pipcast",
   "owner": { "name": "Erdem Bircan" },
   "plugins": [{ "name": "pipcast", "source": "./pipcast" }]
 }
@@ -85,6 +89,11 @@ not() {
   ! "$@"
 }
 
+# Succeeds when a release is gone from the configuration but its marketplace is not
+uninstalled_but_listed() {
+  [[ "$(state pipcast@erdembircan-plugins)" == missing ]] && knows erdembircan-plugins
+}
+
 failed=0
 
 check() { # what it shows, then the test
@@ -98,10 +107,11 @@ check() { # what it shows, then the test
   fi
 }
 
-check "with nothing installed, it says the app runs no Pipcast" grep -q "The app runs no Pipcast." <<<"$("$live" 2>&1 || true)"
+check "with nothing installed, it says the app runs no Pipcast from Claude Code's plugin list" grep -qF "The app runs no Pipcast from Claude Code's plugin list." <<<"$("$live" 2>&1 || true)"
+check "and that a copy from Anthropic's plugin directory never shows there" grep -qF "never shows in that list" <<<"$("$live" 2>&1 || true)"
 check "with no live checkout, pr says to run setup" grep -q "run scripts/live.sh setup" <<<"$("$live" pr 7 2>&1 || true)"
-check "without erdembircan-plugins, published says to add it" grep -q "claude plugin marketplace add erdembircan/plugin-marketplace" <<<"$("$live" published 2>&1 || true)"
-check "and fails" not quietly "$live" published
+check "with nothing installed, published installs nothing" quietly "$live" published
+check "and turns nothing on" test "$(state pipcast@pipcast)" = missing
 
 "$live" setup >/dev/null
 check "setup makes the live checkout beside the clone, on master" test "$(runs)" = "$master"
@@ -110,32 +120,26 @@ check "setup installs pipcast@pipcast and turns it on" test "$(state pipcast@pip
 check "it says the app runs master" grep -q "That is master." <<<"$("$live")"
 check "setup again keeps the live checkout" grep -q "already at" <<<"$("$live" setup)"
 
-check "with no published release, remove says to run published first" grep -q "scripts/live.sh published first" <<<"$("$live" remove 2>&1 || true)"
-check "and removes nothing" test "$(state pipcast@pipcast)" = enabled
-check "not even the folder" test -e "$tmp/pipcast-live"
+# The way the app installs a release: from a marketplace, at user scope
+"$claude" plugin marketplace add "$erdembircan" >/dev/null
+"$claude" plugin marketplace add "$other" >/dev/null
+"$claude" plugin install pipcast@erdembircan-plugins --scope user >/dev/null
+"$claude" plugin install pipcast@other-plugins --scope user >/dev/null
+"$claude" plugin disable pipcast@other-plugins --scope user >/dev/null
+check "with the live checkout and a release both on, it says both are on" grep -q "Both are on" <<<"$("$live")"
 
-"$claude" plugin marketplace add "$broken" >/dev/null
-check "published fails when the release does not install" not quietly "$live" published
-check "and says nothing moved" grep -q "so nothing moved" <<<"$("$live" published 2>&1 || true)"
-check "leaving the live checkout in the app" test "$(state pipcast@pipcast)" = enabled
-"$claude" plugin marketplace remove erdembircan-plugins >/dev/null
-
-"$claude" plugin marketplace add "$published" >/dev/null
 "$live" published >/dev/null
-check "published installs the published release from erdembircan-plugins and turns it on" test "$(state pipcast@erdembircan-plugins)" = enabled
-check "and turns the live checkout off" test "$(state pipcast@pipcast)" = disabled
-check "it says the app runs the published release" grep -q "The app runs the published release, pipcast@erdembircan-plugins" <<<"$("$live")"
-
-"$claude" plugin enable pipcast@pipcast --scope user >/dev/null
-check "with both on, it says every session runs Pipcast twice" grep -q "runs Pipcast twice" <<<"$("$live")"
-"$live" published >/dev/null
-check "published again turns the live checkout off" test "$(state pipcast@pipcast)" = disabled
-check "and keeps the published release on" test "$(state pipcast@erdembircan-plugins)" = enabled
+check "published turns the live checkout off" test "$(state pipcast@pipcast)" = disabled
+check "and leaves the release on" test "$(state pipcast@erdembircan-plugins)" = enabled
+check "and a release that was off stays off" test "$(state pipcast@other-plugins)" = disabled
+check "it says the app runs the release" grep -q "The app runs the release, pipcast@erdembircan-plugins" <<<"$("$live")"
 
 "$live" pr 7 >/dev/null
 check "pr puts a pull request's head in the app" test "$(runs)" = "$parent"
 check "and turns the live checkout on" test "$(state pipcast@pipcast)" = enabled
-check "and the published release off" test "$(state pipcast@erdembircan-plugins)" = disabled
+check "and turns the release off" test "$(state pipcast@erdembircan-plugins)" = disabled
+check "it remembers the release it turned off" grep -qxF "pipcast@erdembircan-plugins" "$record"
+check "and not the one that was already off" not quietly grep -qxF "pipcast@other-plugins" "$record"
 
 "$live" master >/dev/null
 check "master puts master in the app" test "$(runs)" = "$master"
@@ -143,9 +147,16 @@ check "master puts master in the app" test "$(runs)" = "$master"
 "$live" "$parent" >/dev/null
 check "a commit can be put in the app" test "$(runs)" = "$parent"
 
+"$live" published >/dev/null
+check "published turns back on the release it turned off" test "$(state pipcast@erdembircan-plugins)" = enabled
+check "and leaves the one that was already off alone" test "$(state pipcast@other-plugins)" = disabled
+check "and takes the live checkout out" test "$(state pipcast@pipcast)" = disabled
+check "and forgets it" test ! -e "$record"
+
+"$live" master >/dev/null
 echo "a change" >>"$tmp/pipcast-live/README.md"
-check "a live checkout with changes of its own is not moved" not quietly "$live" master
-check "and stays where it was" test "$(runs)" = "$parent"
+check "a live checkout with changes of its own is not moved" not quietly "$live" "$parent"
+check "and stays where it was" test "$(runs)" = "$master"
 check "nor removed" not quietly "$live" remove
 check "and stays installed" test "$(state pipcast@pipcast)" = enabled
 git -C "$tmp/pipcast-live" checkout -q -- README.md
@@ -157,12 +168,26 @@ check "and pr wants a number" not quietly "$live" pr
 check "remove uninstalls pipcast@pipcast" test "$(state pipcast@pipcast)" = missing
 check "and removes the pipcast marketplace" not knows pipcast
 check "and the live checkout" test ! -e "$tmp/pipcast-live"
-check "and puts the published release back" test "$(state pipcast@erdembircan-plugins)" = enabled
+check "and turns the release back on" test "$(state pipcast@erdembircan-plugins)" = enabled
 check "remove again finds nothing to remove" grep -q "no live checkout to remove" <<<"$("$live" remove)"
 
 "$live" setup >/dev/null
 check "setup after remove makes the live checkout again, on master" test "$(runs)" = "$master"
 check "and puts it in the app" test "$(state pipcast@pipcast)" = enabled
-check "taking the published release out" test "$(state pipcast@erdembircan-plugins)" = disabled
+check "taking the release out" test "$(state pipcast@erdembircan-plugins)" = disabled
+
+"$claude" plugin uninstall pipcast@erdembircan-plugins --scope user >/dev/null
+"$claude" plugin uninstall pipcast@other-plugins --scope user >/dev/null
+out="$("$live" published 2>&1 || true)"
+check "with no release in the list, published takes the live checkout out all the same" test "$(state pipcast@pipcast)" = disabled
+check "and installs no release, even from a marketplace Claude Code has" uninstalled_but_listed
+check "and says the app now runs no Pipcast from Claude Code's plugin list" grep -qF "It now runs no Pipcast from Claude Code's plugin list." <<<"$out"
+check "and that a copy from Anthropic's plugin directory never shows there" grep -qF "never shows in that list" <<<"$out"
+
+"$live" master >/dev/null
+check "master puts the live checkout back in the app" test "$(state pipcast@pipcast)" = enabled
+"$live" remove >/dev/null
+check "with no release in the list, remove uninstalls pipcast@pipcast all the same" test "$(state pipcast@pipcast)" = missing
+check "and removes the live checkout" test ! -e "$tmp/pipcast-live"
 
 exit "$failed"

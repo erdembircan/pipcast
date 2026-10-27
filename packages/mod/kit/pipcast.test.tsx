@@ -267,6 +267,17 @@ scenario('with ten others on air TUNE IN still tunes in, and the plate shows no 
   expect((await tuneIn($)).text).toBe(REPLY.tunedIn)
   expect(w.record()?.id).toBe(ID)
   expect(w.launched.length).toBe(1)
+  for (const id of ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j']) {
+    expect(w.hasRecord(id)).toBe(true)
+  }
+})
+
+scenario('tuning in deletes a record no session has written for an hour, and keeps the others', {}, async (w, $) => {
+  w.other('gone', T0 - 7_200_000, T0 - 7_200_000)
+  w.other('fresh', T0 - 10_000)
+  expect((await tuneIn($)).text).toBe(REPLY.tunedIn)
+  expect(w.hasRecord('gone')).toBe(false)
+  expect(w.hasRecord('fresh')).toBe(true)
 })
 
 scenario('/pipcast tunes in, then out', {}, async (w, $) => {

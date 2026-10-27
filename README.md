@@ -15,11 +15,21 @@ What plays in the window is KLWD, a local TV news channel for your sessions, sty
 ## Requirements
 
 - A Mac with Apple silicon, on macOS 14 or later. The window's controls use Liquid Glass on macOS 26 and later.
-- The Claude desktop app, with Claude Code. Sessions you run in Claude Code in a terminal can tune in with `/pipcast` too.
+- The Claude desktop app, with Claude Code. Sessions you run in Claude Code in a terminal can tune in with `/pipcast` too. Pipcast is a mod for Claude Code, so it doesn't run in chat or Cowork.
 
 ## Install
 
-Pipcast is published in [erdembircan-plugins](https://github.com/erdembircan/plugin-marketplace), a marketplace of Claude Code plugins.
+Pipcast is in two places: Anthropic's plugin directory, and [erdembircan-plugins](https://github.com/erdembircan/plugin-marketplace), a marketplace of Claude Code plugins. Install it from one of them.
+
+### From Anthropic's plugin directory
+
+1. In the Claude desktop app, or on claude.ai, open **Customize**, then **Plugins**.
+2. Under **Discover**, find **Pipcast** and select **Add**.
+3. Start a new Claude Code session, signed in to the same account. If Pipcast isn't on in it yet, run `/reload-plugins` in that session, or start another one.
+
+On a Team or Enterprise plan, the directory shows only if your organization keeps it.
+
+### From erdembircan-plugins
 
 In the Claude desktop app, click **+** next to the prompt box, then **Plugins**. Choose **Add marketplace**, enter `erdembircan/plugin-marketplace`, and add **Pipcast**.
 
@@ -102,8 +112,6 @@ The window is there while at least one session is on air, and closes a few secon
 
 Run `/pipcast auto` or `/pipcast transparency` on its own to see whether that setting is on. A change to **Tune in every new session** applies to sessions that start after it; a change to **Transparent window** reaches the window within a second.
 
-The desktop app's plugin page doesn't list these settings, so `/pipcast` is the way to change them there. In Claude Code in a terminal, `/plugin configure pipcast@erdembircan-plugins` shows them too.
-
 ### Commands
 
 | Command | Does |
@@ -112,13 +120,55 @@ The desktop app's plugin page doesn't list these settings, so `/pipcast` is the 
 | `/pipcast auto [on\|off]` | Shows or sets **Tune in every new session** |
 | `/pipcast transparency [on\|off]` | Shows or sets **Transparent window** |
 
+## What Pipcast runs and reads
+
+Pipcast is two programs, and both run only on your Mac.
+
+**The mod** is Pipcast's code inside Claude Code. It runs in every Claude Code session while Pipcast is on, on air or not, so a session that goes on air mid-turn shows where it stands at once. It draws the band above the prompt box, answers `/pipcast`, and follows each session's events: the session starting and ending, prompts sent, turns starting and ending, the tools Claude calls, permission requests and errors. From a prompt you send, it takes only the session's title and where its transcript is, never the prompt itself.
+
+The mod reads:
+
+- what each tool call is about: the file it reads or edits, the command it runs, the site it fetches from, and the text of a question Claude asks you
+- what a permission request is for: the command, file, site or tool
+- Claude's last message when a turn ends
+- the session's title, from the file Claude Code keeps beside the session's transcript in `~/.claude/projects`, and the note there that names the folder a subagent works in
+- your account's usage limits, as Claude Code reports them
+- the environment variables `HOME`, `CLAUDE_CONFIG_DIR` and `CLAUDE_CODE_EXECPATH`, and `PIPCAST_HOME`, `PIPCAST_STATION_BIN` and `PIPCAST_TARGET_BUNDLE_ID`, which are for Pipcast's own tests
+
+It writes a session's file only while the session is on air, and it runs these programs and no others:
+
+- `git`, only to read (`rev-parse`, `diff-index` and `ls-files`), in the folders where Claude works, and it reads the files there that git doesn't track yet, to count the lines each session changes
+- `ps`, `lsof`, `head` and `tail`, when a turn ends with commands still running in the background, to tell from their processes and the start and end of their output whether they're still at work
+- `find`, to find the folder of the session's transcript when no hook has said where it is
+- `sh` and `ps`, to find the Claude Code program the session runs on, and that program's `claude plugin list` and `claude plugin configure`, when you run `/pipcast auto` or `/pipcast transparency`
+- `mkdir`, `mv`, `rm` and `chmod`, on its own files
+- the station
+
+**The station** is a small macOS app that comes with Pipcast: the program `station/pipcast-station` in the plugin, built from the Swift source in Pipcast's repository. The mod starts it when the first session goes on air, and it quits a few seconds after the last one goes off. It reads the sessions' files, shows the broadcast in its window, a web page that comes with the plugin, and plays the jingles and the beat in `station/sounds`. It checks which app is in front, to hide while Claude is, and where the pointer is, to show the window's controls. Its window never takes the keyboard, so macOS treats the station as an app in the background, and three private macOS switches, looked up as it runs, make up for that: one draws the window's glass controls as an active window's, one lets the station set the pointer for resizing, and one keeps the window off Claude's full-screen desktop. For Pipcast's own checks, it has a `snapshot` command that draws a still of its page, and it saves a picture of its own window, and no other, when `PIPCAST_SELF_CAPTURE` is set. It asks for no permission: no screen recording, no accessibility, no automation.
+
+Neither part makes a network request, and neither downloads or installs anything.
+
 ## Privacy
 
-Everything stays on your Mac. Pipcast sends nothing anywhere: your sessions and the window talk only through files in `~/Library/Application Support/Pipcast`.
+Everything stays on your Mac. Pipcast sends nothing anywhere, and has no account, analytics or telemetry.
+
+It keeps its files in one folder, `~/Library/Application Support/Pipcast`, which only your user can open:
+
+- a file for each session on air, with its project's folder name, its title, its state, what Claude is doing, the question Claude asked or what a permission is for, Claude's last words when a turn ends, the lines and files it changed in each hour, and your account's usage limits. A session deletes its file when it goes off the air or ends. A file left behind by a session that stopped without ending, as when Claude Code is force-quit, is deleted the next time a session goes on air, once it's an hour old.
+- the window's corner and size, whether it's tucked into the side, whether sound is on, when the hour last aired, when the window was last closed, **Transparent window**, and the station's process number and version
+- the station's own log of what its window did, for fixing problems, cut back at 1 MB
+
+Claude Code keeps Pipcast's two settings with your other plugins' options.
+
+Uninstalling Pipcast leaves that folder in place. To remove everything Pipcast kept, delete `~/Library/Application Support/Pipcast`.
 
 KLWD is an ordinary window, so it appears in screen shares and recordings, with your session titles and Claude's questions on it. Tune sessions out, or close the window, before you share your screen.
 
 ## Update and uninstall
+
+**From Anthropic's plugin directory**, Pipcast updates by itself: once a new version is out, new sessions get it. To uninstall it, open **Customize**, then **Plugins**, open **Pipcast**, open its menu and select **Remove**. New sessions start without it.
+
+**From erdembircan-plugins**, update or uninstall it from a terminal, then start a new session:
 
 ```bash
 claude plugin update pipcast@erdembircan-plugins
@@ -128,7 +178,7 @@ claude plugin update pipcast@erdembircan-plugins
 claude plugin uninstall pipcast@erdembircan-plugins
 ```
 
-Start a new session after either one.
+Either way, uninstalling leaves the files Pipcast kept in `~/Library/Application Support/Pipcast`. Delete that folder to remove them too.
 
 ## Development
 

@@ -28,4 +28,6 @@ jobs:
             echo "$changed"
             exit 1
           fi
+      - name: plugin/ follows the plugin directory's rules
+        run: node scripts/check-directory.mjs
       - run: npx license-wizard --verify --strict

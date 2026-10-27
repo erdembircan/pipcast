@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { defaultHome, storePaths } from '@pipcast/contract'
 import type { SessionRecord } from '@pipcast/contract'
 import * as m from '../src/core/model.ts'
-import { checkIn, ensureStation, readSharedOptions, recordOf, shareOptions, tuneIn, tuneOut } from '../src/core/services.ts'
+import { ORPHAN_MS, checkIn, ensureStation, readSharedOptions, recordOf, shareOptions, sweepOrphans, tuneIn, tuneOut } from '../src/core/services.ts'
 import type { Io, RunResult } from '../src/core/services.ts'
 
 const HOME = '/store'
@@ -20,6 +20,7 @@ interface Fake {
   launch: RunResult
   onWrite: (path: string) => void
   temps: string[]
+  mtimes: Map<string, number>
 }
 
 function fake(): Fake {
@@ -32,6 +33,7 @@ function fake(): Fake {
     launch: { exitCode: 0, stdout: 'started 4242\n', stderr: '' },
     onWrite: () => undefined,
     temps: [],
+    mtimes: new Map(),
   }
   state.io = {
     now: async () => state.now,
@@ -40,15 +42,17 @@ function fake(): Fake {
     read: async (path) => state.files.get(path) ?? null,
     stat: async (path) => {
       const text = state.files.get(path)
-      return text === undefined ? null : { size: text.length, mtimeMs: 0 }
+      return text === undefined ? null : { size: text.length, mtimeMs: state.mtimes.get(path) ?? state.now }
     },
     write: async (path, text, temp) => {
       state.files.set(path, text)
+      state.mtimes.set(path, state.now)
       state.temps.push(temp ?? `${path}.tmp`)
       state.onWrite(path)
     },
     remove: async (path) => {
       state.files.delete(path)
+      state.mtimes.delete(path)
     },
     list: async (dir) => {
       const prefix = `${dir}/`
@@ -266,5 +270,64 @@ describe('the options the station follows', () => {
     expect(await readSharedOptions(state.io, HOME)).toBeNull()
     state.files.set(paths.options, JSON.stringify({ v: 1, transparent: false }))
     expect(await readSharedOptions(state.io, HOME)).toEqual({ v: 1, transparent: false })
+  })
+})
+
+describe('sweepOrphans', () => {
+  const aged = (state: Fake, path: string, age = ORPHAN_MS + 1): void => {
+    state.files.set(path, '{}')
+    state.mtimes.set(path, T - age)
+  }
+
+  it('tuning in deletes a record no session has written for over an hour', async () => {
+    const state = fake()
+    aged(state, paths.session('gone'))
+    await tuneIn(state.io, mine())
+    expect(state.files.has(paths.session('gone'))).toBe(false)
+    expect(stored(state)).toBeDefined()
+  })
+
+  it('keeps a record written within the hour', async () => {
+    const state = fake()
+    aged(state, paths.session('recent'), ORPHAN_MS)
+    await tuneIn(state.io, mine())
+    expect(state.files.has(paths.session('recent'))).toBe(true)
+  })
+
+  it('deletes a temporary file left over an hour ago', async () => {
+    const state = fake()
+    aged(state, `${paths.session('gone')}.tmp`)
+    await tuneIn(state.io, mine())
+    expect(state.files.has(`${paths.session('gone')}.tmp`)).toBe(false)
+  })
+
+  it("never touches the session's own record, or a file that is not a record", async () => {
+    const state = fake()
+    aged(state, paths.session('me'))
+    aged(state, `${paths.session('me')}.tmp`)
+    aged(state, `${paths.sessions}/notes.txt`)
+    aged(state, paths.session('gone'))
+    await sweepOrphans(state.io, HOME, 'me')
+    expect(state.files.has(paths.session('me'))).toBe(true)
+    expect(state.files.has(`${paths.session('me')}.tmp`)).toBe(true)
+    expect(state.files.has(`${paths.sessions}/notes.txt`)).toBe(true)
+    expect(state.files.has(paths.session('gone'))).toBe(false)
+  })
+
+  it('leaves a file alone when it cannot tell its age', async () => {
+    const state = fake()
+    aged(state, paths.session('unknown'))
+    const stat = state.io.stat
+    state.io.stat = async (path) => (path === paths.session('unknown') ? null : stat(path))
+    await tuneIn(state.io, mine())
+    expect(state.files.has(paths.session('unknown'))).toBe(true)
+  })
+
+  it('a sweep that fails still lets the session tune in', async () => {
+    const state = fake()
+    state.io.list = async () => {
+      throw new Error('EACCES')
+    }
+    expect(await tuneIn(state.io, mine())).toEqual({ status: 'on', tunedInAt: T })
   })
 })
