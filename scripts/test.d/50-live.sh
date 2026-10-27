@@ -108,7 +108,7 @@ check() { # what it shows, then the test
 }
 
 check "with nothing installed, it says the app runs no Pipcast from Claude Code's plugin list" grep -qF "The app runs no Pipcast from Claude Code's plugin list." <<<"$("$live" 2>&1 || true)"
-check "and that a copy from Anthropic's plugin directory never shows there" grep -qF "never shows in that list" <<<"$("$live" 2>&1 || true)"
+check "and that a copy from Anthropic's plugin directory or an upload never shows there" grep -qF "never shows in that list" <<<"$("$live" 2>&1 || true)"
 check "with no live checkout, pr says to run setup" grep -q "run scripts/live.sh setup" <<<"$("$live" pr 7 2>&1 || true)"
 check "with nothing installed, published installs nothing" quietly "$live" published
 check "and turns nothing on" test "$(state pipcast@pipcast)" = missing
@@ -182,7 +182,7 @@ out="$("$live" published 2>&1 || true)"
 check "with no release in the list, published takes the live checkout out all the same" test "$(state pipcast@pipcast)" = disabled
 check "and installs no release, even from a marketplace Claude Code has" uninstalled_but_listed
 check "and says the app now runs no Pipcast from Claude Code's plugin list" grep -qF "It now runs no Pipcast from Claude Code's plugin list." <<<"$out"
-check "and that a copy from Anthropic's plugin directory never shows there" grep -qF "never shows in that list" <<<"$out"
+check "and that a copy from Anthropic's plugin directory or an upload never shows there" grep -qF "never shows in that list" <<<"$out"
 
 "$live" master >/dev/null
 check "master puts the live checkout back in the app" test "$(state pipcast@pipcast)" = enabled

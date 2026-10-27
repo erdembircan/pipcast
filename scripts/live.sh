@@ -51,7 +51,7 @@ live_market="pipcast"
 # Where live.sh keeps the releases it turned off, one id a line
 record="$(git -C "$main" rev-parse --path-format=absolute --git-common-dir)/pipcast-live-releases"
 # Said wherever Claude Code's plugin list shows no Pipcast at all
-directory_note="A copy from Anthropic's plugin directory never shows in that list: the desktop app hands it to each of its sessions itself."
+directory_note="A copy from Anthropic's plugin directory or an upload never shows in that list: the desktop app hands it to each of its sessions itself."
 
 # The live checkout's commit and subject, on one line
 describe() {
