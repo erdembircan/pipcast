@@ -88,15 +88,17 @@ known() { # <marketplace>
 # turned on: Claude Code would record it as on all the same.
 turn() { # on|off <id>
   case "$1:$(listed state "$2")" in
-    on:disabled) "$claude" plugin enable "$2" --scope user >/dev/null ;;
-    off:enabled) "$claude" plugin disable "$2" --scope user >/dev/null ;;
+    on:disabled) "$claude" plugin enable "$2" >/dev/null ;;
+    off:enabled) "$claude" plugin disable "$2" >/dev/null ;;
   esac
 }
 
-# Puts the live checkout in the app: turns off every release that is on, and
-# remembers which
+# Puts the live checkout in the app: turns it on, then turns off every release
+# that is on, and remembers which. On first, so a release that won't turn off
+# leaves both on, which live.sh reports, never neither
 step_in() {
   local id
+  turn on "$live_id"
   for id in $(releases); do
     if [[ "$(listed state "$id")" == enabled ]]; then
       turn off "$id"
@@ -105,14 +107,13 @@ step_in() {
       fi
     fi
   done
-  turn on "$live_id"
 }
 
-# Takes the live checkout out of the app and turns back on the releases it
-# turned off. With none remembered and none on, it turns on every release
+# Takes the live checkout out of the app: turns back on the releases it turned
+# off, then turns it off. With none remembered and none on, it turns on every
+# release. Releases first, so a step that fails leaves both on, never neither
 step_out() {
   local id all back="" some_on=0
-  turn off "$live_id"
   all="$(releases)"
   for id in $all; do
     if [[ "$(listed state "$id")" == enabled ]]; then
@@ -132,6 +133,7 @@ step_out() {
   for id in $back; do
     turn on "$id"
   done
+  turn off "$live_id"
   rm -f "$record"
 }
 

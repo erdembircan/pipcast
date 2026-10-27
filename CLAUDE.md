@@ -16,7 +16,7 @@ The README is for people who install Pipcast. How to build, test and try a chang
 
 ## Anthropic's plugin directory
 
-People install Pipcast from Anthropic's plugin directory, which reads only `plugin/` and checks every version against its rules. Anthropic's plugin directory in `docs/development.md` says what they are and how a version reaches people.
+Anthropic's plugin directory, one of the two places people install Pipcast from, reads only `plugin/` and checks every version against its rules. Anthropic's plugin directory in `docs/development.md` says what they are and how a version reaches people.
 
 - `scripts/check-directory.mjs` checks the rules that can be checked here, and CI runs it. Fix what it reports. A file the directory's validator can't inspect, such as the station's binary, goes in its `HELD` list only with the reason it ships, and holds every version for a reviewer.
 - `plugin/README.md`, built from `packages/mod/README.md`, is Pipcast's listing, and tells the people who add Pipcast everything it runs, reads and keeps. When the mod or the station starts to run, read or keep anything new, say so in its **What Pipcast runs and reads** or **Privacy** section, and in the same section of the root README, word for word.
