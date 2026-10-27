@@ -27,8 +27,8 @@
 #
 # Putting the live checkout in the app turns off every release of Pipcast that
 # is on in Claude Code's plugin list, and remembers which; published turns
-# those back on. The app never runs both. Sessions pick a change up on
-# /reload-plugins, or when they start.
+# those back on. Sessions pick a change up on /reload-plugins, or when they
+# start.
 #
 # A copy from Anthropic's plugin directory is the one release live.sh can't see
 # or turn off: the desktop app hands it to each of its sessions itself, outside

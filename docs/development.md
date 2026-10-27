@@ -61,7 +61,7 @@ runs the whole thing for real, with no window of yours involved: a headless Clau
 
 ## Try a change in the desktop app
 
-The desktop app runs the release of Pipcast you installed, from Anthropic's plugin directory or from erdembircan-plugins (`pipcast@erdembircan-plugins`), or the live checkout while you try a change, never both.
+The desktop app runs one Pipcast at a time: the release you installed, from Anthropic's plugin directory or from erdembircan-plugins (`pipcast@erdembircan-plugins`), or the live checkout while you try a change.
 
 The live checkout, `pipcast@pipcast`, is a second checkout of this repository in a folder beside your clone, named after it (`~/Developer/JS/pipcast-live` beside `~/Developer/JS/pipcast`). The `pipcast` marketplace points at it, and every session reads the plugin from its `plugin/` folder when it starts or on `/reload-plugins`. Your clone never changes what the app runs, so you can switch branches in it freely.
 

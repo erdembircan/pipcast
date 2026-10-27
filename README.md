@@ -25,7 +25,7 @@ Pipcast is in two places: Anthropic's plugin directory, and [erdembircan-plugins
 
 1. In the Claude desktop app, or on claude.ai, open **Customize**, then **Plugins**.
 2. Under **Discover**, find **Pipcast** and select **Add**.
-3. Start a new Claude Code session, signed in to the same account. Claude Code downloads Pipcast as the session starts: run `/reload-plugins` in that session, or start another one, and Pipcast is on.
+3. Start a new Claude Code session, signed in to the same account. If Pipcast isn't on in it yet, run `/reload-plugins` in that session, or start another one.
 
 On a Team or Enterprise plan, the directory shows only if your organization keeps it.
 
@@ -166,11 +166,7 @@ KLWD is an ordinary window, so it appears in screen shares and recordings, with 
 
 ## Update and uninstall
 
-**From Anthropic's plugin directory**, Pipcast updates by itself: when a new version is out, Claude Code downloads it as a session starts, and asks you to run `/reload-plugins`. To uninstall it, open **Customize**, then **Plugins**, open **Pipcast**, open its menu and select **Remove**. Claude Code removes it the next time it starts. To turn it off on one Mac only, run:
-
-```bash
-claude plugin disable pipcast@synced
-```
+**From Anthropic's plugin directory**, Pipcast updates by itself: once a new version is out, new sessions get it. To uninstall it, open **Customize**, then **Plugins**, open **Pipcast**, open its menu and select **Remove**. New sessions start without it.
 
 **From erdembircan-plugins**, update or uninstall it from a terminal, then start a new session:
 

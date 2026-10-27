@@ -24,7 +24,7 @@ Anthropic's plugin directory, one of the two places people install Pipcast from,
 
 ## What the desktop app runs
 
-The Claude desktop app runs a release of Pipcast, or the live checkout while a change is tried, never both:
+The Claude desktop app runs one Pipcast at a time, a release or the live checkout while a change is tried:
 
 - **The release**, which the user installs in the app from one of the two places people get Pipcast: Anthropic's plugin directory, whose copy the desktop app hands to each of its sessions itself, outside Claude Code's plugin list, or the `erdembircan-plugins` marketplace (`erdembircan/plugin-marketplace` on GitHub, which lists the user's other plugins too), as `pipcast@erdembircan-plugins`. Nothing in this repository installs or updates it.
 - **The live checkout**, `pipcast@pipcast`: a second checkout of this repository in a folder beside the main checkout, named after it (`~/Developer/JS/pipcast-live` beside `~/Developer/JS/pipcast`), installed from the `pipcast` marketplace, this repository's own, which points at that folder. That marketplace is for development only: nobody installs Pipcast from it. Every session reads the live checkout from its `plugin/` folder when it starts or on `/reload-plugins`.
