@@ -4,10 +4,11 @@
 # checkout beside that clone, two stand-in marketplaces with master's plugin/ as
 # a release of Pipcast, which the test installs the way the app would, a store
 # of its own for the station, and a throwaway Claude configuration for the
-# marketplaces. A copy synced from claude.ai can't be made here, so
-# pipcast@synced goes untested. Your clone, your live checkout, your station and
-# your configuration are never read or changed. The temporary folder is removed
-# on exit.
+# marketplaces. A copy from Anthropic's plugin directory can't be made here,
+# neither a terminal's pipcast@synced nor the one the desktop app hands in, and
+# neither can an upload, pipcast@local-desktop-app-uploads: those go untested.
+# Your clone, your live checkout, your station and your configuration are never
+# read or changed. The temporary folder is removed on exit.
 set -euo pipefail
 
 root="$(cd "$(dirname "$0")/../.." && pwd)"
@@ -106,11 +107,11 @@ check() { # what it shows, then the test
   fi
 }
 
-check "with nothing installed, it says the app runs no Pipcast" grep -q "The app runs no Pipcast." <<<"$("$live" 2>&1 || true)"
-check "and says to add Pipcast in the app" grep -q "Add Pipcast in the app" <<<"$("$live" 2>&1 || true)"
+check "with nothing installed, it says the app runs no Pipcast from Claude Code's plugin list" grep -qF "The app runs no Pipcast from Claude Code's plugin list." <<<"$("$live" 2>&1 || true)"
+check "and that a copy from Anthropic's plugin directory never shows there" grep -qF "never shows in that list" <<<"$("$live" 2>&1 || true)"
 check "with no live checkout, pr says to run setup" grep -q "run scripts/live.sh setup" <<<"$("$live" pr 7 2>&1 || true)"
-check "with no release installed, published says to add one in the app" grep -q "No release of Pipcast is installed" <<<"$("$live" published 2>&1 || true)"
-check "and fails" not quietly "$live" published
+check "with nothing installed, published installs nothing" quietly "$live" published
+check "and turns nothing on" test "$(state pipcast@pipcast)" = missing
 
 "$live" setup >/dev/null
 check "setup makes the live checkout beside the clone, on master" test "$(runs)" = "$master"
@@ -118,10 +119,6 @@ check "setup points the pipcast marketplace at it" grep -qE 'Folder \(.*/pipcast
 check "setup installs pipcast@pipcast and turns it on" test "$(state pipcast@pipcast)" = enabled
 check "it says the app runs master" grep -q "That is master." <<<"$("$live")"
 check "setup again keeps the live checkout" grep -q "already at" <<<"$("$live" setup)"
-
-check "with no release installed, remove says to add one in the app" grep -q "No release of Pipcast is installed" <<<"$("$live" remove 2>&1 || true)"
-check "and removes nothing" test "$(state pipcast@pipcast)" = enabled
-check "not even the folder" test -e "$tmp/pipcast-live"
 
 # The way the app installs a release: from a marketplace, at user scope
 "$claude" plugin marketplace add "$erdembircan" >/dev/null
@@ -181,8 +178,16 @@ check "taking the release out" test "$(state pipcast@erdembircan-plugins)" = dis
 
 "$claude" plugin uninstall pipcast@erdembircan-plugins --scope user >/dev/null
 "$claude" plugin uninstall pipcast@other-plugins --scope user >/dev/null
-check "with no release installed, published moves nothing" not quietly "$live" published
-check "and installs none, even from a marketplace Claude Code has" uninstalled_but_listed
-check "leaving the live checkout in the app" test "$(state pipcast@pipcast)" = enabled
+out="$("$live" published 2>&1 || true)"
+check "with no release in the list, published takes the live checkout out all the same" test "$(state pipcast@pipcast)" = disabled
+check "and installs no release, even from a marketplace Claude Code has" uninstalled_but_listed
+check "and says the app now runs no Pipcast from Claude Code's plugin list" grep -qF "It now runs no Pipcast from Claude Code's plugin list." <<<"$out"
+check "and that a copy from Anthropic's plugin directory never shows there" grep -qF "never shows in that list" <<<"$out"
+
+"$live" master >/dev/null
+check "master puts the live checkout back in the app" test "$(state pipcast@pipcast)" = enabled
+"$live" remove >/dev/null
+check "with no release in the list, remove uninstalls pipcast@pipcast all the same" test "$(state pipcast@pipcast)" = missing
+check "and removes the live checkout" test ! -e "$tmp/pipcast-live"
 
 exit "$failed"

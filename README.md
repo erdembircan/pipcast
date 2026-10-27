@@ -19,7 +19,7 @@ What plays in the window is KLWD, a local TV news channel for your sessions, sty
 
 ## Install
 
-Pipcast is in two places: Anthropic's plugin directory, and [erdembircan-plugins](https://github.com/erdembircan/plugin-marketplace), a marketplace of Claude Code plugins. Install it from one of them. With both, Claude Code runs the copy from erdembircan-plugins.
+Pipcast is in two places: Anthropic's plugin directory, and [erdembircan-plugins](https://github.com/erdembircan/plugin-marketplace), a marketplace of Claude Code plugins. Install it from one of them.
 
 ### From Anthropic's plugin directory
 

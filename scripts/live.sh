@@ -2,8 +2,8 @@
 # Puts a change to Pipcast in the Claude desktop app, for trying it, and takes
 # it out again. It is for development only: it never installs or updates a
 # release of Pipcast. People install the release in the app, from Anthropic's
-# plugin directory (pipcast@synced) or from erdembircan-plugins
-# (pipcast@erdembircan-plugins), and so do you.
+# plugin directory or from erdembircan-plugins (pipcast@erdembircan-plugins),
+# and so do you.
 #
 # The change runs from the live checkout: a second checkout of this repository
 # in a folder beside the main checkout, named after it
@@ -26,8 +26,14 @@
 #                                 marketplace
 #
 # Putting the live checkout in the app turns off every release of Pipcast that
-# is on, and remembers which; published turns those back on. The app never
-# runs both. Sessions pick a change up on /reload-plugins, or when they start.
+# is on in Claude Code's plugin list, and remembers which; published turns
+# those back on. The app never runs both. Sessions pick a change up on
+# /reload-plugins, or when they start.
+#
+# A copy from Anthropic's plugin directory is the one release live.sh can't see
+# or turn off: the desktop app hands it to each of its sessions itself, outside
+# Claude Code's plugin list, and runs it over any installed Pipcast, the live
+# checkout too. Turn it off in Customize > Plugins while you try a change.
 set -euo pipefail
 
 root="$(cd "$(dirname "$0")/.." && pwd)"
@@ -43,6 +49,8 @@ live_id="pipcast@pipcast"
 live_market="pipcast"
 # Where live.sh keeps the releases it turned off, one id a line
 record="$(git -C "$main" rev-parse --path-format=absolute --git-common-dir)/pipcast-live-releases"
+# Said wherever Claude Code's plugin list shows no Pipcast at all
+directory_note="A copy from Anthropic's plugin directory never shows in that list: the desktop app hands it to each of its sessions itself."
 
 # The live checkout's commit and subject, on one line
 describe() {
@@ -61,9 +69,11 @@ listed() { # state|version <id>
   ' "$1" "$2"
 }
 
-# The releases of Pipcast Claude Code has, one id a line: every pipcast install
-# but the live checkout's, from the directory or a marketplace, leaving out
-# those a project's settings hold
+# The releases of Pipcast in Claude Code's plugin list, one id a line: every
+# pipcast install but the live checkout's, from a marketplace, an upload or a
+# terminal's sync of Anthropic's plugin directory, leaving out those a
+# project's settings hold. A copy the desktop app hands in from the directory
+# is never among them
 releases() {
   { "$claude" plugin list --json 2>/dev/null || true; } | node -e '
     let plugins = []
@@ -156,7 +166,7 @@ running() {
   elif [[ -n "$ids" ]]; then
     echo "the release, $versions"
   else
-    echo "no Pipcast"
+    echo "no Pipcast from Claude Code's plugin list"
   fi
 }
 
@@ -164,22 +174,6 @@ running() {
 unmoved() { # <what failed>
   echo "$1, so nothing moved: the app runs $(running)." >&2
   exit 1
-}
-
-# Stops when no release is installed: without the live checkout, the app would
-# run no Pipcast
-need_release() { # published|remove
-  if [[ -z "$(releases)" ]]; then
-    case "$1" in
-      published)
-        echo "No release of Pipcast is installed, so nothing moved: the app runs $(running). Add Pipcast in the app, from Anthropic's plugin directory or from erdembircan-plugins, then run scripts/live.sh published again." >&2
-        ;;
-      remove)
-        echo "No release of Pipcast is installed, so nothing was removed: without the live checkout the app would run no Pipcast. Add Pipcast in the app, from Anthropic's plugin directory or from erdembircan-plugins, then run scripts/live.sh remove again." >&2
-        ;;
-    esac
-    exit 1
-  fi
 }
 
 need_live() {
@@ -209,8 +203,13 @@ fetch() {
 
 # Says what the app ran and what it runs now
 moved() { # <what it ran> [<what was put there>]
+  local now
+  now="$(running)"
   echo "The app ran $1."
-  echo "It now runs $(running)${2:+ ($2)}."
+  echo "It now runs $now${2:+ ($2)}."
+  if [[ "$now" == 'no Pipcast'* ]]; then
+    echo "$directory_note"
+  fi
   echo "Run /reload-plugins in a session to pick it up, or start a new one."
 }
 
@@ -233,8 +232,9 @@ case "${1:-}" in
       both*)
         echo "Both are on: run scripts/live.sh published or scripts/live.sh master to keep one."
         ;;
-      'no Pipcast')
-        echo "Add Pipcast in the app, from Anthropic's plugin directory or from erdembircan-plugins, or run scripts/live.sh setup to try the live checkout."
+      'no Pipcast'*)
+        echo "$directory_note"
+        echo "Run scripts/live.sh setup to try the live checkout."
         ;;
       'the live checkout in'*)
         if [[ "$(git -C "$live" rev-parse HEAD)" == "$(git -C "$main" rev-parse origin/master)" ]]; then
@@ -275,7 +275,6 @@ case "${1:-}" in
     put "$(git -C "$main" rev-parse origin/master)" "master"
     ;;
   published)
-    need_release published
     before="$(running)"
     step_out
     moved "$before"
@@ -285,7 +284,6 @@ case "${1:-}" in
       echo "There is no live checkout to remove: the app runs $(running)."
       exit 0
     fi
-    need_release remove
     if [[ -e "$live/.git" ]]; then
       need_clean "was removed"
     fi
