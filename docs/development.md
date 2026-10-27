@@ -42,8 +42,8 @@ The manifest also carries what the directory lists and Claude Code itself ignore
 
 Two marketplaces list Pipcast as well. Each entry repeats the manifest's display fields, `displayName`, `description`, `author`, `homepage`, `repository`, `license` and `keywords`, because Claude Code shows an entry's own value wherever it sets one:
 
-- **pipcast**, in this repository's `.claude-plugin/marketplace.json`, is for development: `scripts/live.sh` installs the live checkout from it, and `scripts/verify-install.sh` installs this clone from it. Its entry names `./plugin`, and a test fails when its display fields differ from the manifest's.
-- **erdembircan-plugins**, in [erdembircan/plugin-marketplace](https://github.com/erdembircan/plugin-marketplace), listed Pipcast before the directory did, and `scripts/live.sh published` still installs from it. Its entry is a `git-subdir` source that installs `plugin/` from this repository's master branch. When a display field changes in the manifest, change it in that entry too.
+- **pipcast**, in this repository's `.claude-plugin/marketplace.json`, is for development only, and lists nothing but Pipcast: `scripts/live.sh` installs the live checkout from it, and `scripts/verify-install.sh` installs this clone from it. Nobody installs Pipcast from it. Its entry names `./plugin`, and a test fails when its display fields differ from the manifest's.
+- **erdembircan-plugins**, in [erdembircan/plugin-marketplace](https://github.com/erdembircan/plugin-marketplace), is the other place people install Pipcast from, beside Anthropic's plugin directory: a marketplace of your Claude Code plugins, Pipcast among them. Its entry is a `git-subdir` source that installs `plugin/` from this repository's master branch. When a display field changes in the manifest, change it in that entry too.
 
 ## Test
 
@@ -61,10 +61,11 @@ runs the whole thing for real, with no window of yours involved: a headless Clau
 
 ## Try a change in the desktop app
 
-The desktop app runs the published release of Pipcast, or the live checkout while a change is tried, never both:
+The desktop app runs the release of Pipcast you installed, from Anthropic's plugin directory (`pipcast@synced`) or from erdembircan-plugins (`pipcast@erdembircan-plugins`), or the live checkout while you try a change, never both.
 
-- **The published release**, `pipcast@erdembircan-plugins`: master's newest version, from erdembircan-plugins. People who add Pipcast from Anthropic's plugin directory get the version it last published, as `pipcast@synced`, and `scripts/live.sh` doesn't switch to that copy yet.
-- **The live checkout**, `pipcast@pipcast`: a second checkout of this repository in a folder beside your clone, named after it (`~/Developer/JS/pipcast-live` beside `~/Developer/JS/pipcast`). The `pipcast` marketplace points at it, and every session reads the plugin from its `plugin/` folder when it starts or on `/reload-plugins`. Your clone never changes what the app runs, so you can switch branches in it freely.
+The live checkout, `pipcast@pipcast`, is a second checkout of this repository in a folder beside your clone, named after it (`~/Developer/JS/pipcast-live` beside `~/Developer/JS/pipcast`). The `pipcast` marketplace points at it, and every session reads the plugin from its `plugin/` folder when it starts or on `/reload-plugins`. Your clone never changes what the app runs, so you can switch branches in it freely.
+
+`scripts/live.sh` moves the live checkout in and out of the app. It is for development only: it never installs or updates a release. Install the release in the app, as the README says, and update it there.
 
 ```bash
 scripts/live.sh setup
@@ -76,19 +77,19 @@ makes the live checkout on master, installs it from the `pipcast` marketplace an
 scripts/live.sh pr 12
 ```
 
-puts a pull request in the app. `scripts/live.sh <branch or commit>` puts any other commit there and `scripts/live.sh master` puts master there, each taking the published release out of the app.
+puts a pull request in the app. `scripts/live.sh <branch or commit>` puts any other commit there and `scripts/live.sh master` puts master there. Each turns off the release that is on, and remembers which.
 
 ```bash
 scripts/live.sh published
 ```
 
-updates the published release, or installs it from erdembircan-plugins, and puts it back, taking the live checkout out. `scripts/live.sh` on its own says what the app runs now. After any of them, run `/reload-plugins` in a session, or start a new one. An install that fails moves nothing. Only committed work reaches the app, so run `scripts/build.sh` and commit what it builds first.
+takes the live checkout out and turns that release back on. With no release installed it moves nothing, since the app would be left with no Pipcast. `scripts/live.sh` on its own says what the app runs now. After any of them, run `/reload-plugins` in a session, or start a new one. Only committed work reaches the app, so run `scripts/build.sh` and commit what it builds first.
 
 ```bash
 scripts/live.sh remove
 ```
 
-takes the live checkout out of Claude Code altogether: it uninstalls `pipcast@pipcast`, removes the `pipcast` marketplace and the live checkout's folder, and leaves the published release alone in the app. With no published release installed it removes nothing, since the app would be left with no Pipcast: run `scripts/live.sh published` first. A station started from the live checkout runs from that folder, so `remove` stops the station first, and a session on air starts it again from the published release within half a minute. `scripts/live.sh setup` makes the live checkout again.
+does the same, then takes the live checkout out of Claude Code altogether: it uninstalls `pipcast@pipcast` and removes the `pipcast` marketplace and the live checkout's folder. With no release installed it removes nothing. A station started from the live checkout runs from that folder, so `remove` stops the station first, and a session on air starts it again from the release within half a minute. `scripts/live.sh setup` makes the live checkout again.
 
 Each install keeps its own settings, since Claude Code saves a plugin's options under its id.
 
@@ -100,7 +101,7 @@ Each install keeps its own settings, since Claude Code saves a plugin's options 
 
 ## Anthropic's plugin directory
 
-People get Pipcast from Anthropic's plugin directory, the catalog under **Customize > Plugins** on claude.ai and in the desktop app. A copy added there reaches Claude Code as `pipcast@synced`. Anthropic's official marketplace on GitHub, `anthropics/claude-plugins-official`, takes no submissions: plugins reach the directory through its developer portal, at [claude.ai/directory/manage](https://claude.ai/directory/manage).
+People get Pipcast from two places: Anthropic's plugin directory, the catalog under **Customize > Plugins** on claude.ai and in the desktop app, and erdembircan-plugins. A copy added from the directory reaches Claude Code as `pipcast@synced`. Anthropic's official marketplace on GitHub, `anthropics/claude-plugins-official`, takes no submissions: plugins reach the directory through its developer portal, at [claude.ai/directory/manage](https://claude.ai/directory/manage).
 
 The directory reads only `plugin/`. Before a version can go live, it validates the plugin against the [plugin pre-submission checklist](https://claude.com/docs/plugins/pre-submission-checklist), scans it for anything it does that the README doesn't say, and holds it to the [Software Directory Policy](https://support.claude.com/en/articles/13145358-anthropic-software-directory-policy) and the [Software Directory Terms](https://support.claude.com/en/articles/13145338-anthropic-software-directory-terms).
 
@@ -143,9 +144,12 @@ and add `pipcast.zip` with **Customize > Plugins > Add > Upload plugin**. It rea
 
 ## Release
 
-Anthropic's plugin directory follows the `release` branch. A version reaches people only when `release` moves to it and a reviewer clears it, and people who have Pipcast then get it as a session starts.
+People get a new version from each place on its own schedule:
 
-So a pull request that changes what `plugin/` holds raises the version too: the patch for a fix, as in 1.0.1, and the minor for something new, as in 1.1.0. Raise it in `packages/mod/plugin.json`, in `Constants.version` in `station/Sources/StationCore/Constants.swift`, and in the root `package.json` and `package-lock.json`; tests fail when they differ. The station's binary carries its version, so run `scripts/build.sh` on a Mac and commit what it builds.
+- **Anthropic's plugin directory** follows the `release` branch. A version reaches people there only when `release` moves to it and a reviewer clears it, and they get it as a session starts.
+- **erdembircan-plugins** installs `plugin/` from master's newest commit. An install already made moves only with the version: `claude plugin update pipcast@erdembircan-plugins` keeps the copy it has while `version` stays the same, whatever changed in `plugin/`.
+
+So a pull request that changes what `plugin/` holds raises the version too: the patch for a fix, as in 1.0.1, and the minor for something new, as in 1.1.0. Raise it in `packages/mod/plugin.json`, in `Constants.version` in `station/Sources/StationCore/Constants.swift`, and in the root `package.json` and `package-lock.json`; tests fail when they differ. The station's binary carries its version, so run `scripts/build.sh` on a Mac and commit what it builds. Until Pipcast's first release, nobody has a copy to update, so the version stays 1.0.0.
 
 To release a version once it's on master:
 
@@ -157,8 +161,6 @@ To release a version once it's on master:
    ```
 
 3. The directory scans the new commit, at once through the push webhook, and holds it for a reviewer. Follow it on Pipcast's **Versions** tab in the [developer portal](https://claude.ai/directory/manage), and select **Publish update** once it's approved.
-
-erdembircan-plugins installs `plugin/` from master's newest commit, whatever `release` holds, and `scripts/live.sh published` brings that copy to your app.
 
 ## The demo video
 

@@ -1,15 +1,17 @@
 #!/bin/bash
-# What the Claude desktop app runs: the published release of Pipcast, or the
-# live checkout while a change is tried, never both.
+# Puts a change to Pipcast in the Claude desktop app, for trying it, and takes
+# it out again. It is for development only: it never installs or updates a
+# release of Pipcast. People install the release in the app, from Anthropic's
+# plugin directory (pipcast@synced) or from erdembircan-plugins
+# (pipcast@erdembircan-plugins), and so do you.
 #
-# The published release is pipcast@erdembircan-plugins, from the
-# erdembircan-plugins marketplace (erdembircan/plugin-marketplace on GitHub).
-# The live checkout is a second checkout of this repository in a folder beside
-# the main checkout, named after it (~/Developer/JS/pipcast-live beside
-# ~/Developer/JS/pipcast), installed as pipcast@pipcast from the pipcast
-# marketplace, this repository's own, which points at that folder. The
-# checkout you work in never changes what the app runs. PIPCAST_LIVE names
-# another folder, and PIPCAST_HOME another store for the station.
+# The change runs from the live checkout: a second checkout of this repository
+# in a folder beside the main checkout, named after it
+# (~/Developer/JS/pipcast-live beside ~/Developer/JS/pipcast), installed as
+# pipcast@pipcast from the pipcast marketplace, this repository's own, which
+# points at that folder. The checkout you work in never changes what the app
+# runs. PIPCAST_LIVE names another folder, and PIPCAST_HOME another store for
+# the station.
 #
 #   scripts/live.sh               says what the app runs now
 #   scripts/live.sh setup         makes the live checkout on master, installs
@@ -17,15 +19,15 @@
 #   scripts/live.sh pr <number>   puts a pull request's head in the app
 #   scripts/live.sh master        puts master in the app
 #   scripts/live.sh <ref>         puts any branch or commit in the app
-#   scripts/live.sh published     updates the published release, or installs
-#                                 it, and puts it back in the app
-#   scripts/live.sh remove        uninstalls the live checkout and removes it
-#                                 with the pipcast marketplace, leaving the
-#                                 published release alone in the app
+#   scripts/live.sh published     takes the live checkout out of the app and
+#                                 turns back on the release it turned off
+#   scripts/live.sh remove        does the same, then uninstalls the live
+#                                 checkout and removes it with the pipcast
+#                                 marketplace
 #
-# Putting a commit in the app takes the published release out of it, and
-# published takes the live checkout out. An install that fails moves nothing.
-# Sessions pick a change up on /reload-plugins, or when they start.
+# Putting the live checkout in the app turns off every release of Pipcast that
+# is on, and remembers which; published turns those back on. The app never
+# runs both. Sessions pick a change up on /reload-plugins, or when they start.
 set -euo pipefail
 
 root="$(cd "$(dirname "$0")/.." && pwd)"
@@ -36,27 +38,41 @@ live="${PIPCAST_LIVE:-$(dirname "$main")/$(basename "$main")-live}"
 store="${PIPCAST_HOME:-$HOME/Library/Application Support/Pipcast}"
 claude="$("$root/scripts/claude-bin.sh")"
 
-# The two installs the app can run, and the marketplaces they come from
+# The live checkout's install, and the marketplace it comes from
 live_id="pipcast@pipcast"
 live_market="pipcast"
-published_id="pipcast@erdembircan-plugins"
-published_market="erdembircan-plugins"
+# Where live.sh keeps the releases it turned off, one id a line
+record="$(git -C "$main" rev-parse --path-format=absolute --git-common-dir)/pipcast-live-releases"
 
 # The live checkout's commit and subject, on one line
 describe() {
   git -C "$live" log -1 --format='%h %s'
 }
 
-# What Claude Code lists for an install at user scope: its state (enabled,
-# disabled or missing) or its version
+# What Claude Code lists for an install outside a project's settings: its
+# state (enabled, disabled or missing) or its version
 listed() { # state|version <id>
   { "$claude" plugin list --json 2>/dev/null || true; } | node -e '
     let plugins = []
     try { plugins = JSON.parse(require("node:fs").readFileSync(0, "utf8")) } catch {}
-    const plugin = plugins.find((entry) => entry.id === process.argv[2] && entry.scope === "user")
+    const plugin = plugins.find((entry) => entry.id === process.argv[2] && entry.scope !== "project" && entry.scope !== "local")
     if (process.argv[1] === "version") process.stdout.write(plugin?.version ?? "")
     else process.stdout.write(plugin === undefined ? "missing" : plugin.enabled ? "enabled" : "disabled")
   ' "$1" "$2"
+}
+
+# The releases of Pipcast Claude Code has, one id a line: every pipcast install
+# but the live checkout's, from the directory or a marketplace, leaving out
+# those a project's settings hold
+releases() {
+  { "$claude" plugin list --json 2>/dev/null || true; } | node -e '
+    let plugins = []
+    try { plugins = JSON.parse(require("node:fs").readFileSync(0, "utf8")) } catch {}
+    const ids = plugins
+      .filter((entry) => typeof entry.id === "string" && entry.id.startsWith("pipcast@") && entry.id !== process.argv[1] && entry.scope !== "project" && entry.scope !== "local")
+      .map((entry) => entry.id)
+    process.stdout.write([...new Set(ids)].sort().map((id) => id + "\n").join(""))
+  ' "$live_id"
 }
 
 # Whether Claude Code has a marketplace by that name
@@ -77,19 +93,66 @@ turn() { # on|off <id>
   esac
 }
 
+# Puts the live checkout in the app: turns off every release that is on, and
+# remembers which
+step_in() {
+  local id
+  for id in $(releases); do
+    if [[ "$(listed state "$id")" == enabled ]]; then
+      turn off "$id"
+      if ! grep -qxF "$id" "$record" 2>/dev/null; then
+        echo "$id" >>"$record"
+      fi
+    fi
+  done
+  turn on "$live_id"
+}
+
+# Takes the live checkout out of the app and turns back on the releases it
+# turned off. With none remembered and none on, it turns on every release
+step_out() {
+  local id all back="" some_on=0
+  turn off "$live_id"
+  all="$(releases)"
+  for id in $all; do
+    if [[ "$(listed state "$id")" == enabled ]]; then
+      some_on=1
+    fi
+  done
+  if [[ -f "$record" ]]; then
+    for id in $(cat "$record"); do
+      if grep -qxF "$id" <<<"$all"; then
+        back="$back $id"
+      fi
+    done
+  fi
+  if [[ -z "$back" && $some_on -eq 0 ]]; then
+    back="$all"
+  fi
+  for id in $back; do
+    turn on "$id"
+  done
+  rm -f "$record"
+}
+
 # What the app runs, as a phrase
 running() {
-  local live_now published_now
+  local live_now id ids="" versions=""
   live_now="$(listed state "$live_id")"
-  published_now="$(listed state "$published_id")"
-  if [[ "$live_now" == enabled && "$published_now" == enabled ]]; then
-    echo "both the published release and the live checkout"
+  for id in $(releases); do
+    if [[ "$(listed state "$id")" == enabled ]]; then
+      ids="${ids:+$ids and }$id"
+      versions="${versions:+$versions and }$id $(listed version "$id")"
+    fi
+  done
+  if [[ "$live_now" == enabled && -n "$ids" ]]; then
+    echo "both the live checkout and the release, $ids"
   elif [[ "$live_now" == enabled && -e "$live/.git" ]]; then
     echo "the live checkout in $live, at $(describe)"
   elif [[ "$live_now" == enabled ]]; then
     echo "the live checkout, which is missing from $live"
-  elif [[ "$published_now" == enabled ]]; then
-    echo "the published release, $published_id $(listed version "$published_id")"
+  elif [[ -n "$ids" ]]; then
+    echo "the release, $versions"
   else
     echo "no Pipcast"
   fi
@@ -99,6 +162,22 @@ running() {
 unmoved() { # <what failed>
   echo "$1, so nothing moved: the app runs $(running)." >&2
   exit 1
+}
+
+# Stops when no release is installed: without the live checkout, the app would
+# run no Pipcast
+need_release() { # published|remove
+  if [[ -z "$(releases)" ]]; then
+    case "$1" in
+      published)
+        echo "No release of Pipcast is installed, so nothing moved: the app runs $(running). Add Pipcast in the app, from Anthropic's plugin directory or from erdembircan-plugins, then run scripts/live.sh published again." >&2
+        ;;
+      remove)
+        echo "No release of Pipcast is installed, so nothing was removed: without the live checkout the app would run no Pipcast. Add Pipcast in the app, from Anthropic's plugin directory or from erdembircan-plugins, then run scripts/live.sh remove again." >&2
+        ;;
+    esac
+    exit 1
+  fi
 }
 
 need_live() {
@@ -140,8 +219,7 @@ put() {
   need_clean moved
   before="$(running)"
   git -C "$live" checkout -q --detach "$commit"
-  turn off "$published_id"
-  turn on "$live_id"
+  step_in
   moved "$before" "$what"
 }
 
@@ -151,10 +229,10 @@ case "${1:-}" in
     echo "The app runs $now."
     case "$now" in
       both*)
-        echo "Every session runs Pipcast twice: run scripts/live.sh published or scripts/live.sh master to keep one."
+        echo "Both are on: run scripts/live.sh published or scripts/live.sh master to keep one."
         ;;
       'no Pipcast')
-        echo "Run scripts/live.sh published to put the published release in the app, or scripts/live.sh setup to put the live checkout there."
+        echo "Add Pipcast in the app, from Anthropic's plugin directory or from erdembircan-plugins, or run scripts/live.sh setup to try the live checkout."
         ;;
       'the live checkout in'*)
         if [[ "$(git -C "$live" rev-parse HEAD)" == "$(git -C "$main" rev-parse origin/master)" ]]; then
@@ -178,8 +256,7 @@ case "${1:-}" in
     if [[ "$(listed state "$live_id")" == missing ]] && ! "$claude" plugin install "$live_id" --scope user >/dev/null; then
       unmoved "Could not install $live_id from the live checkout"
     fi
-    turn off "$published_id"
-    turn on "$live_id"
+    step_in
     moved "$before"
     ;;
   pr)
@@ -196,24 +273,9 @@ case "${1:-}" in
     put "$(git -C "$main" rev-parse origin/master)" "master"
     ;;
   published)
-    if [[ "$(listed state "$published_id")" == missing ]] && ! known "$published_market"; then
-      echo "The published release comes from the $published_market marketplace, which Claude Code doesn't have, so nothing moved. Add it from a terminal, then run scripts/live.sh published again:" >&2
-      echo "  claude plugin marketplace add erdembircan/plugin-marketplace" >&2
-      exit 1
-    fi
+    need_release published
     before="$(running)"
-    if [[ "$(listed state "$published_id")" == missing ]]; then
-      if ! "$claude" plugin marketplace update "$published_market" >/dev/null; then
-        unmoved "Could not update the $published_market marketplace"
-      fi
-      if ! "$claude" plugin install "$published_id" --scope user >/dev/null; then
-        unmoved "Could not install $published_id"
-      fi
-    elif ! "$claude" plugin update "$published_id" --scope user >/dev/null 2>&1; then
-      echo "Could not update the published release: it stays at $(listed version "$published_id")." >&2
-    fi
-    turn off "$live_id"
-    turn on "$published_id"
+    step_out
     moved "$before"
     ;;
   remove)
@@ -221,16 +283,12 @@ case "${1:-}" in
       echo "There is no live checkout to remove: the app runs $(running)."
       exit 0
     fi
-    if [[ "$(listed state "$published_id")" == missing ]]; then
-      echo "The published release is not installed, so nothing was removed: without the live checkout the app would run no Pipcast. Run scripts/live.sh published first, then scripts/live.sh remove." >&2
-      exit 1
-    fi
+    need_release remove
     if [[ -e "$live/.git" ]]; then
       need_clean "was removed"
     fi
     before="$(running)"
-    turn off "$live_id"
-    turn on "$published_id"
+    step_out
     if [[ "$(listed state "$live_id")" != missing ]]; then
       "$claude" plugin uninstall "$live_id" --scope user >/dev/null
     fi

@@ -1,6 +1,6 @@
 {
   "name": "pipcast",
-  "description": "Pipcast's development marketplace, for trying Pipcast straight from this repository. Install Pipcast itself from Anthropic's plugin directory.",
+  "description": "Pipcast's development marketplace, for trying Pipcast straight from this repository. Install Pipcast itself from Anthropic's plugin directory or from erdembircan-plugins.",
   "owner": {
     "name": "Erdem Bircan",
     "url": "https://github.com/erdembircan"

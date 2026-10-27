@@ -19,13 +19,31 @@ What plays in the window is KLWD, a local TV news channel for your sessions, sty
 
 ## Install
 
-Pipcast is in Anthropic's plugin directory.
+Pipcast is in two places: Anthropic's plugin directory, and [erdembircan-plugins](https://github.com/erdembircan/plugin-marketplace), a marketplace of Claude Code plugins. Install it from one of them. With both, Claude Code runs the copy from erdembircan-plugins.
+
+### From Anthropic's plugin directory
 
 1. In the Claude desktop app, or on claude.ai, open **Customize**, then **Plugins**.
 2. Under **Discover**, find **Pipcast** and select **Add**.
 3. Start a new Claude Code session, signed in to the same account. Claude Code downloads Pipcast as the session starts: run `/reload-plugins` in that session, or start another one, and Pipcast is on.
 
 On a Team or Enterprise plan, the directory shows only if your organization keeps it.
+
+### From erdembircan-plugins
+
+In the Claude desktop app, click **+** next to the prompt box, then **Plugins**. Choose **Add marketplace**, enter `erdembircan/plugin-marketplace`, and add **Pipcast**.
+
+Or from a terminal:
+
+```bash
+claude plugin marketplace add erdembircan/plugin-marketplace
+```
+
+```bash
+claude plugin install pipcast@erdembircan-plugins
+```
+
+Sessions you start after that have it.
 
 ## Get started
 
@@ -148,15 +166,23 @@ KLWD is an ordinary window, so it appears in screen shares and recordings, with 
 
 ## Update and uninstall
 
-Pipcast updates by itself. When a new version is out, Claude Code downloads it as a session starts, and asks you to run `/reload-plugins`.
-
-To uninstall Pipcast, open **Customize**, then **Plugins**, open **Pipcast**, open its menu and select **Remove**. Claude Code removes it the next time it starts. To turn it off on one Mac only, run:
+**From Anthropic's plugin directory**, Pipcast updates by itself: when a new version is out, Claude Code downloads it as a session starts, and asks you to run `/reload-plugins`. To uninstall it, open **Customize**, then **Plugins**, open **Pipcast**, open its menu and select **Remove**. Claude Code removes it the next time it starts. To turn it off on one Mac only, run:
 
 ```bash
 claude plugin disable pipcast@synced
 ```
 
-Uninstalling leaves the files Pipcast kept in `~/Library/Application Support/Pipcast`. Delete that folder to remove them too.
+**From erdembircan-plugins**, update or uninstall it from a terminal, then start a new session:
+
+```bash
+claude plugin update pipcast@erdembircan-plugins
+```
+
+```bash
+claude plugin uninstall pipcast@erdembircan-plugins
+```
+
+Either way, uninstalling leaves the files Pipcast kept in `~/Library/Application Support/Pipcast`. Delete that folder to remove them too.
 
 ## Development
 
