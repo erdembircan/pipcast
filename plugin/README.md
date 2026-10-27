@@ -47,7 +47,7 @@ Run `/pipcast auto` or `/pipcast transparency` on its own to see whether that se
 
 Pipcast is two programs, and both run only on your Mac.
 
-**The mod** is Pipcast's code inside Claude Code. It runs in every Claude Code session while Pipcast is on, on air or not, so a session that goes on air mid-turn shows where it stands at once. It draws the band above the prompt box, answers `/pipcast`, and follows each session's events: turns starting and ending, the tools Claude calls, permission requests and errors. It never reads the prompts you send.
+**The mod** is Pipcast's code inside Claude Code. It runs in every Claude Code session while Pipcast is on, on air or not, so a session that goes on air mid-turn shows where it stands at once. It draws the band above the prompt box, answers `/pipcast`, and follows each session's events: the session starting and ending, prompts sent, turns starting and ending, the tools Claude calls, permission requests and errors. From a prompt you send, it takes only the session's title and where its transcript is, never the prompt itself.
 
 The mod reads:
 
