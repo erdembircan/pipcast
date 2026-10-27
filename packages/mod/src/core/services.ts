@@ -41,6 +41,32 @@ export interface Io {
 
 export type TuneInResult = { status: 'on'; tunedInAt: number } | { status: 'cannot-start' }
 
+// A record no session has written for this long belongs to a session that
+// stopped without tuning out, as when Claude Code was force-quit. A session
+// on air writes its whole record every HEARTBEAT_MS; one that a Mac's sleep
+// kept quiet longer writes it again at its first heartbeat after the Mac wakes.
+export const ORPHAN_MS = 3_600_000
+
+// Deletes every record in the store, with the temporary file beside it, that no
+// session has written for ORPHAN_MS, and a temporary file left alone that old,
+// but never the record of the session `own`
+export async function sweepOrphans(io: Io, home: string, own: string): Promise<void> {
+  const { sessions } = storePaths(home)
+  const now = await io.now()
+  for (const name of await io.list(sessions)) {
+    if (!name.endsWith('.json') && !name.endsWith('.json.tmp')) {
+      continue
+    }
+    if (name === `${own}.json` || name === `${own}.json.tmp`) {
+      continue
+    }
+    const found = await io.stat(`${sessions}/${name}`)
+    if (found !== null && now - found.mtimeMs > ORPHAN_MS) {
+      await io.remove(`${sessions}/${name}`)
+    }
+  }
+}
+
 async function readJson(io: Io, path: string): Promise<unknown> {
   const text = await io.read(path)
   if (text === null) {
@@ -84,6 +110,8 @@ export async function tuneIn(io: Io, model: SessionModel): Promise<TuneInResult>
   const home = await io.storeHome()
   const now = await io.now()
   const id = model.record.id
+  // Records a session left behind go first; a failure here never stops a tune-in
+  await sweepOrphans(io, home, id).catch(() => undefined)
   await writeRecord(io, home, model, now, now)
   if (!(await ensureStation(io, home))) {
     await io.remove(storePaths(home).session(id))

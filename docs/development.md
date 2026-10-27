@@ -12,7 +12,7 @@ Pipcast has three parts.
 
 The sessions and the station talk only through files in `~/Library/Application Support/Pipcast`. [architecture.md](architecture.md) has the details.
 
-An install gets none of this source. It copies `plugin/`, which holds only what runs, all of it built from the source: the mod bundled into one file, the station's binary, the broadcast's page and its sounds, and the plugin's manifest, icon and license.
+An install gets none of this source. It copies `plugin/`, which holds only what runs, all of it built from the source: the mod bundled into one file, the station's binary, the broadcast's page and its sounds, and the plugin's manifest, icon, README and license.
 
 ## Build
 
@@ -26,7 +26,9 @@ npm ci
 scripts/build.sh
 ```
 
-builds everything an install gets into `plugin/`: the mod bundled into one file, the station, the broadcast's page and its sounds, with the plugin's manifest, icon and license. `plugin/` belongs to the build. Don't edit it by hand or keep anything else in it: the build stops when it finds a file there that it doesn't make. Commit what it builds, since an install copies `plugin/` as it is, and CI fails a pull request whose `plugin/` differs from what its sources build.
+builds everything an install gets into `plugin/`: the mod bundled into one file, the station, the broadcast's page and its sounds, with the plugin's manifest, icon, README and license. `plugin/` belongs to the build. Don't edit it by hand or keep anything else in it: the build stops when it finds a file there that it doesn't make. Commit what it builds, since an install copies `plugin/` as it is, and CI fails a pull request whose `plugin/` differs from what its sources build.
+
+The build minifies nothing, since Anthropic's plugin directory holds code it can't read for a reviewer. The broadcast's page is its own code, `station.js`, bundled as written, beside React's production files, copied unchanged from its npm package into `plugin/station/web/vendor` with React's license. The page loads React first.
 
 The plugin's icon is KLWD's tower over the city at dusk, its beacon sending out the board's signal. `scripts/build-icon.mjs` draws it in layers from the design system's colours and the band's letters: `assets/icon.svg` stacks them, and `assets/icon-layers` holds each one on its own, as an SVG and as a 2048-pixel PNG, with `layers.json` saying how they stack, for animating the icon. The build draws them every time; their PNGs render only on a Mac, with Chrome, and on CI the build stops when the PNGs were rendered from another drawing.
 
@@ -34,12 +36,14 @@ The plugin's icon is KLWD's tower over the city at dusk, its beacon sending out 
 
 The plugin's manifest is `packages/mod/plugin.json`, which the build copies to `plugin/.claude-plugin/plugin.json`. Its `version` is the plugin's version, and the manifest is the only place it is set: the marketplaces' entries leave it out, the station's `Constants.version` and the root `package.json` repeat it, and tests fail when either of them differs.
 
-Two marketplaces list Pipcast. Each entry repeats the manifest's display fields, `displayName`, `description`, `author`, `homepage`, `repository`, `license` and `keywords`, because Claude Code shows an entry's own value wherever it sets one:
+The plugin's README is `packages/mod/README.md`, which the build copies to `plugin/README.md`. Anthropic's plugin directory shows it as Pipcast's listing, so it is written for someone deciding whether to add Pipcast, and it says everything Pipcast runs, reads and keeps. Its sections **What Pipcast runs and reads** and **Privacy** are in this repository's README too, word for word, and `scripts/check-directory.mjs` fails when the two differ. When Pipcast starts to run, read or keep anything new, say so in both.
 
-- **erdembircan-plugins**, in [erdembircan/plugin-marketplace](https://github.com/erdembircan/plugin-marketplace), is where Pipcast is published. Its entry is a `git-subdir` source that installs `plugin/` from this repository's master branch. Until a plugin is installed, Claude Code shows only what its entry says, so when a display field changes in the manifest, change it in that entry too.
+The manifest also carries what the directory lists and Claude Code itself ignores: the icon, `assets/icon-1024.png` copied to `plugin/assets/icon.png`; links to the README, the issues and the README's privacy section; and the screenshots, as links to `assets/screenshots` on the master branch.
+
+Two marketplaces list Pipcast as well. Each entry repeats the manifest's display fields, `displayName`, `description`, `author`, `homepage`, `repository`, `license` and `keywords`, because Claude Code shows an entry's own value wherever it sets one:
+
 - **pipcast**, in this repository's `.claude-plugin/marketplace.json`, is for development: `scripts/live.sh` installs the live checkout from it, and `scripts/verify-install.sh` installs this clone from it. Its entry names `./plugin`, and a test fails when its display fields differ from the manifest's.
-
-The manifest also carries what Anthropic's plugin directory lists and Claude Code itself ignores: the icon, `assets/icon-1024.png` copied to `plugin/assets/icon.png`; links to the README, the issues and the README's privacy section; and the screenshots, as links to `assets/screenshots` on the master branch.
+- **erdembircan-plugins**, in [erdembircan/plugin-marketplace](https://github.com/erdembircan/plugin-marketplace), listed Pipcast before the directory did, and `scripts/live.sh published` still installs from it. Its entry is a `git-subdir` source that installs `plugin/` from this repository's master branch. When a display field changes in the manifest, change it in that entry too.
 
 ## Test
 
@@ -47,7 +51,7 @@ The manifest also carries what Anthropic's plugin directory lists and Claude Cod
 scripts/test.sh
 ```
 
-runs every check: lint, types, the unit tests of each part, the station's Swift tests, the marketplace and the built plugin validated by the engine bundled with the Claude desktop app, the plugin against the plugin directory's submission checks as well, the mod's kit tests against it, and `scripts/live.sh` in a throwaway copy of the repository.
+runs every check: lint, types, the unit tests of each part, the station's Swift tests, the marketplace and the built plugin validated by the engine bundled with the Claude desktop app, the plugin against the plugin directory's rules, with the engine's own checks and `scripts/check-directory.mjs`, the mod's kit tests against it, and `scripts/live.sh` in a throwaway copy of the repository.
 
 ```bash
 scripts/verify.sh
@@ -59,7 +63,7 @@ runs the whole thing for real, with no window of yours involved: a headless Clau
 
 The desktop app runs the published release of Pipcast, or the live checkout while a change is tried, never both:
 
-- **The published release**, `pipcast@erdembircan-plugins`, which everyone who installs Pipcast gets.
+- **The published release**, `pipcast@erdembircan-plugins`: master's newest version, from erdembircan-plugins. People who add Pipcast from Anthropic's plugin directory get the version it last published, as `pipcast@synced`, and `scripts/live.sh` doesn't switch to that copy yet.
 - **The live checkout**, `pipcast@pipcast`: a second checkout of this repository in a folder beside your clone, named after it (`~/Developer/JS/pipcast-live` beside `~/Developer/JS/pipcast`). The `pipcast` marketplace points at it, and every session reads the plugin from its `plugin/` folder when it starts or on `/reload-plugins`. Your clone never changes what the app runs, so you can switch branches in it freely.
 
 ```bash
@@ -94,13 +98,67 @@ Each install keeps its own settings, since Claude Code saves a plugin's options 
 ~/Developer/JS/pipcast-live/plugin/station/pipcast-station stop --home ~/Library/Application\ Support/Pipcast
 ```
 
+## Anthropic's plugin directory
+
+People get Pipcast from Anthropic's plugin directory, the catalog under **Customize > Plugins** on claude.ai and in the desktop app. A copy added there reaches Claude Code as `pipcast@synced`. Anthropic's official marketplace on GitHub, `anthropics/claude-plugins-official`, takes no submissions: plugins reach the directory through its developer portal, at [claude.ai/directory/manage](https://claude.ai/directory/manage).
+
+The directory reads only `plugin/`. Before a version can go live, it validates the plugin against the [plugin pre-submission checklist](https://claude.com/docs/plugins/pre-submission-checklist), scans it for anything it does that the README doesn't say, and holds it to the [Software Directory Policy](https://support.claude.com/en/articles/13145358-anthropic-software-directory-policy) and the [Software Directory Terms](https://support.claude.com/en/articles/13145338-anthropic-software-directory-terms).
+
+```bash
+node scripts/check-directory.mjs
+```
+
+checks what can be checked here: a README of 40 words or more in `plugin/`, with the two sections it shares with this repository's README; the manifest's name and fields and the license; code that stays readable, with React's files exactly as its npm package has them; the files in `plugin/` that the directory's validator can't inspect, each listed in the script with the reason it ships; and the repository's file names, links and size, which can stop the portal before it reports anything. CI runs it after the build, and so does `scripts/test.sh`.
+
+### What review holds
+
+The station's binary and its six sounds are files the directory's validator can't inspect, so every version is held for a reviewer at Anthropic, and goes live only once the reviewer clears it. A hold isn't a rejection. React's production files, which come minified, and the stylesheet that loads the page's fonts may be held for the same reviewer. The README's **What Pipcast runs and reads** and **Privacy** sections are what the reviewer and the security scan read Pipcast against, so keep them true.
+
+### Submit
+
+1. Put the `release` branch on the commit to submit, as Release, below, says.
+2. From the claude.ai account that should own the listing, on a Pro or Max plan, open [claude.ai/directory/manage](https://claude.ai/directory/manage) and select **Submit new**, then **Plugin bundle**.
+3. On **Source**, enter `erdembircan/pipcast` as the repository, `plugin` as the plugin path, and `release` as the branch. While the repository is private, the portal asks you to connect GitHub, install the Claude GitHub App on the repository, and agree that its source is uploaded to Anthropic for scanning.
+4. Select **Validate**. Fix anything the report marks **Blocking**, push, and select **Re-validate**. The holds above show as **Policy hold**, and don't stop you.
+5. **Listing details** come from the manifest and the README.
+6. On **Data handling**, the answers are:
+   - It reads and keeps personal data, on the Mac only: session titles, folder names, what Claude is doing, Claude's questions and last words, and the account's usage limits, to show them in the window.
+   - It sends no data to any service, and makes no network request.
+   - A session's file lasts while the session is on air: the session deletes it when it goes off the air or ends, and a file a session left behind is deleted the next time a session goes on air, once it's an hour old.
+   - It isn't meant for people under 18.
+7. On **Compliance**, check the contact email and select the four acknowledgements.
+8. On **Review and submit**, keep **GitHub push webhook**, leave **Auto-publish passing versions** off, and select **Submit for review**.
+
+The listing goes live only once the repository is public. When the reviewer has cleared Pipcast, make the repository public, select **Check for new commits** on Pipcast's page in the portal, and then **Publish**. [Track your directory submission](https://claude.com/docs/directory/submission-status) says what each status in the portal means, and who acts next.
+
+### Try the directory's copy first
+
+The directory installs what is in `plugin/`, and nothing else. To try that copy the way people get it, zip the folder:
+
+```bash
+(cd plugin && zip -r -X ~/Downloads/pipcast.zip . -x '*.DS_Store')
+```
+
+and add `pipcast.zip` with **Customize > Plugins > Add > Upload plugin**. It reaches Claude Code as `pipcast@synced`, which an installed copy of the same name outranks, so run `claude plugin disable pipcast@pipcast` first, and `claude plugin enable pipcast@pipcast` when you're done. Then remove the upload in **Customize > Plugins**.
+
 ## Release
 
-What master holds is what a new install gets: Pipcast's entry in erdembircan-plugins names no commit, so Claude Code installs `plugin/` from master's newest one. An install already made moves only with the version: `claude plugin update pipcast@erdembircan-plugins` keeps the copy it has while `version` stays the same, whatever changed in `plugin/`.
+Anthropic's plugin directory follows the `release` branch. A version reaches people only when `release` moves to it and a reviewer clears it, and people who have Pipcast then get it as a session starts.
 
 So a pull request that changes what `plugin/` holds raises the version too: the patch for a fix, as in 1.0.1, and the minor for something new, as in 1.1.0. Raise it in `packages/mod/plugin.json`, in `Constants.version` in `station/Sources/StationCore/Constants.swift`, and in the root `package.json` and `package-lock.json`; tests fail when they differ. The station's binary carries its version, so run `scripts/build.sh` on a Mac and commit what it builds.
 
-Once the new version is on master, tag that commit `v<version>`, as in `v1.1.0`, and publish a GitHub release from the tag. `scripts/live.sh published` brings it to your app. Everyone else gets it with `claude plugin update pipcast@erdembircan-plugins`, or by itself if they turned on auto-update for erdembircan-plugins.
+To release a version once it's on master:
+
+1. Tag its commit `v<version>`, as in `v1.1.0`, push the tag, and publish a GitHub release from it.
+2. Move `release` to the tag:
+
+   ```bash
+   git push origin 'v1.1.0^{commit}:refs/heads/release'
+   ```
+
+3. The directory scans the new commit, at once through the push webhook, and holds it for a reviewer. Follow it on Pipcast's **Versions** tab in the [developer portal](https://claude.ai/directory/manage), and select **Publish update** once it's approved.
+
+erdembircan-plugins installs `plugin/` from master's newest commit, whatever `release` holds, and `scripts/live.sh published` brings that copy to your app.
 
 ## The demo video
 

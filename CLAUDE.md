@@ -4,9 +4,9 @@ The README is for people who install Pipcast. How to build, test and try a chang
 
 ## plugin/ is built
 
-`plugin/` is what an install copies, and only that: the mod bundled into one file, its manifest, its state contract, its icon, the license, and the station with its page and jingles. `scripts/build.sh` writes all of it from the sources, and its last step stops when `plugin/` holds a file it does not make.
+`plugin/` is what an install copies, and only that: the mod bundled into one file, its manifest, its README, its state contract, its icon, the license, and the station with its page and jingles. `scripts/build.sh` writes all of it from the sources, and its last step stops when `plugin/` holds a file it does not make.
 
-- Never edit `plugin/` by hand. The mod is in `packages/mod`, with its manifest in `packages/mod/plugin.json`; the contract it shares with the station and the broadcast is in `packages/contract`; the broadcast is in `packages/director` and `packages/renderer`; the station is in `station/`.
+- Never edit `plugin/` by hand. The mod is in `packages/mod`, with its manifest in `packages/mod/plugin.json` and its README in `packages/mod/README.md`; the contract it shares with the station and the broadcast is in `packages/contract`; the broadcast is in `packages/director` and `packages/renderer`; the station is in `station/`.
 - After changing any of them, run `scripts/build.sh` and commit what it builds with the change. CI builds again and fails when the result differs from what is committed.
 - A change to what `plugin/` holds reaches the people who installed Pipcast only with a new version, so the pull request that makes it raises the version too. Release in `docs/development.md` says how.
 - A change to `station/Sources` or `scripts/build-station.sh` means a new station binary, which only builds on a Mac. Run `scripts/build.sh` after the last such change, then commit.
@@ -14,11 +14,19 @@ The README is for people who install Pipcast. How to build, test and try a chang
 - Keep sources, tests and tools out of `plugin/`. A new file the plugin needs goes in `SHIPS` in `scripts/build-plugin.mjs`, and in the build step that makes it.
 - Code in `packages/mod/src` and `packages/contract/src` imports with relative paths only: the kit tests run against the built plugin in a folder of their own, where an alias such as `@pipcast/contract` resolves to nothing.
 
+## Anthropic's plugin directory
+
+People install Pipcast from Anthropic's plugin directory, which reads only `plugin/` and checks every version against its rules. Anthropic's plugin directory in `docs/development.md` says what they are and how a version reaches people.
+
+- `scripts/check-directory.mjs` checks the rules that can be checked here, and CI runs it. Fix what it reports. A file the directory's validator can't inspect, such as the station's binary, goes in its `HELD` list only with the reason it ships, and holds every version for a reviewer.
+- `plugin/README.md`, built from `packages/mod/README.md`, is Pipcast's listing, and tells the people who add Pipcast everything it runs, reads and keeps. When the mod or the station starts to run, read or keep anything new, say so in its **What Pipcast runs and reads** or **Privacy** section, and in the same section of the root README, word for word.
+- Never minify what ships: the directory holds code it can't read for a reviewer.
+
 ## What the desktop app runs
 
 The Claude desktop app runs the published release of pipcast, or the live checkout while a change is tried, never both:
 
-- **The published release**, `pipcast@erdembircan-plugins`, from the `erdembircan-plugins` marketplace (`erdembircan/plugin-marketplace` on GitHub), whose entry installs `plugin/` from master.
+- **The published release**, `pipcast@erdembircan-plugins`, from the `erdembircan-plugins` marketplace (`erdembircan/plugin-marketplace` on GitHub), whose entry installs `plugin/` from master. People who install Pipcast get it from Anthropic's plugin directory instead, as `pipcast@synced`; `scripts/live.sh` doesn't switch to that copy yet.
 - **The live checkout**, `pipcast@pipcast`: a second checkout of this repository in a folder beside the main checkout, named after it (`~/Developer/JS/pipcast-live` beside `~/Developer/JS/pipcast`), installed from the `pipcast` marketplace, this repository's own, which points at that folder. Every session reads it from its `plugin/` folder when it starts or on `/reload-plugins`.
 
 The main checkout and its worktrees change nothing the app runs.

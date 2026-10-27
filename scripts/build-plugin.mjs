@@ -1,9 +1,9 @@
 // Builds what an install of pipcast gets, in plugin/: the mod bundled into one
-// ES module, hooks/register.js, beside its manifest, its state contract, its
-// icon and the license. The steps before this one build the station, its page
-// and its jingles into plugin/station. Last, it checks that plugin/ holds
-// exactly what ships, the files in SHIPS, and stops when it holds anything more
-// or anything less.
+// ES module, hooks/register.js, beside its manifest, its README, its state
+// contract, its icon and the license. The steps before this one build the
+// station, its page and its jingles into plugin/station. Last, it checks that
+// plugin/ holds exactly what ships, the files in SHIPS, and stops when it holds
+// anything more or anything less.
 
 import { execFileSync } from 'node:child_process'
 import { copyFileSync, existsSync, mkdirSync, writeFileSync } from 'node:fs'
@@ -19,6 +19,7 @@ const out = join(root, 'plugin')
 const SHIPS = [
   '.claude-plugin/plugin.json',
   'LICENSE',
+  'README.md',
   'assets/icon.png',
   'hooks/hooks.json',
   'hooks/register.js',
@@ -62,6 +63,7 @@ writeFileSync(join(out, 'hooks/hooks.json'), '{ "modules": ["./register.js"] }\n
 
 for (const [from, to] of [
   ['packages/mod/plugin.json', '.claude-plugin/plugin.json'],
+  ['packages/mod/README.md', 'README.md'],
   ['packages/mod/types/index.d.ts', 'types/index.d.ts'],
   ['assets/icon-1024.png', 'assets/icon.png'],
   ['LICENSE', 'LICENSE'],

@@ -1,6 +1,6 @@
 {
   "name": "pipcast",
-  "description": "Pipcast's development marketplace, for trying Pipcast straight from this repository. Install Pipcast itself from erdembircan/plugin-marketplace.",
+  "description": "Pipcast's development marketplace, for trying Pipcast straight from this repository. Install Pipcast itself from Anthropic's plugin directory.",
   "owner": {
     "name": "Erdem Bircan",
     "url": "https://github.com/erdembircan"
@@ -10,7 +10,7 @@
       "name": "pipcast",
       "source": "./plugin",
       "displayName": "Pipcast",
-      "description": "Picture in picture for Claude Code. While you work in other apps, a small window in the corner of your Mac's screen shows a live board of your sessions, and cuts to BREAKING NEWS, the way a 1990s local TV station would, when one needs you, finishes or stops on an error.",
+      "description": "Picture in picture for Claude Code. While you work in other apps, a small window in the corner of your Mac's screen shows a live board of your sessions, and cuts to BREAKING NEWS, the way a 1990s local TV station would, when one needs you, finishes or stops on an error. A small macOS app that comes with Pipcast runs the window, and nothing leaves your Mac.",
       "author": {
         "name": "Erdem Bircan",
         "url": "https://github.com/erdembircan"

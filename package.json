@@ -1,6 +1,6 @@
 {
   "name": "pipcast",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "private": true,
   "type": "module",
   "description": "Picture in picture for Claude Code",

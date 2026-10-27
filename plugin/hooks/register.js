@@ -1299,6 +1299,23 @@ function waitsOn(stop) {
 }
 
 // packages/mod/src/core/services.ts
+var ORPHAN_MS = 36e5;
+async function sweepOrphans(io, home, own) {
+  const { sessions } = storePaths(home);
+  const now = await io.now();
+  for (const name of await io.list(sessions)) {
+    if (!name.endsWith(".json") && !name.endsWith(".json.tmp")) {
+      continue;
+    }
+    if (name === `${own}.json` || name === `${own}.json.tmp`) {
+      continue;
+    }
+    const found = await io.stat(`${sessions}/${name}`);
+    if (found !== null && now - found.mtimeMs > ORPHAN_MS) {
+      await io.remove(`${sessions}/${name}`);
+    }
+  }
+}
 async function readJson(io, path) {
   const text = await io.read(path);
   if (text === null) {
@@ -1336,6 +1353,7 @@ async function tuneIn(io, model2) {
   const home = await io.storeHome();
   const now = await io.now();
   const id = model2.record.id;
+  await sweepOrphans(io, home, id).catch(() => void 0);
   await writeRecord(io, home, model2, now, now);
   if (!await ensureStation(io, home)) {
     await io.remove(storePaths(home).session(id));
