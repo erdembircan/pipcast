@@ -166,7 +166,18 @@ The app writes an upload over any Pipcast already installed in Claude Code, even
    ~/Developer/JS/pipcast-live/plugin/station/pipcast-station stop --home ~/Library/Application\ Support/Pipcast
    ```
 
-3. In the desktop app, add `pipcast.zip` with **Customize > Plugins > Add > Upload plugin**, and start a new session.
+3. In the desktop app, add `pipcast.zip` with **Customize > Plugins > Add > Upload plugin**, and start a new session. The upload is what runs, and not an older copy, when:
+
+   - the new session goes on air as it opens, and the window comes up
+   - `claude plugin list` shows one Pipcast, `pipcast@local-desktop-app-uploads`
+   - the station runs from the upload's folder, not from `~/Developer/JS/pipcast-live`:
+
+     ```bash
+     ps -axo command | grep '[p]ipcast-station serve'
+     ```
+
+   - Pipcast's page in **Customize > Plugins** has a **Settings** tab, with **Tune in every new session** and **Transparent window**
+
 4. When you're done, remove the upload in **Customize > Plugins**, stop the station again, install again any other copy you uninstalled, and put the live checkout back, on the commit from step 1:
 
    ```bash
