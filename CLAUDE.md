@@ -39,7 +39,7 @@ The main checkout and its worktrees change nothing the app runs.
   - `scripts/live.sh remove` does the same, then uninstalls the live checkout and removes it with the `pipcast` marketplace.
   - Then ask the user to run `/reload-plugins` in a session, or to start a new one.
 - Only committed work reaches the app. Run `scripts/build.sh` and commit what it builds before you put a branch there.
-- A copy from Anthropic's plugin directory is the one release `scripts/live.sh` can't see or turn off, and desktop sessions run it over the live checkout. When the user has one, a change put in the app runs in their desktop sessions only while that copy is off: ask them to turn it off in Customize > Plugins first, and back on when they're done.
+- A copy the desktop app hands in itself, from Anthropic's plugin directory or an upload in Customize > Plugins, is the one kind of release `scripts/live.sh` can't see or turn off, and desktop sessions run it over the live checkout. When the user has one, a change put in the app runs in their desktop sessions only while that copy is off: ask them to turn it off in Customize > Plugins first, and back on when they're done.
 - Every session shares the live checkout and what the app runs. Run `scripts/live.sh` first, and do not move the app off another session's pull request unless the user asks you to.
 - After merging a pull request the app was running, run `scripts/live.sh master` to keep it on master, or, when the user has a release, `scripts/live.sh published` to go back to it.
 - To check `scripts/live.sh` itself, run `scripts/test.d/50-live.sh`: it works in a throwaway copy. Running `scripts/live.sh` changes what the user's app runs.
