@@ -4,9 +4,9 @@
 # checkout beside that clone, two stand-in marketplaces with master's plugin/ as
 # a release of Pipcast, which the test installs the way the app would, a store
 # of its own for the station, and a throwaway Claude configuration for the
-# marketplaces. A copy from Anthropic's plugin directory can't be made here,
-# neither a terminal's pipcast@synced nor the one the desktop app hands in, and
-# neither can an upload, pipcast@local-desktop-app-uploads: those go untested.
+# marketplaces. A copy from Anthropic's plugin directory or an upload can't be
+# made here, neither a terminal's pipcast@synced nor the one the desktop app
+# hands in: those go untested.
 # Your clone, your live checkout, your station and your configuration are never
 # read or changed. The temporary folder is removed on exit.
 set -euo pipefail

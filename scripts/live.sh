@@ -30,10 +30,11 @@
 # those back on. Sessions pick a change up on /reload-plugins, or when they
 # start.
 #
-# A copy from Anthropic's plugin directory is the one release live.sh can't see
-# or turn off: the desktop app hands it to each of its sessions itself, outside
-# Claude Code's plugin list, and runs it over any installed Pipcast, the live
-# checkout too. Turn it off in Customize > Plugins while you try a change.
+# A copy the desktop app hands in itself, from Anthropic's plugin directory or
+# an upload in Customize > Plugins, is the one kind of release live.sh can't
+# see or turn off: it stays outside Claude Code's plugin list, and runs over
+# any installed Pipcast, the live checkout too. Turn it off in Customize >
+# Plugins while you try a change.
 set -euo pipefail
 
 root="$(cd "$(dirname "$0")/.." && pwd)"
@@ -70,10 +71,10 @@ listed() { # state|version <id>
 }
 
 # The releases of Pipcast in Claude Code's plugin list, one id a line: every
-# pipcast install but the live checkout's, from a marketplace, an upload or a
-# terminal's sync of Anthropic's plugin directory, leaving out those a
-# project's settings hold. A copy the desktop app hands in from the directory
-# is never among them
+# pipcast install but the live checkout's, from a marketplace or a terminal's
+# sync of Anthropic's plugin directory, leaving out those a project's settings
+# hold. A copy the desktop app hands in, from the directory or an upload, is
+# never among them
 releases() {
   { "$claude" plugin list --json 2>/dev/null || true; } | node -e '
     let plugins = []

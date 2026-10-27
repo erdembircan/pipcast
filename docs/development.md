@@ -91,7 +91,7 @@ scripts/live.sh remove
 
 does the same, then takes the live checkout out of Claude Code altogether: it uninstalls `pipcast@pipcast` and removes the `pipcast` marketplace and the live checkout's folder. A station started from the live checkout runs from that folder, so `remove` stops the station first, and a session on air starts it again from the release within half a minute. `scripts/live.sh setup` makes the live checkout again.
 
-A copy from Anthropic's plugin directory is the one release `scripts/live.sh` can't see or turn off. The desktop app hands it to each of its sessions itself, outside Claude Code's plugin list, and runs it over any installed Pipcast, the live checkout too. So while you try a change, turn Pipcast off in **Customize > Plugins**, and back on when you're done.
+A copy the desktop app hands in itself, from Anthropic's plugin directory or an upload in **Customize > Plugins**, is the one kind of release `scripts/live.sh` can't see or turn off. It stays outside Claude Code's plugin list, and runs over any installed Pipcast, the live checkout too. So while you try a change, turn Pipcast off in **Customize > Plugins**, and back on when you're done.
 
 Each install keeps its own settings, since Claude Code saves a plugin's options under its id.
 
@@ -142,9 +142,9 @@ Then select **Check for new commits** on Pipcast's page in the portal, and **Pub
 
 ### Try the directory's copy first
 
-The directory installs what is in `plugin/`, and nothing else, and the desktop app hands that copy to each of its sessions itself. Before Pipcast is listed, an upload in the desktop app comes closest: the app installs it in Claude Code as `pipcast@local-desktop-app-uploads` and hands it to each new session the same way. It can't stand in for the rest of a directory copy's way to you: the sync from the claude.ai account, a terminal's `pipcast@synced`, or a directory copy running over an installed Pipcast.
+The directory installs what is in `plugin/`, and nothing else, and the desktop app hands that copy to each of its sessions itself. Before Pipcast is listed, an upload in the desktop app comes closest: it goes to the claude.ai account, under **My Uploads**, and the desktop app downloads it and hands it to each new session the way it does a directory copy, outside Claude Code's plugin list. Only the desktop app's way in is tried: a terminal's `pipcast@synced` isn't.
 
-The app writes an upload over any Pipcast already installed in Claude Code, even a disabled one. For the live checkout, that's a cached copy no session reads, so the test would quietly run the old code. Take every installed copy out first:
+A session on air starts the station again from the copy it runs, and an installed Pipcast stays in Claude Code's plugin list beside the upload. Take every installed copy out first, so the upload is the only Pipcast that can run:
 
 1. Put the commit to try in the live checkout, and zip its `plugin/`:
 
@@ -169,7 +169,7 @@ The app writes an upload over any Pipcast already installed in Claude Code, even
 3. In the desktop app, add `pipcast.zip` with **Customize > Plugins > Add > Upload plugin**, and start a new session. The upload is what runs, and not an older copy, when:
 
    - the new session goes on air as it opens, and the window comes up
-   - `claude plugin list` shows one Pipcast, `pipcast@local-desktop-app-uploads`
+   - `claude plugin list` shows no Pipcast, since the app hands the upload in itself
    - the station runs from the upload's folder, not from `~/Developer/JS/pipcast-live`:
 
      ```bash
