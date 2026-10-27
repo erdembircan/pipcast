@@ -103,7 +103,7 @@ Each install keeps its own settings, since Claude Code saves a plugin's options 
 
 People get Pipcast from two places: Anthropic's plugin directory, the catalog under **Customize > Plugins** on claude.ai and in the desktop app, and erdembircan-plugins. A copy added from the directory reaches Claude Code as `pipcast@synced`. Anthropic's official marketplace on GitHub, `anthropics/claude-plugins-official`, takes no submissions: plugins reach the directory through its developer portal, at [claude.ai/directory/manage](https://claude.ai/directory/manage).
 
-The directory reads only `plugin/`. Before a version can go live, it validates the plugin against the [plugin pre-submission checklist](https://claude.com/docs/plugins/pre-submission-checklist), scans it for anything it does that the README doesn't say, and holds it to the [Software Directory Policy](https://support.claude.com/en/articles/13145358-anthropic-software-directory-policy) and the [Software Directory Terms](https://support.claude.com/en/articles/13145338-anthropic-software-directory-terms).
+The directory reads only `plugin/`. Before a version can go live, it validates the plugin against the [plugin pre-submission checklist](https://claude.com/docs/plugins/pre-submission-checklist), scans it for anything it does that the README doesn't say, and holds it to the [Software Directory Policy](https://support.claude.com/en/articles/13145358-anthropic-software-directory-policy) and the [Software Directory Terms](https://support.claude.com/en/articles/13145338-anthropic-software-directory-terms). Those terms ask for a way to receive reports of security problems: `SECURITY.md` sends people to GitHub's private vulnerability reporting.
 
 ```bash
 node scripts/check-directory.mjs
@@ -130,7 +130,13 @@ The station's binary and its six sounds are files the directory's validator can'
 7. On **Compliance**, check the contact email and select the four acknowledgements.
 8. On **Review and submit**, keep **GitHub push webhook**, leave **Auto-publish passing versions** off, and select **Submit for review**.
 
-The listing goes live only once the repository is public. When the reviewer has cleared Pipcast, make the repository public, select **Check for new commits** on Pipcast's page in the portal, and then **Publish**. [Track your directory submission](https://claude.com/docs/directory/submission-status) says what each status in the portal means, and who acts next.
+The listing goes live only once the repository is public. When the reviewer has cleared Pipcast, make the repository public and turn on its private vulnerability reporting, which `SECURITY.md` sends people to and GitHub offers only on public repositories:
+
+```bash
+gh api -X PUT repos/erdembircan/pipcast/private-vulnerability-reporting
+```
+
+Then select **Check for new commits** on Pipcast's page in the portal, and **Publish**. [Track your directory submission](https://claude.com/docs/directory/submission-status) says what each status in the portal means, and who acts next.
 
 ### Try the directory's copy first
 
