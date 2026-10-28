@@ -366,7 +366,7 @@ describe('the ticker on air', () => {
     perChar = 12
     look(250)
     const nodes = units()
-    expect(nodes.slice(0, kept.length)).toEqual(kept)
+    kept.forEach((node, index) => expect(nodes[index]).toBe(node))
     expect(at(runOf(nodes[0]!))).toBeCloseTo(first - 53 * 0.25, 6)
     nodes.forEach((node, index) => {
       if (index > 0) {
