@@ -9,6 +9,9 @@
 # hands in: those go untested.
 # Your clone, your live checkout, your station and your configuration are never
 # read or changed. The temporary folder is removed on exit.
+# The live checkout's build here is its plugin/ as it is
+# (PIPCAST_LIVE_BUILD=release): the development build takes npm and Swift,
+# and scripts/test.d/60-dev.sh tries it.
 set -euo pipefail
 
 root="$(cd "$(dirname "$0")/../.." && pwd)"
@@ -18,6 +21,8 @@ trap 'rm -rf "$tmp"' EXIT
 claude="$(bash "$root/scripts/claude-bin.sh")"
 export CLAUDE_CONFIG_DIR="$tmp/config"
 export PIPCAST_HOME="$tmp/store"
+# The live checkout's build is its plugin/ as it is: no npm or Swift here
+export PIPCAST_LIVE_BUILD=release
 mkdir -p "$CLAUDE_CONFIG_DIR"
 
 git clone -q --bare "$root" "$tmp/origin.git"
@@ -115,7 +120,10 @@ check "and turns nothing on" test "$(state pipcast@pipcast)" = missing
 
 "$live" setup >/dev/null
 check "setup makes the live checkout beside the clone, on master" test "$(runs)" = "$master"
-check "setup points the pipcast marketplace at it" grep -qE 'Folder \(.*/pipcast-live\)' <<<"$("$claude" plugin marketplace list 2>&1)"
+check "setup points the pipcast marketplace at the live checkout's build, in .dev/marketplace" grep -qE 'Folder \(.*/pipcast-live/\.dev/marketplace\)' <<<"$("$claude" plugin marketplace list 2>&1)"
+check "which holds the commit's plugin/" cmp -s "$tmp/pipcast-live/plugin/.claude-plugin/plugin.json" "$tmp/pipcast-live/.dev/marketplace/plugin/.claude-plugin/plugin.json"
+check "and names the commit it was built from" test "$(cat "$tmp/pipcast-live/.dev/marketplace/BUILT-FROM")" = "$master"
+check "while the live checkout stays clean around it" test -z "$(git -C "$tmp/pipcast-live" status --porcelain)"
 check "setup installs pipcast@pipcast and turns it on" test "$(state pipcast@pipcast)" = enabled
 check "it says the app runs master" grep -q "That is master." <<<"$("$live")"
 check "setup again keeps the live checkout" grep -q "already at" <<<"$("$live" setup)"
@@ -140,9 +148,18 @@ check "and turns the live checkout on" test "$(state pipcast@pipcast)" = enabled
 check "and turns the release off" test "$(state pipcast@erdembircan-plugins)" = disabled
 check "it remembers the release it turned off" grep -qxF "pipcast@erdembircan-plugins" "$record"
 check "and not the one that was already off" not quietly grep -qxF "pipcast@other-plugins" "$record"
+check "and builds the pull request's head for the app" test "$(cat "$tmp/pipcast-live/.dev/marketplace/BUILT-FROM")" = "$parent"
 
-"$live" master >/dev/null
+out="$("$live" master)"
 check "master puts master in the app" test "$(runs)" = "$master"
+check "a commit with no development build goes in as it is, and it says so" grep -qF "which takes no cues" <<<"$out"
+"$claude" plugin marketplace add "$tmp/pipcast-live" >/dev/null
+check "with the pipcast marketplace pointed elsewhere, it says so" grep -qF "not at the live checkout's build" <<<"$("$live")"
+"$live" master >/dev/null
+check "and a move points it at the build again" grep -qE 'Folder \(.*/pipcast-live/\.dev/marketplace\)' <<<"$("$claude" plugin marketplace list 2>&1)"
+check "restart with no station on air says so" grep -qF "No station is on air." <<<"$("$live" restart)"
+check "story with no development build on air fails, and says why" grep -qE "comes before cues|No station is on air" <<<"$("$live" story 2>&1 || true)"
+check "and exits with an error" not quietly "$live" story
 
 "$live" "$parent" >/dev/null
 check "a commit can be put in the app" test "$(runs)" = "$parent"

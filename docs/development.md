@@ -51,7 +51,7 @@ Two marketplaces list Pipcast as well. Each entry repeats the manifest's display
 scripts/test.sh
 ```
 
-runs every check: lint, types, the unit tests of each part, the station's Swift tests, the marketplace and the built plugin validated by the engine bundled with the Claude desktop app, the plugin against the plugin directory's rules, with the engine's own checks and `scripts/check-directory.mjs`, the mod's kit tests against it, and `scripts/live.sh` in a throwaway copy of the repository.
+runs every check: lint, types, the unit tests of each part, the station's Swift tests and its development build compiled, the marketplace and the built plugin validated by the engine bundled with the Claude desktop app, the plugin against the plugin directory's rules, with the engine's own checks and `scripts/check-directory.mjs`, the mod's kit tests against it, `scripts/live.sh` in a throwaway copy of the repository, and the development build and `scripts/cue.mjs` with a throwaway store.
 
 ```bash
 scripts/verify.sh
@@ -63,7 +63,7 @@ runs the whole thing for real, with no window of yours involved: a headless Clau
 
 The desktop app runs one Pipcast at a time: the release you installed, from Anthropic's plugin directory or from erdembircan-plugins (`pipcast@erdembircan-plugins`), or the live checkout while you try a change.
 
-The live checkout, `pipcast@pipcast`, is a second checkout of this repository in a folder beside your clone, named after it (`~/Developer/JS/pipcast-live` beside `~/Developer/JS/pipcast`). The `pipcast` marketplace points at it, and every session reads the plugin from its `plugin/` folder when it starts or on `/reload-plugins`. Your clone never changes what the app runs, so you can switch branches in it freely.
+The live checkout, `pipcast@pipcast`, is a second checkout of this repository in a folder beside your clone, named after it (`~/Developer/JS/pipcast-live` beside `~/Developer/JS/pipcast`). The app runs it as its development build: what its `plugin/` holds, with the station and its page built to take cues (Cue a segment, below). `scripts/live.sh` builds that into the live checkout's `.dev/` folder and points the `pipcast` marketplace at `.dev/marketplace`, so every session reads the plugin from `.dev/marketplace/plugin` when it starts or on `/reload-plugins`, and the station runs from there. The live checkout's own `plugin/` stays the release build, as committed. `.dev/` and `node_modules/` stay out of git at any commit, through your clone's `.git/info/exclude`, which `scripts/live.sh` keeps. Your clone never changes what the app runs, so you can switch branches in it freely.
 
 `scripts/live.sh` moves the live checkout in and out of the app. It is for development only: it never installs or updates a release. Install the release in the app, as the README says, and update it there.
 
@@ -71,35 +71,97 @@ The live checkout, `pipcast@pipcast`, is a second checkout of this repository in
 scripts/live.sh setup
 ```
 
-makes the live checkout on master, installs it from the `pipcast` marketplace and puts it in the app.
+makes the live checkout on master, builds it, installs it from the `pipcast` marketplace and puts it in the app. The first build installs the repository's tools in the live checkout and builds all of the station, which takes a few minutes; after that a build takes seconds, unless the station's sources changed.
 
 ```bash
 scripts/live.sh pr 12
 ```
 
-puts a pull request in the app. `scripts/live.sh <branch or commit>` puts any other commit there and `scripts/live.sh master` puts master there. Each turns off the release that is on, and remembers which.
+puts a pull request in the app. `scripts/live.sh <branch or commit>` puts any other commit there and `scripts/live.sh master` puts master there. Each checks the commit out in the live checkout, builds it with the commit's own `scripts/build-dev.sh` and swaps the build in, then turns off the release that is on, and remembers which. A build that fails moves nothing. A commit from before the development build has no `scripts/build-dev.sh`: its `plugin/` goes in as it is, and takes no cues. A station running the build that was in the app is stopped when the move changes it, and a session on air starts it again from the new build within 10 seconds.
 
 ```bash
 scripts/live.sh published
 ```
 
-takes the live checkout out and turns that release back on. With no release in Claude Code's plugin list, it still takes the live checkout out, and the app runs no Pipcast from that list. `scripts/live.sh` on its own says what the app runs now. After any of them, run `/reload-plugins` in a session, or start a new one. Only committed work reaches the app, so run `scripts/build.sh` and commit what it builds first.
+takes the live checkout out and turns that release back on. With no release in Claude Code's plugin list, it still takes the live checkout out, and the app runs no Pipcast from that list. `scripts/live.sh` on its own says what the app runs now, and whether the station on air takes cues. After any of them, run `/reload-plugins` in a session, or start a new one. Only committed work reaches the app, so run `scripts/build.sh` and commit what it builds first.
 
 ```bash
 scripts/live.sh remove
 ```
 
-does the same, then takes the live checkout out of Claude Code altogether: it uninstalls `pipcast@pipcast` and removes the `pipcast` marketplace and the live checkout's folder. A station started from the live checkout runs from that folder, so `remove` stops the station first, and a session on air starts it again from the release within half a minute. `scripts/live.sh setup` makes the live checkout again.
+does the same, then takes the live checkout out of Claude Code altogether: it uninstalls `pipcast@pipcast` and removes the `pipcast` marketplace and the live checkout's folder, its build with it. A station started from the live checkout runs from that folder, so `remove` stops the station first, and a session on air starts it again from the release within half a minute. `scripts/live.sh setup` makes the live checkout again.
 
 A copy the desktop app hands in itself, from Anthropic's plugin directory or an upload in **Customize > Plugins**, is the one kind of release `scripts/live.sh` can't see or turn off. It stays outside Claude Code's plugin list, and runs over any installed Pipcast, the live checkout too. So while you try a change, turn Pipcast off in **Customize > Plugins**, and back on when you're done.
 
 Each install keeps its own settings, since Claude Code saves a plugin's options under its id.
 
-`/reload-plugins` leaves the station running. After a change to `plugin/station`, stop it, and a session on air starts it again from the live checkout within half a minute:
+Any session on air starts the station when it finds none, from the plugin it runs. When you switch the app from one Pipcast to another, a session that hasn't reloaded yet still runs the one before, and could start that one's station. So after a switch, run `/reload-plugins` in every session on air, then
 
 ```bash
-~/Developer/JS/pipcast-live/plugin/station/pipcast-station stop --home ~/Library/Application\ Support/Pipcast
+scripts/live.sh restart
 ```
+
+which stops the station on air, and a session on air starts it again from the plugin it runs within 10 seconds.
+
+## Cue a segment
+
+BREAKING NEWS airs when a session's turn ends while you're away from Claude, and the report on the hour only as the hour strikes. To see one now, cue it, from the sessions on air or with words and figures of your own.
+
+Only the development build takes a cue: the live checkout's build, the one `scripts/live.sh` puts in the app. Its station and page are built with a way in for a cue. The station and the page in `plugin/`, which every release installs, have none, so nothing that ships can air a segment that didn't happen.
+
+```bash
+scripts/live.sh story
+```
+
+cues BREAKING NEWS, ready for review, with the design system's sample session and figures. Name another kind of story, `needs-input`, `complete` or `error`, and give it words and figures of your own:
+
+```bash
+scripts/live.sh story needs-input --title "Fix flaky checkout test" --command "npm install" --quote "Install dependencies" --minutes 3
+```
+
+`--title` and `--project` name its session. `--command` is what a story that needs input asks to run, and `--quote` what a story says: Claude's description of the command or its question, its last words, or the error. `--added`, `--removed` and `--files` are what a ready story changed. `--minutes` is how long a story that needs input has waited, or how long the turn of any other ran. What you leave out comes from the design system's sample for the kind. The story airs on a session of its own, which leaves the board when the story is over.
+
+`--session` lands the story on a session on air instead, named by its id or a piece of its title, with that session's title and project. On its own, `--session` airs that session's newest story again, as it was.
+
+```bash
+scripts/live.sh hour
+```
+
+cues the report on the next hour, now, from the sessions on air: what they did since the last report, as the report at the hour would show it if nothing else happened. `--sessions` with a number from 1 to 7 makes it the design system's sample sessions instead, and `--quiet` makes it a quiet hour, with every session working and no story.
+
+A cue waits until the window shows and nothing else is on air or due, so you can cue it from Claude and then switch to another app. It waits five minutes at most. Then it airs as the real thing does: the same open, desk, review and outro, the jingles and the beat, and the window out of the side for it. Hiding the window cuts it, as it cuts any segment. Nothing it airs is kept: the report on the next hour still comes at the hour, covering the whole hour, and a story that lands while a cue is on air waits its turn and airs after it. With no cue, the development build airs what a release does.
+
+### The cue
+
+A cue is a JSON file in the store's `dev` folder. The development build's station takes each one, hands it to its page and deletes it. `scripts/live.sh cue` sends one you wrote, from a file, or from its input with `-`, and gives it an `id` when it has none.
+
+A story cue airs one to eight stories, one after another, each with what `story` takes:
+
+```json
+{
+  "segment": "story",
+  "stories": [
+    { "kind": "needs-input", "title": "Fix flaky checkout test", "project": "web-shop", "command": "npm install", "quote": "Install dependencies" },
+    { "kind": "ready", "added": 182, "removed": 40, "files": 4, "minutes": 9 }
+  ]
+}
+```
+
+`session` is the id of a session on air.
+
+An hour cue's report covers the sessions you give it, 1 to 24, in place of the ones on air. `story` is the kind of a session's newest story this hour, if it had one, and `state` is where the session stands now, by default where that story left it. `added`, `removed` and `files` are its lines this hour, and `minutes` how long a session that needs input or stopped on an error has waited, back to the start of this hour at most. `samples`, 1 to 7, and `quiet` are what `--sessions` and `--quiet` set.
+
+```json
+{
+  "segment": "hour",
+  "sessions": [
+    { "title": "Refactor auth middleware", "project": "api-server", "added": 1204, "removed": 310 },
+    { "title": "Fix flaky checkout test", "project": "web-shop", "story": "needs-input", "minutes": 27 }
+  ]
+}
+```
+
+`packages/dev/src/cue.ts` says what each field takes. `scripts/live.sh` checks a cue with it before it sends one, and says what is wrong with one the page would drop. The development build logs each cue it takes in `station.log`, with every sound and window the page asks for, so the log also says what aired.
 
 ## Anthropic's plugin directory
 

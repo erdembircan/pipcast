@@ -9,6 +9,7 @@ export default tseslint.config(
   {
     ignores: [
       'node_modules',
+      '.dev/**',
       'design/**',
       'plugin/**',
       'station/.build/**',
@@ -27,7 +28,7 @@ export default tseslint.config(
     languageOptions: { globals: globals.node },
   },
   {
-    files: ['packages/renderer/**', 'video/src/**'],
+    files: ['packages/renderer/**', 'packages/dev/**', 'video/src/**'],
     languageOptions: { globals: globals.browser },
   },
   {

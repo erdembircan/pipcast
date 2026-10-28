@@ -17,7 +17,11 @@ do {
 
 switch command {
 case .version:
+    #if PIPCAST_DEV
+    print("pipcast-station \(Constants.version)+dev")
+    #else
     print("pipcast-station \(Constants.version)")
+    #endif
     exit(0)
 case let .launch(options):
     runLaunch(options)
