@@ -131,6 +131,7 @@ The station's binary and its six sounds are files the directory's validator can'
    - It isn't meant for people under 18.
 7. On **Compliance**, check the contact email and select the four acknowledgements.
 8. On **Review and submit**, keep **GitHub push webhook**, leave **Auto-publish passing versions** off, and select **Submit for review**.
+9. On **Plugin submitted for review**, select **Set up push updates**, which needs admin access to the repository on GitHub. Keeping **GitHub push webhook** doesn't set the webhook up by itself, and without it the directory finds a new commit on `release` only at its next scheduled check. To set it up later, open Pipcast from **Submissions** in the portal, and select **Set up** under **Updates** on its **Settings** tab.
 
 The listing goes live only once the repository is public. When the reviewer has cleared Pipcast, make the repository public and turn on its private vulnerability reporting, which `SECURITY.md` sends people to and GitHub offers only on public repositories:
 
