@@ -46,16 +46,16 @@ var OPTION_WORDS = {
   }
 };
 var COMMAND_ARGUMENT_HINT = `[${Object.keys(OPTION_WORDS).join("|")} on|off]`;
-function optionState(word, on) {
+function optionState(word, enabled) {
   const words = OPTION_WORDS[word];
-  const state = `${words?.title ?? word} is ${on ? "on" : "off"}.`;
-  return words === void 0 ? state : `${state} ${on ? words.on : words.off}`;
+  const state = `${words?.title ?? word} is ${enabled ? "on" : "off"}.`;
+  return words === void 0 ? state : `${state} ${enabled ? words.on : words.off}`;
 }
 var OPTION_REPLY = {
   unknown: (word) => `/pipcast has no option called ${word}. Options: ${Object.keys(OPTION_WORDS).join(", ")}.`,
   badValue: (word) => `/pipcast ${word} takes on or off.`,
   cannotRead: (word) => `Pipcast could not read the ${word} setting. Run /pipcast ${word} to try again.`,
-  cannotSave: (word, on) => `Pipcast could not save the ${word} setting. Run /pipcast ${word} ${on ? "on" : "off"} to try again.`
+  cannotSave: (word, enabled) => `Pipcast could not save the ${word} setting. Run /pipcast ${word} ${enabled ? "on" : "off"} to try again.`
 };
 var BAND_ALT = {
   in: "KLWD, Tune in",
@@ -668,6 +668,20 @@ function editCounts(tool, input) {
   }
 }
 
+// packages/mod/src/core/engine.ts
+function processTag(random = Math.random) {
+  return `pipcast-${random().toString(36).slice(2)}${random().toString(36).slice(2)}`;
+}
+function parentOf(listing, tag) {
+  for (const line of listing.split("\n")) {
+    const [pid, ppid] = line.trim().split(/\s+/);
+    if (pid !== void 0 && ppid !== void 0 && /^\d+$/.test(pid) && /^\d+$/.test(ppid) && line.includes(`command=${tag}`)) {
+      return Number(ppid);
+    }
+  }
+  return null;
+}
+
 // packages/mod/src/core/ledger.ts
 var FILE_TOOLS = ["Bash", "Edit", "MultiEdit", "Write", "NotebookEdit"];
 var GIT_TIMEOUT_MS = 1e4;
@@ -1212,7 +1226,7 @@ function parseRequest(args) {
     return { kind: "show", option };
   }
   if (rest.length === 0 && (value === "on" || value === "off")) {
-    return { kind: "set", option, on: value === "on" };
+    return { kind: "set", option, enabled: value === "on" };
   }
   return { kind: "bad-value", option };
 }
@@ -1401,8 +1415,8 @@ async function readOption(io, home, key) {
   const answer = await io.run([...home.argv, "plugin", "configure", "--json", "--", home.id], void 0, ENGINE_MS);
   return answer.exitCode === 0 ? readBoolean(answer.stdout, key) : null;
 }
-async function writeOption(io, home, key, on) {
-  const values = JSON.stringify({ [key]: on ? "true" : "false" });
+async function writeOption(io, home, key, enabled) {
+  const values = JSON.stringify({ [key]: enabled ? "true" : "false" });
   const answer = await io.run([...home.argv, "plugin", "configure", "--json", "--values-stdin", "--", home.id], void 0, ENGINE_MS, values);
   return answer.exitCode === 0 && wasSaved(answer.stdout, key);
 }
@@ -1471,9 +1485,9 @@ function enqueue(task) {
   queue = queue.then(task, task);
   return queue;
 }
-function toolInput(e) {
+function toolInput(event) {
   const input = {};
-  for (const [key, value] of Object.entries(e)) {
+  for (const [key, value] of Object.entries(event)) {
     if (key !== "tool" && key !== "tool_use_id" && key !== "agentId") {
       input[key] = value;
     }
@@ -1629,8 +1643,8 @@ async function shareOwnTransparency($) {
     failure($, "telling the station", error);
   }
 }
-function noteTranscript(e) {
-  const { session_id: id, transcript_path: path } = e;
+function noteTranscript(event) {
+  const { session_id: id, transcript_path: path } = event;
   if (typeof id !== "string" || typeof path !== "string") {
     return;
   }
@@ -1711,9 +1725,9 @@ async function bookNow($, id, booking) {
   if (model === null || model.record.id !== id) {
     return false;
   }
-  const next = booked(model, now, booking);
-  const changed = next !== model;
-  model = next;
+  const updated = booked(model, now, booking);
+  const changed = updated !== model;
+  model = updated;
   return changed;
 }
 async function watch($, agent, tool, input) {
@@ -1803,9 +1817,9 @@ async function checkTitle($) {
     if (found === void 0 || model === null || model.record.id !== id) {
       return;
     }
-    const next = fileTitled(model, found);
-    const changed = next.record.title !== model.record.title;
-    model = next;
+    const updated = fileTitled(model, found);
+    const changed = updated.record.title !== model.record.title;
+    model = updated;
     if (changed) {
       await save($);
     }
@@ -1825,9 +1839,9 @@ async function takeLimits($, reported) {
   if (model === null) {
     return false;
   }
-  const next = measured(model, readLimits(reported, await $.clock.now()));
-  const moved = limitsMoved(model.record.limits ?? [], next.record.limits ?? []);
-  model = next;
+  const updated = measured(model, readLimits(reported, await $.clock.now()));
+  const moved = limitsMoved(model.record.limits ?? [], updated.record.limits ?? []);
+  model = updated;
   return moved;
 }
 async function readLimitsNow($) {
@@ -1852,9 +1866,9 @@ async function lookAgain($) {
     if (model === null || model.held !== held) {
       return;
     }
-    const next = looked(model, await $.clock.now(), states);
-    model = next;
-    if (next.held === null) {
+    const updated = looked(model, await $.clock.now(), states);
+    model = updated;
+    if (updated.held === null) {
       await save($);
     }
   } catch (error) {
@@ -2013,9 +2027,9 @@ async function onTitle($, title) {
   }
   hookTitle = title.trim();
   if (model !== null) {
-    const next = hookTitled(model, hookTitle);
-    const changed = next.record.title !== model.record.title;
-    model = next;
+    const updated = hookTitled(model, hookTitle);
+    const changed = updated.record.title !== model.record.title;
+    model = updated;
     if (changed) {
       await save($);
     }
@@ -2056,9 +2070,15 @@ async function engineBinary($) {
   if (set !== void 0 && set !== "") {
     return set;
   }
-  const parent = await $.process.run(["/bin/sh", "-c", '/bin/ps -o comm= -p "$PPID"']);
-  const path = parent.stdout.trim();
-  return parent.exitCode === 0 && path.startsWith("/") ? path : null;
+  const tag = processTag();
+  const listing = await $.process.run(["/bin/ps", "-A", "-o", "pid=", "-o", "ppid=", "-o", `command=${tag}`]);
+  const parent = listing.exitCode === 0 ? parentOf(listing.stdout, tag) : null;
+  if (parent === null) {
+    return null;
+  }
+  const named = await $.process.run(["/bin/ps", "-o", "comm=", "-p", String(parent)]);
+  const path = named.stdout.trim();
+  return named.exitCode === 0 && path.startsWith("/") ? path : null;
 }
 async function optionsHomeOf($) {
   if (optionsAt === null) {
@@ -2077,20 +2097,20 @@ async function showOption($, option) {
     return OPTION_REPLY.cannotRead(option.word);
   }
 }
-async function setOption($, option, on) {
+async function setOption($, option, enabled) {
   try {
     const home = await optionsHomeOf($);
-    const saved = home !== null && await writeOption(ioFor($), home, option.key, on);
+    const saved = home !== null && await writeOption(ioFor($), home, option.key, enabled);
     if (!saved) {
-      return OPTION_REPLY.cannotSave(option.word, on);
+      return OPTION_REPLY.cannotSave(option.word, enabled);
     }
     if (option.key === TRANSPARENT_KEY) {
-      await shareTransparency($, on);
+      await shareTransparency($, enabled);
     }
-    return optionState(option.word, on);
+    return optionState(option.word, enabled);
   } catch (error) {
     failure($, "saving an option", error);
-    return OPTION_REPLY.cannotSave(option.word, on);
+    return OPTION_REPLY.cannotSave(option.word, enabled);
   }
 }
 async function onTurnStart($, turnId) {
@@ -2123,9 +2143,9 @@ async function onToolAfter($, agent) {
   if (model === null) {
     return;
   }
-  const next = resumed(model, await $.clock.now(), agent);
-  if (next !== model) {
-    model = next;
+  const updated = resumed(model, await $.clock.now(), agent);
+  if (updated !== model) {
+    model = updated;
     await save($);
   }
 }
@@ -2137,18 +2157,18 @@ async function onPermission($, tool, input, agent) {
   model = askedPermission(model, await $.clock.now(), described.command, described.quote, agent);
   await save($);
 }
-async function onStop($, e) {
+async function onStop($, stop) {
   if (model === null) {
     return;
   }
-  const waits = waitsOn(e);
+  const waits = waitsOn(stop);
   const waiting = waits.others || waits.shells.length === 0 ? waits : { shells: stillWorking(waits.shells, await lookAtShells(ioFor($), waits.shells)), others: false };
   await lookOwnTree($);
   if (model === null) {
     return;
   }
   model = finished(model, await $.clock.now(), {
-    lastWords: lastWords(e.last_assistant_message ?? ""),
+    lastWords: lastWords(stop.last_assistant_message ?? ""),
     waiting
   });
   await save($);
@@ -2212,7 +2232,7 @@ function register(on, options) {
       case "show":
         return { text: await showOption($, request.option) };
       case "set":
-        return { text: await setOption($, request.option, request.on) };
+        return { text: await setOption($, request.option, request.enabled) };
       case "unknown":
         return { text: OPTION_REPLY.unknown(request.word) };
       case "bad-value":

@@ -1208,14 +1208,16 @@ scenario('a save or a read Claude Code refuses says so', { configureFails: true 
   expect((await option($, 'auto')).text).toBe(OPTION_REPLY.cannotRead('auto'))
 })
 
-scenario('the engine is the parent of a command the mod starts', {}, async (w, $) => {
+scenario('the engine is the program that started a ps the mod tagged', {}, async (w, $) => {
   await option($, 'auto')
-  expect(w.ran.some((argv) => argv[0] === '/bin/sh')).toBe(true)
+  expect(w.ran.some((argv) => argv[0] === '/bin/sh')).toBe(false)
+  expect(w.ran.some((argv) => argv[0] === '/bin/ps' && argv.some((arg) => arg.startsWith('command=pipcast-')))).toBe(true)
   expect(w.engineCalls[0]?.argv[0]).toBe(ENGINE)
 })
 
 scenario('CLAUDE_CODE_EXECPATH names the engine when it is set', { env: { CLAUDE_CODE_EXECPATH: '/pip/env/claude' } }, async (w, $) => {
   await option($, 'auto')
+  expect(w.ran.some((argv) => argv[0] === '/bin/ps' && argv.some((arg) => arg.startsWith('command=')))).toBe(false)
   expect(w.ran.some((argv) => argv[0] === '/bin/sh')).toBe(false)
   expect(w.engineCalls[0]?.argv[0]).toBe('/pip/env/claude')
 })

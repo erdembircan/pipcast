@@ -8,7 +8,7 @@ export const ID = '8253106f-ce3e-4af6-824a-21845bad3955'
 export const HOME = '/pip/home'
 export const ROOT = '/work/proj'
 export const STATION = '/pip/stand-in-station'
-// The Claude Code binary, as a command the mod starts finds its parent
+// The Claude Code binary, as the parent of the ps the mod tags
 export const ENGINE = '/pip/engine/claude'
 export const T0 = 1_792_600_000_000
 export const SESSIONS = `${HOME}/sessions`
@@ -26,6 +26,8 @@ export const WORKTREE = `${ROOT}/.claude/worktrees/agent-a1`
 // Where the engine writes each background command's output, and its own pid
 export const TASKS = `/private/tmp/claude-501/-work-proj/${ID}/tasks`
 export const ENGINE_PID = 4000
+// The ps the mod tags to find its parent, which is the engine
+export const PS_PID = 4242
 
 // A git working tree as the fake git sees it: its commit, what `diff-index`
 // prints, and its untracked files
@@ -305,8 +307,19 @@ export function world(on: On, options: WorldOptions = {}) {
         return done(0, options.transcriptDir === undefined ? '' : `${options.transcriptDir}/${ID}.jsonl\n`)
       case '/usr/bin/git':
         return gitRun(args, (e as { init?: { cwd?: string } }).init?.cwd ?? ROOT)
-      case '/bin/ps':
+      case '/bin/ps': {
+        // The engine, as the parent of the ps the mod tagged, and its program
+        const tagged = args.find((arg) => arg.startsWith('command='))
+        if (tagged !== undefined) {
+          return engine === null
+            ? done(1, '', 'ps: no')
+            : done(0, [`${' '.repeat(12)}${tagged.slice('command='.length)}`, `${PS_PID} ${ENGINE_PID} /bin/ps ${args.join(' ')}`, `${ENGINE_PID} 1 ${engine}`, ''].join('\n'))
+        }
+        if (args.includes('comm=')) {
+          return engine !== null && args[args.indexOf('-p') + 1] === String(ENGINE_PID) ? done(0, `${engine}\n`) : done(1)
+        }
         return procs.fails ? done(1, '', 'ps: no') : done(0, procs.table.map((p) => `${p.pid} ${p.ppid} ${p.pgid}`).join('\n'))
+      }
       case '/usr/sbin/lsof': {
         if (procs.fails) {
           return done(1, '', 'lsof: no')
@@ -321,9 +334,6 @@ export function world(on: On, options: WorldOptions = {}) {
       case '/usr/bin/head':
       case '/usr/bin/tail':
         return done(0, procs.outputs.get(args.at(-1) ?? '') ?? '')
-      case '/bin/sh':
-        // The engine, as the parent of a command the mod starts
-        return engine === null ? done(1) : done(0, `${engine}\n`)
       default:
         return done(0)
     }

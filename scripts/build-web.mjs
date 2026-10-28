@@ -2,10 +2,11 @@
 // station.js, station.css, fonts/ and vendor/. Nothing is minified, since
 // Anthropic's plugin directory holds code it can't read for a reviewer:
 // station.js is the page's own code, bundled as written, and React comes as its
-// own production files in vendor/, copied unchanged from its npm package with
-// its license. index.html loads them first, and station.js takes React and
-// ReactDOM from the globals they set. The output folder is emptied first, so the
-// build is reproducible.
+// own production files in vendor/, from its npm package with its license.
+// React's is copied unchanged, and React DOM's with two minified names renamed
+// (scripts/lib/react-dom-names.mjs says why). index.html loads them first, and
+// station.js takes React and ReactDOM from the globals they set. The output
+// folder is emptied first, so the build is reproducible.
 // With --dev it builds the development build's page instead, from
 // packages/dev/src/main.tsx into .dev/web, for scripts/build-dev.sh: never into
 // plugin/.
@@ -13,6 +14,8 @@ import { build, transform } from 'esbuild'
 import { cpSync, copyFileSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+
+import { renameShellNames } from './lib/react-dom-names.mjs'
 
 const VENDOR = [
   ['node_modules/react/umd/react.production.min.js', 'vendor/react.production.min.js'],
@@ -95,7 +98,11 @@ cpSync(join(renderer, 'index.html'), join(out, 'index.html'))
 
 mkdirSync(join(out, 'vendor'), { recursive: true })
 for (const [from, to] of VENDOR) {
-  copyFileSync(join(root, from), join(out, to))
+  if (to === 'vendor/react-dom.production.min.js') {
+    writeFileSync(join(out, to), renameShellNames(readFileSync(join(root, from), 'utf8')))
+  } else {
+    copyFileSync(join(root, from), join(out, to))
+  }
 }
 
 console.log(dev ? '.dev/web' : 'plugin/station/web')

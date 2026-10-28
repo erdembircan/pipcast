@@ -10,6 +10,9 @@ import { closeSync, lstatSync, openSync, readFileSync, readSync } from 'node:fs'
 import { basename, dirname, extname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
+import { modNameFindings } from './lib/mod-names.mjs'
+import { renameShellNames } from './lib/react-dom-names.mjs'
+
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 
 // The files in plugin/ that the directory's validator can't inspect, each with
@@ -300,8 +303,23 @@ for (const [path, source] of Object.entries(VENDOR)) {
   } catch {
     problem(`${source} is missing: run npm ci first.`)
   }
-  if (original !== null && !(pluginBytes.get(path)?.equals(original) ?? false)) {
+  if (original === null) {
+    continue
+  }
+  if (path === 'station/web/vendor/react-dom.production.min.js') {
+    if (!(pluginBytes.get(path)?.equals(Buffer.from(renameShellNames(original.toString('utf8')))) ?? false)) {
+      problem(`plugin/${path} differs from React DOM's own file with sh and Sh renamed: build it with scripts/build-web.mjs, and change nothing else in it.`)
+    }
+  } else if (!(pluginBytes.get(path)?.equals(original) ?? false)) {
     problem(`plugin/${path} differs from ${source}: copy React's file unchanged.`)
+  }
+}
+
+// The mod, as the directory reads it
+
+if (pluginBytes.has('hooks/register.js')) {
+  for (const finding of modNameFindings(pluginBytes.get('hooks/register.js').toString('utf8'), 'plugin/hooks/register.js')) {
+    problem(finding)
   }
 }
 
