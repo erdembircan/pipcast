@@ -34,7 +34,7 @@ export function Thumbnail() {
   )
 }
 
-/** The width the README shows the thumbnail at, in CSS pixels */
+/** The width README.md shows the picture at, in CSS pixels: its img's width="716". Change the two together. */
 const README_W = 716
 
 // YouTube's large play button as its player draws it: the path, the red and the
