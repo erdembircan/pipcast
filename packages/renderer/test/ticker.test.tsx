@@ -53,7 +53,10 @@ describe('the ticker on air', () => {
     const getComputedStyle = window.getComputedStyle.bind(window)
     vi.spyOn(window, 'getComputedStyle').mockImplementation((element: Element, pseudo?: string | null) => {
       if (element.classList.contains('pn-ticker-unit')) {
-        return { width: `${(element.textContent ?? '').length * perChar}px` } as CSSStyleDeclaration
+        const text = element.textContent ?? ''
+        // an empty stretch reads back its own width, rounded to WebKit's 1/64 px layout grid
+        const width = text === '' ? Math.round(parseFloat((element as HTMLElement).style.width || '0') * 64) / 64 : text.length * perChar
+        return { width: `${width}px` } as CSSStyleDeclaration
       }
       return getComputedStyle(element, pseudo)
     })
@@ -445,6 +448,23 @@ describe('the ticker on air', () => {
     for (const node of nodes) {
       if (!kept.includes(node) && (node.textContent ?? '') !== '') {
         expect(at(runOf(node))).toBeGreaterThanOrEqual(VIEW - 1e-6)
+      }
+    }
+  })
+
+  it('leaves an empty stretch as it was laid, a look later', () => {
+    renderLines()
+    look(250)
+    clock += 6001
+    look(0)
+    expect(units().filter((node) => (node.textContent ?? '') === '')).toHaveLength(1)
+    const kept = units().map((node) => ({ node, run: runOf(node) }))
+
+    look(250)
+    for (const { node, run } of kept) {
+      if (node.isConnected) {
+        expect(runOf(node)).toBe(run)
+        expect(run.cancel).not.toHaveBeenCalled()
       }
     }
   })

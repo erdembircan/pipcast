@@ -560,7 +560,9 @@
         if (held !== null) { return; }
         var changed = false;
         var units = belt.units.map(function (unit, i) {
-          var w = on[i] ? crawlWidth(on[i].node) : 0;
+          /* an empty stretch keeps the width it was laid with: no typeface
+             changes it, and the layout gives it back rounded */
+          var w = on[i] && unit.item !== null ? crawlWidth(on[i].node) : 0;
           if (w > 0 && w !== unit.width) {
             changed = true;
             return { key: unit.key, item: unit.item, width: w };
