@@ -48,6 +48,10 @@ final class StationController: NSObject, InteractionDelegate, WKNavigationDelega
     private var transparent = false
     /// The self-capture holds the controls up.
     private var holdingControls = false
+    #if PIPCAST_DEV
+    /// The development build's cues (DevCues.swift).
+    private let devCues: DevCues
+    #endif
 
     /// Whether the window is open, minimized to the side, or out for a segment, and the decisions about it.
     private var model: MinimizeModel
@@ -72,6 +76,9 @@ final class StationController: NSObject, InteractionDelegate, WKNavigationDelega
         prefs = StationPrefs.load(from: paths.prefs)
         quadrant = prefs.quadrant
         model = MinimizeModel(minimized: prefs.minimized)
+        #if PIPCAST_DEV
+        devCues = DevCues(paths: paths)
+        #endif
         web = makeStationWebView(bridge: bridge)
         chrome = ChromeView(web: web)
         content = PanelContent(chrome: chrome)
@@ -99,6 +106,14 @@ final class StationController: NSObject, InteractionDelegate, WKNavigationDelega
     /// screen before the app has finished launching makes AppKit activate it.
     func start() {
         log.write("start \(Constants.version) home \(paths.root)")
+        #if PIPCAST_DEV
+        do {
+            try devCues.prepare()
+            log.write("dev: the development build, taking cues from \(devCues.folder)")
+        } catch {
+            log.write("error dev: cannot make \(devCues.folder): \(error)")
+        }
+        #endif
         log.write(allowPointerInBackground()
                   ? "pointer: set in the background"
                   : "error cannot set the pointer in the background")
@@ -195,6 +210,9 @@ final class StationController: NSObject, InteractionDelegate, WKNavigationDelega
         keepOffOwnSpaces()
         readOptions()
         refreshStore()
+        #if PIPCAST_DEV
+        forwardDevCues()
+        #endif
         // macOS tells a window nothing when it appears under a resting pointer, or moves out from under it.
         followPointer()
         if shouldQuit() {
@@ -225,7 +243,13 @@ final class StationController: NSObject, InteractionDelegate, WKNavigationDelega
     }
 
     func writeStatus() {
+        #if PIPCAST_DEV
+        // The development build says so, for scripts/cue.mjs and scripts/live.sh to tell it from the station that ships
+        let status = StationStatus(pid: Int(getpid()), startedAt: startedAtMs, heartbeatAt: nowMilliseconds(),
+                                   version: "\(Constants.version)+dev")
+        #else
         let status = StationStatus(pid: Int(getpid()), startedAt: startedAtMs, heartbeatAt: nowMilliseconds())
+        #endif
         do {
             try status.write(to: paths.station)
         } catch {
@@ -236,6 +260,19 @@ final class StationController: NSObject, InteractionDelegate, WKNavigationDelega
     // MARK: The page
 
     private func receive(_ message: PageMessage) {
+        #if PIPCAST_DEV
+        // The development build logs what the page asks it to play, and when it wants the window, so station.log
+        // says what aired
+        switch message {
+        case let .cue(jingle): log.write("dev: page cue \(jingle)")
+        case let .bed(bed): log.write("dev: page bed \(bed)")
+        case .bedOut: log.write("dev: page bed-out")
+        case .hush: log.write("dev: page hush")
+        case let .window(wanted): log.write("dev: page window \(wanted ? "wanted" : "let go")")
+        case let .reported(at): log.write("dev: page reported \(Int(at))")
+        default: break
+        }
+        #endif
         switch message {
         case .ready:
             pageReady = true
@@ -285,6 +322,27 @@ final class StationController: NSObject, InteractionDelegate, WKNavigationDelega
             self.log.write("error \(problem)")
         }
     }
+
+    #if PIPCAST_DEV
+    /// Hands each cue waiting in the dev folder to the page, oldest first, and deletes it. Not before the page listens:
+    /// a cue sent then would be lost.
+    private func forwardDevCues() {
+        guard pageReady else { return }
+        for path in devCues.waiting() {
+            let name = (path as NSString).lastPathComponent
+            let data = FileManager.default.contents(atPath: path)
+            try? FileManager.default.removeItem(atPath: path)
+            guard let data, let text = String(data: data, encoding: .utf8) else {
+                log.write("error dev: cannot read the cue \(name)")
+                continue
+            }
+            log.write("dev: cue \(name)")
+            send(["type": "dev", "cue": text], to: web) { [weak self] problem in
+                self?.log.write("error dev: \(problem)")
+            }
+        }
+    }
+    #endif
 
     func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
         log.write("error page failed: \(error.localizedDescription)")

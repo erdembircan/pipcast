@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 
 import type { Snapshot } from '@pipcast/contract'
 import { createDirector } from '@pipcast/director'
-import type { Program } from '@pipcast/director'
+import type { DirectorOptions, Program, Tick } from '@pipcast/director'
 
 import { post, subscribe } from './bridge.ts'
 import { Broadcast, Stage } from './design.ts'
@@ -17,10 +17,21 @@ export function prefersReducedMotion(): boolean {
   }
 }
 
+// What decides what airs, tick by tick: the director, or in the development
+// build the dev director in front of it (packages/dev)
+export interface ProgramSource {
+  tick(input: Tick): Program
+}
+
+export interface AppProps {
+  reducedMotion?: boolean
+  createSource?: (options: DirectorOptions) => ProgramSource
+}
+
 // The live page: keeps the latest snapshot, ticks the director on a timer and
 // as each snapshot comes, and draws what it airs
-export function App({ reducedMotion = prefersReducedMotion() }: { reducedMotion?: boolean }) {
-  const director = useMemo(() => createDirector({ reducedMotion }), [reducedMotion])
+export function App({ reducedMotion = prefersReducedMotion(), createSource = createDirector }: AppProps) {
+  const director = useMemo(() => createSource({ reducedMotion }), [createSource, reducedMotion])
   const snapshot = useRef<Snapshot | null>(null)
   const [program, setProgram] = useState<Program | null>(null)
   const [width, setWidth] = useState(window.innerWidth)

@@ -6,6 +6,9 @@
 // its license. index.html loads them first, and station.js takes React and
 // ReactDOM from the globals they set. The output folder is emptied first, so the
 // build is reproducible.
+// With --dev it builds the development build's page instead, from
+// packages/dev/src/main.tsx into .dev/web, for scripts/build-dev.sh: never into
+// plugin/.
 import { build, transform } from 'esbuild'
 import { cpSync, copyFileSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
@@ -19,7 +22,14 @@ const VENDOR = [
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const renderer = join(root, 'packages/renderer')
-const out = join(root, 'plugin/station/web')
+
+const args = process.argv.slice(2)
+if (args.length > 1 || (args.length === 1 && args[0] !== '--dev')) {
+  throw new Error('usage: node scripts/build-web.mjs [--dev]')
+}
+const dev = args[0] === '--dev'
+const entry = dev ? join(root, 'packages/dev/src/main.tsx') : join(renderer, 'src/main.tsx')
+const out = dev ? join(root, '.dev/web') : join(root, 'plugin/station/web')
 
 rmSync(out, { recursive: true, force: true })
 mkdirSync(out, { recursive: true })
@@ -46,7 +56,7 @@ const reactGlobals = {
 }
 
 await build({
-  entryPoints: [join(renderer, 'src/main.tsx')],
+  entryPoints: [entry],
   outfile: join(out, 'station.js'),
   bundle: true,
   format: 'iife',
@@ -88,4 +98,4 @@ for (const [from, to] of VENDOR) {
   copyFileSync(join(root, from), join(out, to))
 }
 
-console.log('plugin/station/web')
+console.log(dev ? '.dev/web' : 'plugin/station/web')

@@ -3,6 +3,7 @@
 node_modules/
 artifacts/
 dist/
+.dev/
 .DS_Store
 station/.build/
 station/.swiftpm/

@@ -3715,8 +3715,8 @@
       return false;
     }
   }
-  function App({ reducedMotion = prefersReducedMotion() }) {
-    const director = (0, import_react.useMemo)(() => createDirector({ reducedMotion }), [reducedMotion]);
+  function App({ reducedMotion = prefersReducedMotion(), createSource = createDirector }) {
+    const director = (0, import_react.useMemo)(() => createSource({ reducedMotion }), [createSource, reducedMotion]);
     const snapshot = (0, import_react.useRef)(null);
     const [program, setProgram] = (0, import_react.useState)(null);
     const [width, setWidth] = (0, import_react.useState)(window.innerWidth);

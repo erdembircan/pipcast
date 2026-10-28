@@ -17,5 +17,5 @@
       "@pipcast/design": ["./design/components/index.d.ts"]
     }
   },
-  "include": ["packages/contract/src", "packages/director/src", "packages/director/test", "packages/renderer/src", "packages/renderer/test"]
+  "include": ["packages/contract/src", "packages/director/src", "packages/director/test", "packages/dev/src", "packages/dev/test", "packages/renderer/src", "packages/renderer/test"]
 }

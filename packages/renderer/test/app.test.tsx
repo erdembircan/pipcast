@@ -6,6 +6,8 @@ import { createRoot } from 'react-dom/client'
 import type { Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import type { Program } from '@pipcast/director'
+
 import { App } from '../src/App.tsx'
 import { receive } from '../src/bridge.ts'
 
@@ -86,6 +88,22 @@ describe('the live page', () => {
     })
     expect(container.querySelector('.pn-mode-desk')).not.toBeNull()
     expect(container.textContent).toContain('npm install')
+  })
+
+  it('takes what airs from the source it is given', () => {
+    const program: Program = {
+      scene: { mode: 'board' },
+      key: 'board',
+      sounds: [{ type: 'cue', jingle: 'breaking' }],
+      reported: null,
+      wantsWindow: false,
+    }
+    act(() => root.render(<App reducedMotion={false} createSource={() => ({ tick: () => program })} />))
+    act(() => receive(snapshot([record({})])))
+    act(() => {
+      vi.advanceTimersByTime(250)
+    })
+    expect(postMessage).toHaveBeenCalledWith({ type: 'cue', jingle: 'breaking' })
   })
 
   it('does not air a story that landed while the window was hidden, when the window shows before the timer ticks', () => {
