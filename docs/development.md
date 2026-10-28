@@ -229,4 +229,4 @@ The README's three grids of screenshots, `assets/screenshots/in-use.jpg`, `on-ai
 npm --prefix video run readme
 ```
 
-renders all three again, in Chrome. Render them after a change to what they show, and commit them with it. The picture at the top of the README, `assets/screenshots/breaking.png`, is not one of them.
+renders all three again, in Chrome. Render them after a change to what they show, and commit them with it. The picture under the video's thumbnail at the top of the README, `assets/screenshots/breaking.png`, is not one of them.
