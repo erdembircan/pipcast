@@ -10,6 +10,7 @@
     "studio": "node scripts/prepare.mjs && remotion studio src/index.ts",
     "still": "node scripts/prepare.mjs && remotion still src/index.ts",
     "readme": "node scripts/prepare.mjs --picture && node scripts/readme.mjs",
+    "thumbnail": "node scripts/prepare.mjs --picture && node scripts/thumbnail.mjs",
     "render": "node scripts/prepare.mjs && remotion render src/index.ts Pipcast out/pipcast.mp4",
     "render:4k": "node scripts/prepare.mjs && remotion render src/index.ts Pipcast out/pipcast-4k.mp4 --scale=2",
     "typecheck": "tsc -p tsconfig.json"
