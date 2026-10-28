@@ -219,6 +219,8 @@ npm --prefix video run studio
 
 opens it in Remotion Studio, rendering the soundtrack first if its score changed. `npm --prefix video run render` renders it to `video/out/pipcast.mp4`, and `render:4k` at twice the size; `video/out/` is not committed.
 
+The video is on YouTube at https://youtu.be/WZc3zm6nB9g, with `assets/youtube-thumbnail.jpg` as its thumbnail; `video/README.md` says how each is rendered. The README's link to the video, at its top, is that thumbnail with YouTube's play button on it, `assets/youtube-thumbnail-play.jpg`, which `npm --prefix video run thumbnail` renders with the thumbnail. The plugin's README, `packages/mod/README.md`, links to the video under its introduction, with its length. When a new cut of the video goes up, change its link in both READMEs, and its length in the plugin's README.
+
 ## README screenshots
 
 The README's three grids of screenshots, `assets/screenshots/in-use.jpg`, `on-air.jpg` and `window.jpg`, are drawn from the demo video's own pieces, in `video/src/readme`: moments of the video's desktop, two states the video only passes through, and KLWD's pictures in its window. With the video's dependencies installed,
@@ -227,4 +229,4 @@ The README's three grids of screenshots, `assets/screenshots/in-use.jpg`, `on-ai
 npm --prefix video run readme
 ```
 
-renders all three again, in Chrome. Render them after a change to what they show, and commit them with it. The picture at the top of the README, `assets/screenshots/breaking.png`, is not one of them.
+renders all three again, in Chrome. Render them after a change to what they show, and commit them with it. The picture under the video's thumbnail at the top of the README, `assets/screenshots/breaking.png`, is not one of them.

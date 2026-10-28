@@ -10,7 +10,7 @@ npm ci
 npm run studio
 ```
 
-opens Remotion Studio. `npm run render` renders the video to `out/pipcast.mp4`, and `npm run render:4k` at twice the size, for YouTube. `out/` is not committed.
+opens Remotion Studio. `npm run render` renders the video to `out/pipcast.mp4`, and `npm run render:4k` at twice the size, for YouTube. Render the 4K one with `npm run render:4k -- --concurrency=1 --timeout=120000`: at a concurrency of 3 or 5 it left broken frames in the video, such as a half-white screen, a blank window or a stalled crawl, even on an idle Mac. `out/` is not committed.
 
 ## How it is put together
 
@@ -27,4 +27,4 @@ opens Remotion Studio. `npm run render` renders the video to `out/pipcast.mp4`, 
 - `scripts/prepare.mjs` runs before the studio and every render: it copies the design system's stylesheet without its Google Fonts import, copies the icon's layers as markup, renders the soundtrack in Chrome when its score changed, and lays the beat when its loops or where it plays changed. What it makes is in `src/generated` and `public/audio`, which are not committed.
 - `scripts/stills.mjs <composition> <dir> <seconds...>` renders single frames, for checking a change without rendering the video.
 - `src/readme` lays out the README's three grids of screenshots from the same pieces, as the video's boards are laid out: moments of the desktop scene, two states the video only passes through (the window's controls on hover, and the transparent window), and KLWD's pictures in its window. `npm run readme` renders them into `assets/screenshots` at the repository's root. It runs `scripts/prepare.mjs --picture` first, which stops before the soundtrack and the beat, since a still has no sound.
-- `src/thumbnail` is the video's YouTube thumbnail: the icon, the name in the serif and the line under it, centred on the paper. `npm run thumbnail` renders it into `assets/youtube-thumbnail.jpg` at the repository's root, after `scripts/prepare.mjs --picture` as for the README's screenshots.
+- `src/thumbnail` is the video's YouTube thumbnail: the icon, the name in the serif and the line under it, centred on the paper. `npm run thumbnail` renders it into `assets/youtube-thumbnail.jpg` at the repository's root, after `scripts/prepare.mjs --picture` as for the README's screenshots. It also renders `assets/youtube-thumbnail-play.jpg`, the same picture with YouTube's play button in the middle, which the README shows at its top as its link to the video. The button is the one YouTube's player draws, with the player's own path and red, at the size the player draws it for the width the README shows the picture at.
