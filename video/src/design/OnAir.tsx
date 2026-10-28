@@ -12,7 +12,7 @@ import { CRAWL_SPEED, power, signalWave, slide, sweep } from './motion.ts'
 import { PipNews } from './pipnews.ts'
 import type { Scene, TickerItem } from './pipnews.ts'
 
-const { TopBand, Ticker, SessionBoard, Stinger, Ident, NewsDesk, OTSBox, LowerThird, HourReview } = PipNews
+const { Backdrop, TopBand, Ticker, SessionBoard, Stinger, Ident, NewsDesk, OTSBox, LowerThird, HourReview } = PipNews
 
 const STAGE: CSSProperties = { position: 'absolute', left: 0, top: 0, width: 960, height: 540 }
 
@@ -23,18 +23,6 @@ export const IDENT_S = 7.5
 export const IDENT_OUTRO_S = 1.4
 
 const clamp01 = (x: number) => (x < 0 ? 0 : x > 1 ? 1 : x)
-
-/** The ring's signal: three waves 3 s apart, drawn at the station's clock. */
-export function Signal({ clock }: { clock: number }) {
-  return (
-    <div className="pn-signal" aria-hidden="true">
-      {[0, 1, 2].map((i) => {
-        const wave = signalWave(clock * 1000 + i * 3000)
-        return <i key={i} style={{ transform: `scale(${wave.scale})`, opacity: wave.o }} />
-      })}
-    </div>
-  )
-}
 
 function textOf(item: TickerItem): string {
   return typeof item === 'string' ? item : `${item.lead ?? ''} ${item.text}`
@@ -74,6 +62,15 @@ export function OnAir({ scene, t, crawl, clock, identFrom = 0 }: OnAirProps) {
   const parts: JSX.Element[] = []
   const crawlSeconds = crawl ?? t
 
+  // The backdrop's signal at the station's clock. Backdrop draws its waves
+  // with `animate`, but nothing plays them in the video, which has no
+  // pn-anim: DesignStyles puts each one where pn-signal has it now.
+  for (let i = 0; i < 3; i += 1) {
+    const wave = signalWave(clock * 1000 + i * 3000)
+    vars[`--rv-wave-${i + 1}-s`] = wave.scale
+    vars[`--rv-wave-${i + 1}-o`] = wave.o
+  }
+
   if (mode === 'desk') {
     const line = slide(ms, 0)
     const strap = slide(ms, 150)
@@ -99,7 +96,7 @@ export function OnAir({ scene, t, crawl, clock, identFrom = 0 }: OnAirProps) {
     const back = scene.board ?? { mode: 'board' }
     parts.push(
       <div key="under" className="pn-board-under" style={{ ...STAGE, zIndex: 0 }}>
-        <Signal clock={clock} />
+        <Backdrop animate />
         <SessionBoard sessions={back.sessions} limits={back.limits} />
         <Crawl items={back.ticker ?? []} time={back.clock} seconds={crawlSeconds} />
       </div>,
@@ -112,9 +109,9 @@ export function OnAir({ scene, t, crawl, clock, identFrom = 0 }: OnAirProps) {
   } else if (mode === 'ident') {
     parts.push(<Ident key="id" hour={scene.hour} progress={clamp01(identFrom + t / IDENT_S)} />)
   } else if (mode === 'review') {
-    parts.push(<HourReview key="rv" rows={scene.rows} span={scene.span} label={scene.label} />)
+    parts.push(<Backdrop key="backdrop" animate />, <HourReview key="rv" rows={scene.rows} span={scene.span} label={scene.label} />)
   } else {
-    parts.push(<Signal key="signal" clock={clock} />, <SessionBoard key="board" sessions={scene.sessions} limits={scene.limits} />)
+    parts.push(<Backdrop key="backdrop" animate />, <SessionBoard key="board" sessions={scene.sessions} limits={scene.limits} />)
   }
   parts.push(<TopBand key="top" />)
   if (mode !== 'stinger' && mode !== 'outro' && mode !== 'ident') {

@@ -12,6 +12,9 @@ const driven = `
 .rv-air .pn-anchor { transform: translateY(var(--rv-bob, 0px)); }
 .rv-air .pn-board-slot > .pn-row { transform: translateX(var(--rv-row-x, 0px)); opacity: var(--rv-row-o, 1); }
 .rv-air .pn-clawd { will-change: auto; }
+.rv-air .pn-signal > i:nth-child(1) { transform: scale(var(--rv-wave-1-s, 1)); opacity: var(--rv-wave-1-o, 0); }
+.rv-air .pn-signal > i:nth-child(2) { transform: scale(var(--rv-wave-2-s, 1)); opacity: var(--rv-wave-2-o, 0); }
+.rv-air .pn-signal > i:nth-child(3) { transform: scale(var(--rv-wave-3-s, 1)); opacity: var(--rv-wave-3-o, 0); }
 `
 
 // The window's glass controls and its tab, with no backdrop-filter: headless

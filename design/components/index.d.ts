@@ -151,6 +151,9 @@ export interface PipControlsProps {
 
 export interface BroadcastProps { scene?: Scene; sample?: string; run?: RunStep[]; animate?: boolean }
 
+/** The backdrop: a faint ring at the top right of the studio and the signal it sends out. The broadcast draws it under the board, THE HOUR IN REVIEW and an outro's board. */
+export interface BackdropProps { /** Sends out the ring's signal, a wave every 3 s that keeps time with the clock; without it the ring stands alone, as in a still. */ animate?: boolean }
+
 /** The station mark: KLWD in chrome, alone. `size` is the letters' size in px (40 in the bug). */
 export interface MarkProps { size?: number; text?: string }
 

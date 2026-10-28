@@ -191,36 +191,34 @@
 }
 .pn-ticker-clock > span { display: inline-block; transform: skewX(calc(var(--slant, -12deg) * -1)); }
 
-/* ---------- Live board ---------- */
-/* The ring at the top right: behind the board, THE HOUR IN REVIEW and an outro's board underneath */
-.pn-broadcast.pn-mode-board::before, .pn-broadcast.pn-mode-review::before, .pn-board-under::before {
-  content: "";
-  position: absolute;
-  right: -190px;
-  top: -150px;
-  width: 640px;
-  height: 640px;
-  border-radius: 50%;
-  border: 2px solid rgba(255, 255, 255, 0.08);
-  box-shadow: inset 0 0 0 70px rgba(255, 255, 255, 0.025), 0 0 0 46px rgba(255, 255, 255, 0.02);
-}
-/* The ring's signal (Signal in bundle.js): waves that leave the ring and
-   spread across the studio, fading as they go. They share the ring's
-   centre (830, 170) and start at its size; each wave's delay is set from
-   the clock when it is drawn. Not animating, nothing shows */
-.pn-signal { position: absolute; left: 830px; top: 170px; width: 0; height: 0; }
-.pn-signal > i {
+/* ---------- The backdrop: behind the board, THE HOUR IN REVIEW and an outro's board ---------- */
+/* Backdrop in bundle.js: the ring at the top right and the signal it sends
+   out, laid out from the ring's centre (830, 170). The ring and each wave
+   are the same circle about that centre; the waves leave the ring and
+   spread across the studio, fading as they go, each with its delay set
+   from the clock when it is drawn. Not animating, the ring stands alone */
+.pn-backdrop { position: absolute; left: 830px; top: 170px; width: 0; height: 0; }
+.pn-backdrop-ring, .pn-signal > i {
   position: absolute;
   left: -320px;
   top: -320px;
   width: 640px;
   height: 640px;
   border-radius: 50%;
+}
+.pn-backdrop-ring {
+  border: 2px solid rgba(255, 255, 255, 0.08);
+  box-shadow: inset 0 0 0 70px rgba(255, 255, 255, 0.025), 0 0 0 46px rgba(255, 255, 255, 0.02);
+}
+.pn-signal { position: absolute; left: 0; top: 0; width: 0; height: 0; }
+.pn-signal > i {
   border: 2px solid rgba(255, 255, 255, 0.16);
   box-shadow: inset 0 0 0 26px rgba(255, 255, 255, 0.025);
   opacity: 0;
 }
 .pn-anim .pn-signal > i { animation: pn-signal 9s cubic-bezier(0.2, 0.6, 0.4, 1) infinite; }
+
+/* ---------- Live board ---------- */
 /* The listing, as the first station sketch drew it: a glossy row per session
    with a hard split across the middle, the project on a plate, the title,
    and the state on a pill */

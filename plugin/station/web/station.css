@@ -382,26 +382,14 @@ body {
   display: inline-block;
   transform: skewX(calc(var(--slant, -12deg) * -1));
 }
-.pn-broadcast.pn-mode-board::before,
-.pn-broadcast.pn-mode-review::before,
-.pn-board-under::before {
-  content: "";
-  position: absolute;
-  right: -190px;
-  top: -150px;
-  width: 640px;
-  height: 640px;
-  border-radius: 50%;
-  border: 2px solid rgba(255, 255, 255, 0.08);
-  box-shadow: inset 0 0 0 70px rgba(255, 255, 255, 0.025), 0 0 0 46px rgba(255, 255, 255, 0.02);
-}
-.pn-signal {
+.pn-backdrop {
   position: absolute;
   left: 830px;
   top: 170px;
   width: 0;
   height: 0;
 }
+.pn-backdrop-ring,
 .pn-signal > i {
   position: absolute;
   left: -320px;
@@ -409,6 +397,19 @@ body {
   width: 640px;
   height: 640px;
   border-radius: 50%;
+}
+.pn-backdrop-ring {
+  border: 2px solid rgba(255, 255, 255, 0.08);
+  box-shadow: inset 0 0 0 70px rgba(255, 255, 255, 0.025), 0 0 0 46px rgba(255, 255, 255, 0.02);
+}
+.pn-signal {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 0;
+  height: 0;
+}
+.pn-signal > i {
   border: 2px solid rgba(255, 255, 255, 0.16);
   box-shadow: inset 0 0 0 26px rgba(255, 255, 255, 0.025);
   opacity: 0;
