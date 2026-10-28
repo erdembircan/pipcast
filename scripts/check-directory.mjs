@@ -10,11 +10,16 @@ import { closeSync, lstatSync, openSync, readFileSync, readSync } from 'node:fs'
 import { basename, dirname, extname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
+import { modNameFindings } from './lib/mod-names.mjs'
+import { renameShellNames } from './lib/react-dom-names.mjs'
+
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 
 // The files in plugin/ that the directory's validator can't inspect, each with
-// the reason it ships. Each one holds every version for a reviewer at
-// Anthropic, so a file joins this list only when Pipcast can't do without it.
+// the reason it ships. The pre-submission checklist holds a version with such
+// a file for a reviewer at Anthropic, though the portal's first validation of
+// Pipcast held only the binary, so a file joins this list only when Pipcast
+// can't do without it.
 const HELD = {
   'station/pipcast-station': 'the station, a native macOS program built from station/Sources',
   'station/sounds/breaking.m4a': "BREAKING NEWS's jingle, rendered from the design system's score",
@@ -300,8 +305,23 @@ for (const [path, source] of Object.entries(VENDOR)) {
   } catch {
     problem(`${source} is missing: run npm ci first.`)
   }
-  if (original !== null && !(pluginBytes.get(path)?.equals(original) ?? false)) {
+  if (original === null) {
+    continue
+  }
+  if (path === 'station/web/vendor/react-dom.production.min.js') {
+    if (!(pluginBytes.get(path)?.equals(Buffer.from(renameShellNames(original.toString('utf8')))) ?? false)) {
+      problem(`plugin/${path} differs from React DOM's own file with sh and Sh renamed: build it with scripts/build-web.mjs, and change nothing else in it.`)
+    }
+  } else if (!(pluginBytes.get(path)?.equals(original) ?? false)) {
     problem(`plugin/${path} differs from ${source}: copy React's file unchanged.`)
+  }
+}
+
+// The mod, as the directory reads it
+
+if (pluginBytes.has('hooks/register.js')) {
+  for (const finding of modNameFindings(pluginBytes.get('hooks/register.js').toString('utf8'), 'plugin/hooks/register.js')) {
+    problem(finding)
   }
 }
 
@@ -396,4 +416,4 @@ if (count > 0) {
   process.exit(1)
 }
 const held = Object.keys(HELD).length
-console.log(`plugin/ and the repository pass every check of Anthropic's plugin directory made here. The ${held} files in HELD hold each version for a reviewer.`)
+console.log(`plugin/ and the repository pass every check of Anthropic's plugin directory made here. The ${held} files in HELD can hold a version for a reviewer.`)

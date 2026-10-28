@@ -11,6 +11,7 @@ import { activity, lastWords, permission, question } from './core/describe.ts'
 import type { ToolInput } from './core/describe.ts'
 import { editCounts } from './core/diffstat.ts'
 import type { Booking } from './core/diffstat.ts'
+import { parentOf, processTag } from './core/engine.ts'
 import { FILE_TOOLS, MAX_FOLDERS, NOTHING, agentMetaPath, look, parseAgentMeta, readTree, remember, topOf } from './core/ledger.ts'
 import type { Reading } from './core/ledger.ts'
 import { limitsMoved, readLimits } from './core/limits.ts'
@@ -90,9 +91,9 @@ function enqueue(task: () => Promise<void>): Promise<void> {
 }
 
 // A tool call's arguments: the event, less the envelope around them
-function toolInput(e: object): ToolInput {
+function toolInput(event: object): ToolInput {
   const input: ToolInput = {}
-  for (const [key, value] of Object.entries(e)) {
+  for (const [key, value] of Object.entries(event)) {
     if (key !== 'tool' && key !== 'tool_use_id' && key !== 'agentId') {
       input[key] = value
     }
@@ -266,8 +267,8 @@ async function shareOwnTransparency($: EngineInterface): Promise<void> {
 }
 
 // Where the engine keeps the session's files, from a classic hook's input
-function noteTranscript(e: object): void {
-  const { session_id: id, transcript_path: path } = e as { session_id?: unknown; transcript_path?: unknown }
+function noteTranscript(event: object): void {
+  const { session_id: id, transcript_path: path } = event as { session_id?: unknown; transcript_path?: unknown }
   if (typeof id !== 'string' || typeof path !== 'string') {
     return
   }
@@ -363,9 +364,9 @@ async function bookNow($: EngineInterface, id: string | undefined, booking: Book
   if (model === null || model.record.id !== id) {
     return false
   }
-  const next = record.booked(model, now, booking)
-  const changed = next !== model
-  model = next
+  const updated = record.booked(model, now, booking)
+  const changed = updated !== model
+  model = updated
   return changed
 }
 
@@ -482,9 +483,9 @@ async function checkTitle($: EngineInterface): Promise<void> {
     if (found === undefined || model === null || model.record.id !== id) {
       return
     }
-    const next = record.fileTitled(model, found)
-    const changed = next.record.title !== model.record.title
-    model = next
+    const updated = record.fileTitled(model, found)
+    const changed = updated.record.title !== model.record.title
+    model = updated
     if (changed) {
       await save($)
     }
@@ -508,9 +509,9 @@ async function takeLimits($: EngineInterface, reported: unknown): Promise<boolea
   if (model === null) {
     return false
   }
-  const next = record.measured(model, readLimits(reported, await $.clock.now()))
-  const moved = limitsMoved(model.record.limits ?? [], next.record.limits ?? [])
-  model = next
+  const updated = record.measured(model, readLimits(reported, await $.clock.now()))
+  const moved = limitsMoved(model.record.limits ?? [], updated.record.limits ?? [])
+  model = updated
   return moved
 }
 
@@ -544,9 +545,9 @@ async function lookAgain($: EngineInterface): Promise<void> {
     if (model === null || model.held !== held) {
       return
     }
-    const next = record.looked(model, await $.clock.now(), states)
-    model = next
-    if (next.held === null) {
+    const updated = record.looked(model, await $.clock.now(), states)
+    model = updated
+    if (updated.held === null) {
       await save($)
     }
   } catch (error) {
@@ -725,9 +726,9 @@ async function onTitle($: EngineInterface, title: unknown): Promise<void> {
   }
   hookTitle = title.trim()
   if (model !== null) {
-    const next = record.hookTitled(model, hookTitle)
-    const changed = next.record.title !== model.record.title
-    model = next
+    const updated = record.hookTitled(model, hookTitle)
+    const changed = updated.record.title !== model.record.title
+    model = updated
     if (changed) {
       await save($)
     }
@@ -772,15 +773,21 @@ function autoTune($: EngineInterface): Promise<void> {
 }
 
 // The Claude Code binary this session runs on: CLAUDE_CODE_EXECPATH when it is
-// set, else the parent of a command the mod starts, which is the engine itself
+// set, else the program that started a ps the mod runs, found with no shell
 async function engineBinary($: EngineInterface): Promise<string | null> {
   const set = await $.env.get('CLAUDE_CODE_EXECPATH')
   if (set !== undefined && set !== '') {
     return set
   }
-  const parent = await $.process.run(['/bin/sh', '-c', '/bin/ps -o comm= -p "$PPID"'])
-  const path = parent.stdout.trim()
-  return parent.exitCode === 0 && path.startsWith('/') ? path : null
+  const tag = processTag()
+  const listing = await $.process.run(['/bin/ps', '-x', '-o', 'pid=', '-o', 'ppid=', '-o', `command=${tag}`])
+  const parent = listing.exitCode === 0 ? parentOf(listing.stdout, tag) : null
+  if (parent === null) {
+    return null
+  }
+  const named = await $.process.run(['/bin/ps', '-o', 'comm=', '-p', String(parent)])
+  const path = named.stdout.trim()
+  return named.exitCode === 0 && path.startsWith('/') ? path : null
 }
 
 // Where Claude Code keeps this plugin's options, found once a load
@@ -807,20 +814,20 @@ async function showOption($: EngineInterface, option: OptionSpec): Promise<strin
 // /pipcast <option> on|off: saved with Claude Code's own command, after which
 // every session reloads the mod with the new value. Transparent window also
 // reaches the station at once, through options.json.
-async function setOption($: EngineInterface, option: OptionSpec, on: boolean): Promise<string> {
+async function setOption($: EngineInterface, option: OptionSpec, enabled: boolean): Promise<string> {
   try {
     const home = await optionsHomeOf($)
-    const saved = home !== null && (await writeOption(ioFor($), home, option.key, on))
+    const saved = home !== null && (await writeOption(ioFor($), home, option.key, enabled))
     if (!saved) {
-      return OPTION_REPLY.cannotSave(option.word, on)
+      return OPTION_REPLY.cannotSave(option.word, enabled)
     }
     if (option.key === TRANSPARENT_KEY) {
-      await shareTransparency($, on)
+      await shareTransparency($, enabled)
     }
-    return optionState(option.word, on)
+    return optionState(option.word, enabled)
   } catch (error) {
     failure($, 'saving an option', error)
-    return OPTION_REPLY.cannotSave(option.word, on)
+    return OPTION_REPLY.cannotSave(option.word, enabled)
   }
 }
 
@@ -857,9 +864,9 @@ async function onToolAfter($: EngineInterface, agent: string | null): Promise<vo
   if (model === null) {
     return
   }
-  const next = record.resumed(model, await $.clock.now(), agent)
-  if (next !== model) {
-    model = next
+  const updated = record.resumed(model, await $.clock.now(), agent)
+  if (updated !== model) {
+    model = updated
     await save($)
   }
 }
@@ -873,14 +880,14 @@ async function onPermission($: EngineInterface, tool: string, input: unknown, ag
   await save($)
 }
 
-async function onStop($: EngineInterface, e: { last_assistant_message?: string; background_tasks?: unknown[]; session_crons?: unknown[] }): Promise<void> {
+async function onStop($: EngineInterface, stop: { last_assistant_message?: string; background_tasks?: unknown[]; session_crons?: unknown[] }): Promise<void> {
   if (model === null) {
     return
   }
   // With nothing else to wake the session, a look tells which of the commands
   // it left running in the background work; with something else, the finish
   // waits anyway
-  const waits = waitsOn(e)
+  const waits = waitsOn(stop)
   const waiting =
     waits.others || waits.shells.length === 0
       ? waits
@@ -890,7 +897,7 @@ async function onStop($: EngineInterface, e: { last_assistant_message?: string; 
     return
   }
   model = record.finished(model, await $.clock.now(), {
-    lastWords: lastWords(e.last_assistant_message ?? ''),
+    lastWords: lastWords(stop.last_assistant_message ?? ''),
     waiting,
   })
   await save($)
@@ -967,7 +974,7 @@ export function register(on: On, options: PluginOptions) {
       case 'show':
         return { text: await showOption($, request.option) }
       case 'set':
-        return { text: await setOption($, request.option, request.on) }
+        return { text: await setOption($, request.option, request.enabled) }
       case 'unknown':
         return { text: OPTION_REPLY.unknown(request.word) }
       case 'bad-value':

@@ -30,8 +30,8 @@ export async function readOption(io: Io, home: OptionsHome, key: string): Promis
 }
 
 // Saves a boolean option; true once Claude Code says it is saved
-export async function writeOption(io: Io, home: OptionsHome, key: string, on: boolean): Promise<boolean> {
-  const values = JSON.stringify({ [key]: on ? 'true' : 'false' })
+export async function writeOption(io: Io, home: OptionsHome, key: string, enabled: boolean): Promise<boolean> {
+  const values = JSON.stringify({ [key]: enabled ? 'true' : 'false' })
   const answer = await io.run([...home.argv, 'plugin', 'configure', '--json', '--values-stdin', '--', home.id], undefined, ENGINE_MS, values)
   return answer.exitCode === 0 && wasSaved(answer.stdout, key)
 }

@@ -47,17 +47,17 @@ export const OPTION_WORDS: Record<string, OptionWords> = {
 export const COMMAND_ARGUMENT_HINT = `[${Object.keys(OPTION_WORDS).join('|')} on|off]`
 
 // "Tune in every new session is on. Each new session in the desktop app tunes in to KLWD as it opens."
-export function optionState(word: string, on: boolean): string {
+export function optionState(word: string, enabled: boolean): string {
   const words = OPTION_WORDS[word]
-  const state = `${words?.title ?? word} is ${on ? 'on' : 'off'}.`
-  return words === undefined ? state : `${state} ${on ? words.on : words.off}`
+  const state = `${words?.title ?? word} is ${enabled ? 'on' : 'off'}.`
+  return words === undefined ? state : `${state} ${enabled ? words.on : words.off}`
 }
 
 export const OPTION_REPLY = {
   unknown: (word: string) => `/pipcast has no option called ${word}. Options: ${Object.keys(OPTION_WORDS).join(', ')}.`,
   badValue: (word: string) => `/pipcast ${word} takes on or off.`,
   cannotRead: (word: string) => `Pipcast could not read the ${word} setting. Run /pipcast ${word} to try again.`,
-  cannotSave: (word: string, on: boolean) => `Pipcast could not save the ${word} setting. Run /pipcast ${word} ${on ? 'on' : 'off'} to try again.`,
+  cannotSave: (word: string, enabled: boolean) => `Pipcast could not save the ${word} setting. Run /pipcast ${word} ${enabled ? 'on' : 'off'} to try again.`,
 } as const
 
 // The band draws one picture; this is what a screen reader reads for it

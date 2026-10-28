@@ -13,18 +13,18 @@ describe('parseRequest', () => {
 
   it('reads an option on its own as a question, and with on or off as a change', () => {
     expect(parseRequest('auto')).toEqual({ kind: 'show', option: auto })
-    expect(parseRequest('auto on')).toEqual({ kind: 'set', option: auto, on: true })
-    expect(parseRequest('auto off')).toEqual({ kind: 'set', option: auto, on: false })
+    expect(parseRequest('auto on')).toEqual({ kind: 'set', option: auto, enabled: true })
+    expect(parseRequest('auto off')).toEqual({ kind: 'set', option: auto, enabled: false })
   })
 
   it('reads transparency the same way', () => {
     expect(parseRequest('transparency')).toEqual({ kind: 'show', option: transparency })
-    expect(parseRequest('Transparency ON')).toEqual({ kind: 'set', option: transparency, on: true })
-    expect(parseRequest('transparency off')).toEqual({ kind: 'set', option: transparency, on: false })
+    expect(parseRequest('Transparency ON')).toEqual({ kind: 'set', option: transparency, enabled: true })
+    expect(parseRequest('transparency off')).toEqual({ kind: 'set', option: transparency, enabled: false })
   })
 
   it('reads the words in any case and spacing', () => {
-    expect(parseRequest('  AUTO   On ')).toEqual({ kind: 'set', option: auto, on: true })
+    expect(parseRequest('  AUTO   On ')).toEqual({ kind: 'set', option: auto, enabled: true })
   })
 
   it('names a word it does not know as it was typed', () => {

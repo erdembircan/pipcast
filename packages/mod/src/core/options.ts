@@ -29,7 +29,7 @@ export function needsSharing(file: SharedOptions | null, transparent: boolean): 
 export type Request =
   | { kind: 'toggle' }
   | { kind: 'show'; option: OptionSpec }
-  | { kind: 'set'; option: OptionSpec; on: boolean }
+  | { kind: 'set'; option: OptionSpec; enabled: boolean }
   | { kind: 'unknown'; word: string }
   | { kind: 'bad-value'; option: OptionSpec }
 
@@ -47,7 +47,7 @@ export function parseRequest(args: string): Request {
     return { kind: 'show', option }
   }
   if (rest.length === 0 && (value === 'on' || value === 'off')) {
-    return { kind: 'set', option, on: value === 'on' }
+    return { kind: 'set', option, enabled: value === 'on' }
   }
   return { kind: 'bad-value', option }
 }

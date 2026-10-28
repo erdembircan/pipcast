@@ -124,7 +124,7 @@ Run `/pipcast auto` or `/pipcast transparency` on its own to see whether that se
 
 Pipcast is two programs, and both run only on your Mac.
 
-**The mod** is Pipcast's code inside Claude Code. It runs in every Claude Code session while Pipcast is on, on air or not, so a session that goes on air mid-turn shows where it stands at once. It draws the band above the prompt box, answers `/pipcast`, and follows each session's events: the session starting and ending, prompts sent, turns starting and ending, the tools Claude calls, permission requests and errors. From a prompt you send, it takes only the session's title and where its transcript is, never the prompt itself.
+**The mod** is Pipcast's code inside Claude Code. It runs in every Claude Code session while Pipcast is on, on air or not, so a session that goes on air mid-turn shows where it stands at once. It draws the band above the prompt box, answers `/pipcast`, and follows each session's events: the session starting and ending, prompts sent, turns starting and ending, the tools Claude calls, permission requests and errors. From a prompt you send, it takes only the session's title and where its transcript is, never the prompt itself. When Claude asks for a permission, the mod only notes that the session is waiting on you: it never answers a permission request or changes one, so every permission prompt still comes to you.
 
 The mod reads:
 
@@ -135,12 +135,13 @@ The mod reads:
 - your account's usage limits, as Claude Code reports them
 - the environment variables `HOME`, `CLAUDE_CONFIG_DIR` and `CLAUDE_CODE_EXECPATH`, and `PIPCAST_HOME`, `PIPCAST_STATION_BIN` and `PIPCAST_TARGET_BUNDLE_ID`, which are for Pipcast's own tests
 
-It writes a session's file only while the session is on air, and it runs these programs and no others:
+What it reads about a session goes only into that session's file, for the station to show. It writes the file only while the session is on air, and it runs these programs and no others:
 
 - `git`, only to read (`rev-parse`, `diff-index` and `ls-files`), in the folders where Claude works, and it reads the files there that git doesn't track yet, to count the lines each session changes
 - `ps`, `lsof`, `head` and `tail`, when a turn ends with commands still running in the background, to tell from their processes and the start and end of their output whether they're still at work
 - `find`, to find the folder of the session's transcript when no hook has said where it is
-- `sh` and `ps`, to find the Claude Code program the session runs on, and that program's `claude plugin list` and `claude plugin configure`, when you run `/pipcast auto` or `/pipcast transparency`
+- `ps`, when you run `/pipcast auto` or `/pipcast transparency`, to find the Claude Code program the session runs on: it lists your processes with their commands, finds among them the `ps` it started by a tag of its own, and keeps only the program that started that `ps`
+- that Claude Code program's `claude plugin list` and `claude plugin configure`, to read and save Pipcast's two settings, when you run `/pipcast auto` or `/pipcast transparency`
 - `mkdir`, `mv`, `rm` and `chmod`, on its own files
 - the station
 
