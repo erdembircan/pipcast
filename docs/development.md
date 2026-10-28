@@ -77,7 +77,7 @@ makes the live checkout on master, builds it, installs it from the `pipcast` mar
 scripts/live.sh pr 12
 ```
 
-puts a pull request in the app. `scripts/live.sh <branch or commit>` puts any other commit there and `scripts/live.sh master` puts master there. Each checks the commit out in the live checkout, builds it with the commit's own `scripts/build-dev.sh` and swaps the build in, then turns off the release that is on, and remembers which. A build that fails moves nothing. A commit from before the development build has no `scripts/build-dev.sh`: its `plugin/` goes in as it is, and takes no cues. A station running the build that was in the app is stopped when the move changes it, and a session on air starts it again from the new build within 10 seconds.
+puts a pull request in the app. `scripts/live.sh <branch or commit>` puts any other commit there and `scripts/live.sh master` puts master there. Each checks the commit out in the live checkout, builds it with the commit's own `scripts/build-dev.sh` and swaps the build in, then turns off the release that is on, and remembers which. A build that fails moves nothing. A commit from before the development build has no `scripts/build-dev.sh`: its `plugin/` goes in as it is, and takes no cues. A station running the build that was in the app is restarted on the new build when the move changes it.
 
 ```bash
 scripts/live.sh published
@@ -95,13 +95,13 @@ A copy the desktop app hands in itself, from Anthropic's plugin directory or an 
 
 Each install keeps its own settings, since Claude Code saves a plugin's options under its id.
 
-Any session on air starts the station when it finds none, from the plugin it runs. When you switch the app from one Pipcast to another, a session that hasn't reloaded yet still runs the one before, and could start that one's station. So after a switch, run `/reload-plugins` in every session on air, then
+Any session on air starts the station when it finds none, from the plugin it runs, and a session that hasn't reloaded since you switched the app from one Pipcast to another still runs the one before. So after a switch to the live checkout,
 
 ```bash
 scripts/live.sh restart
 ```
 
-which stops the station on air, and a session on air starts it again from the plugin it runs within 10 seconds.
+stops the station on air and starts the live checkout's in its place, whatever the sessions run: they feed it as they feed any station. With a release in the app, it stops the station, and a session on air starts its own again within 10 seconds.
 
 ## Cue a segment
 

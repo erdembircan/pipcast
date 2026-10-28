@@ -27,8 +27,9 @@
 #   scripts/live.sh remove        does the same, then uninstalls the live
 #                                 checkout and removes it with the pipcast
 #                                 marketplace
-#   scripts/live.sh restart       stops the station on air; a session on air
-#                                 starts it again from the plugin it runs
+#   scripts/live.sh restart       stops the station on air, and while the live
+#                                 checkout is in the app starts its station in
+#                                 its place
 #   scripts/live.sh story ...     cues BREAKING NEWS in the development build
 #   scripts/live.sh hour ...      cues the report on the next hour in it
 #   scripts/live.sh cue <file>    cues what a JSON file holds, or - its input
@@ -38,11 +39,11 @@
 # clean. Putting a commit in the app builds it first, and a build that fails
 # moves nothing. A commit from before the development build has no
 # scripts/build-dev.sh: its plugin/ goes in as it is, and takes no cues. A
-# station running the build that was in the app is stopped when a move changes
-# it, and a session on air starts it again from the new build. Putting the
-# live checkout in the app turns off every release of Pipcast that is on in
-# Claude Code's plugin list, and remembers which; published turns those back
-# on. Sessions pick a change up on /reload-plugins, or when they start.
+# station running the build that was in the app is restarted on the new build
+# when a move changes it. Putting the live checkout in the app turns off every
+# release of Pipcast that is on in Claude Code's plugin list, and remembers
+# which; published turns those back on. Sessions pick a change up on
+# /reload-plugins, or when they start.
 #
 # story, hour and cue run the live checkout's own scripts/cue.mjs. A branch
 # called story, hour, cue or restart needs its full name, refs/heads/<name>.
@@ -197,6 +198,31 @@ stop_station() {
   done
 }
 
+# Puts the live checkout's station on air in place of whichever runs, there and
+# then, rather than leaving it to a session: one that hasn't reloaded since a
+# switch would start the station of the Pipcast it still runs. Stops a station
+# that a session starts in between, and tries again; false when one keeps
+# coming back
+start_live_station() {
+  local binary
+  for _ in 1 2 3; do
+    stop_station
+    "$plugin/station/pipcast-station" launch --home "$store" --assets "$plugin/station" >/dev/null
+    binary=""
+    for _ in $(seq 30); do
+      binary="$(station_binary)"
+      if [[ -n "$binary" ]]; then
+        break
+      fi
+      sleep 0.1
+    done
+    if [[ "$binary" == "$plugin/station/pipcast-station" ]]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
 # Builds the live checkout's commit into .dev/marketplace/plugin.next, then
 # swaps it in for the build in the app with two renames, so a station running
 # the build before keeps running and is never overwritten. False when the
@@ -226,10 +252,9 @@ build() {
   echo "$commit" >"$mount/BUILT-FROM"
 }
 
-# After a move: a station running the build that was in the app is stopped
-# when the move changed it, and a session on air starts it again from the new
-# build. A station running anything else is left alone: a session that hasn't
-# reloaded could start that one again
+# After a move: a station running the build that was in the app is restarted
+# on the new build when the move changed it. One running anything else is left
+# to scripts/live.sh restart, since it may be a copy the desktop app hands in
 settle_station() { # <fingerprint of the station before the move>
   local binary
   binary="$(station_binary)"
@@ -238,11 +263,14 @@ settle_station() { # <fingerprint of the station before the move>
   fi
   if [[ "$binary" == "$plugin/station/pipcast-station" ]]; then
     if [[ "$1" != "$(fingerprint "$plugin/station")" ]]; then
-      stop_station
-      echo "Stopped the station, which ran the build before: a session on air starts it again from this one within 10 s."
+      if start_live_station; then
+        echo "Restarted the station on this build."
+      else
+        echo "A session started its own station again each time the old one stopped: run scripts/live.sh restart once every session on air has reloaded." >&2
+      fi
     fi
   else
-    echo "The station on air runs from $(dirname "$(dirname "$binary")"), not the live checkout's build. If that is a copy the desktop app hands in, from Anthropic's plugin directory or an upload, turn Pipcast off in Customize > Plugins first. Once every session on air has reloaded, run scripts/live.sh restart."
+    echo "The station on air runs from $(dirname "$(dirname "$binary")"), not the live checkout's build. If that is a copy the desktop app hands in, from Anthropic's plugin directory or an upload, turn Pipcast off in Customize > Plugins first. Then scripts/live.sh restart puts the live checkout's station on air in its place."
   fi
 }
 
@@ -425,7 +453,7 @@ case "${1:-}" in
         echo "The station on air takes no cues."
       fi
       if [[ "$now" == 'the live checkout in'* && "$station" != "$plugin/station/pipcast-station" ]]; then
-        echo "It runs from $(dirname "$(dirname "$station")"), not the live checkout's build. If that is a copy the desktop app hands in, from Anthropic's plugin directory or an upload, turn Pipcast off in Customize > Plugins first. Once every session on air has reloaded, run scripts/live.sh restart."
+        echo "It runs from $(dirname "$(dirname "$station")"), not the live checkout's build. If that is a copy the desktop app hands in, from Anthropic's plugin directory or an upload, turn Pipcast off in Customize > Plugins first. Then scripts/live.sh restart puts the live checkout's station on air in its place."
       fi
     fi
     ;;
@@ -501,6 +529,13 @@ case "${1:-}" in
   restart)
     if [[ -z "$(station_binary)" ]]; then
       echo "No station is on air."
+    elif [[ "$(listed state "$live_id")" == enabled && -x "$plugin/station/pipcast-station" ]]; then
+      if start_live_station; then
+        echo "The live checkout's station is on air in place of the one that ran."
+      else
+        echo "A session started its own station again each time the old one stopped: run scripts/live.sh restart once every session on air has reloaded." >&2
+        exit 1
+      fi
     else
       stop_station
       echo "Stopped the station: a session on air starts it again, from the plugin it runs, within 10 s."

@@ -38,7 +38,7 @@ The main checkout and its worktrees change nothing the app runs.
   - `scripts/live.sh pr <number>` builds a pull request's head and puts it in the app, `scripts/live.sh <branch or commit>` does the same for any other commit, and `scripts/live.sh master` for master. Each turns off the release that is on, and remembers which. A build that fails moves nothing.
   - `scripts/live.sh published` takes the live checkout out and turns that release back on. With no release in Claude Code's plugin list, it still takes the live checkout out, and the app runs no Pipcast from that list.
   - `scripts/live.sh remove` does the same, then uninstalls the live checkout and removes it with the `pipcast` marketplace.
-  - `scripts/live.sh restart` stops the station on air, and a session on air starts it again from the plugin it runs. After a switch from another Pipcast, ask the user to run `/reload-plugins` in every session on air first.
+  - `scripts/live.sh restart` stops the station on air and, while the live checkout is in the app, starts the live checkout's station in its place, so after a switch to it the station is its build even before every session has reloaded.
   - Then ask the user to run `/reload-plugins` in a session, or to start a new one.
 - Only committed work reaches the app. Run `scripts/build.sh` and commit what it builds before you put a branch there.
 - To air BREAKING NEWS or the report on the hour now, instead of waiting for a turn to end or the hour to strike, use `scripts/live.sh story` and `scripts/live.sh hour` (Cue a segment in `docs/development.md`). Only the live checkout's development build takes a cue. A cue airs in the user's window, with sound: ask before sending one, as before any change to what the app shows.
