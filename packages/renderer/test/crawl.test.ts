@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest'
 
 import type { CrawlBelt, CrawlInput, CrawlStepResult, TickerItem } from '@pipcast/design'
 
-import { crawlSpeed, crawlStep } from '../src/design.ts'
+import { crawlRun, crawlSpeed, crawlStep } from '../src/design.ts'
 
 const VIEW = 623
 
@@ -35,10 +35,15 @@ function belt(offset: number, texts: string[]): CrawlBelt {
 }
 
 function step(from: CrawlBelt, items: TickerItem[], rest: Partial<CrawlInput> = {}): CrawlStepResult {
-  return crawlStep(from, { dt: 0, speed: crawlSpeed, view: VIEW, items, measure, ...rest })
+  return crawlStep(from, { offset: from.offset, view: VIEW, items, measure, ...rest })
 }
 
-function nameOf(item: TickerItem | undefined): string {
+// where a run has carried its unit's left edge at `t`, in stage px from the view's left edge
+function at(run: { startTime: number | null }, t: number): number {
+  return 960 - (t - (run.startTime ?? Number.NaN)) * 53 / 1000
+}
+
+function nameOf(item: TickerItem | undefined | null): string {
   return typeof item === 'string' ? item : (item?.key ?? '')
 }
 
@@ -48,26 +53,37 @@ function nameOf(item: TickerItem | undefined): string {
 function laying() {
   let current: CrawlBelt = { offset: -1, units: [], done: {}, last: null, started: true }
   return (items: TickerItem[]): string => {
-    const result = crawlStep(current, { dt: 0, speed: crawlSpeed, view: 1, items, measure: () => 1000 })
+    const result = crawlStep(current, { offset: current.offset, view: 1, items, measure: () => 1000 })
     expect(result.laid).toHaveLength(1)
     current = { ...result.belt, units: [], offset: -1 }
     return nameOf(result.laid[0])
   }
 }
 
-describe('the crawl, a step at a time', () => {
-  it('moves at 53 stage px a second', () => {
+describe('the crawl, a look at a time', () => {
+  it("runs each unit at 53 stage px a second, from the ticker's right end to past the tab", () => {
     expect(crawlSpeed).toBe(53)
-    const result = step(belt(0, ['B', 'C']), [], { dt: 0.05 })
-    expect(result.belt.offset).toBeCloseTo(2.65, 6)
+    const run = crawlRun(22, 300, 1000)
+    expect(run.keyframes).toEqual([{ transform: 'translateX(960px)' }, { transform: 'translateX(-300px)' }])
+    expect(run.duration).toBeCloseTo(((960 + 300) * 1000) / 53, 6)
+    expect(run.startTime).toBeCloseTo(1000 - ((960 - 22) * 1000) / 53, 6)
+    expect(at(run, 1000)).toBeCloseTo(22, 6)
+    expect(at(run, 2000)).toBeCloseTo(22 - 53, 6)
+    expect(at(run, run.startTime + run.duration)).toBeCloseTo(-300, 6)
   })
 
-  it('carries on after a pause from where it stopped', () => {
-    const paused = step(belt(0, ['B', 'C']), [], { dt: 5 })
-    const tenth = step(belt(0, ['B', 'C']), [], { dt: 0.1 })
-    expect(paused.belt.offset).toBeCloseTo(tenth.belt.offset, 6)
-    expect(paused.belt.offset).toBeCloseTo(5.3, 6)
-    expect(step(belt(0, ['B', 'C']), [], { dt: -1 }).belt.offset).toBe(0)
+  it('takes a unit off past the tab and its width off the offset', () => {
+    const result = step(belt(299, ['A', 'B', 'C']), [], { offset: 300.06 })
+    expect(result.dropped).toBe(1)
+    expect(result.belt.offset).toBeCloseTo(0.06, 6)
+    expect(result.belt.units[0]?.item).toBe('B')
+  })
+
+  it('keeps the offset it is given', () => {
+    const result = step(belt(0, ['B', 'C']), [], { offset: 2.65 })
+    expect(result.belt.offset).toBeCloseTo(2.65, 6)
+    expect(result.dropped).toBe(0)
+    expect(result.belt.units.map((unit) => unit.item)).toEqual(['B', 'C'])
   })
 
   it('fills a new belt from 22 px in from the tab', () => {
@@ -75,13 +91,6 @@ describe('the crawl, a step at a time', () => {
     expect(result.belt.offset).toBe(-22)
     expect(result.belt.units.map((unit) => unit.item)).toEqual(['A', 'B', 'C'])
     expect(result.laid).toEqual(['A', 'B', 'C'])
-  })
-
-  it('takes a unit off past the tab and its width off the offset', () => {
-    const result = step(belt(299, ['A', 'B', 'C']), ['A', 'B', 'C'], { dt: 0.02 })
-    expect(result.dropped).toBe(1)
-    expect(result.belt.offset).toBeCloseTo(299 + 1.06 - 300, 6)
-    expect(result.belt.units[0]?.item).toBe('B')
   })
 
   it('never changes the words of a unit already laid', () => {
@@ -96,7 +105,7 @@ describe('the crawl, a step at a time', () => {
         { key: 'a', text: 'D' },
         { key: 'b', text: 'X' },
       ],
-      { dt: 0.016 },
+      { offset: first.belt.offset + 0.85 },
     )
     expect(second.belt.units.slice(0, before.length)).toEqual(before)
   })
@@ -124,8 +133,7 @@ describe('the crawl, a step at a time', () => {
       started: true,
     }
     const result = crawlStep(current, {
-      dt: 0,
-      speed: crawlSpeed,
+      offset: -1,
       view: 1,
       items: [
         { key: 'brk', lead: 'BREAKING', text: 'X' },
@@ -170,5 +178,27 @@ describe('the crawl, a step at a time', () => {
     const result = step(fresh(), ['A', 'B'], { measure: () => 0 })
     expect(result.laid).toEqual([])
     expect(result.belt.units).toEqual([])
+  })
+
+  it("brings the next item on from the clock when the belt's end has come into view", () => {
+    const result = step(belt(0, ['C']), ['A'])
+    expect(result.belt.units.map((unit) => ({ key: unit.key, item: unit.item, width: unit.width }))).toEqual([
+      { key: 'text:C', item: 'C', width: 200 },
+      { key: 'gap', item: null, width: 423 },
+      { key: 'text:A', item: 'A', width: 300 },
+    ])
+    expect(result.laid).toEqual(['A'])
+    const before = result.belt.units.slice(0, 2).reduce((sum, unit) => sum + unit.width, 0)
+    expect(before - result.belt.offset).toBe(VIEW)
+  })
+
+  it("lays on at the belt's end while it is still out of sight", () => {
+    const result = step(belt(0, ['B', 'A']), ['C'])
+    expect(result.belt.units.map((unit) => unit.item)).toEqual(['B', 'A', 'C'])
+  })
+
+  it('leaves no empty stretch when there is nothing to lay', () => {
+    const result = step(belt(0, ['C']), [])
+    expect(result.belt.units.map((unit) => unit.item)).toEqual(['C'])
   })
 })

@@ -1398,7 +1398,8 @@
     var CRAWL_SPEED = 53;
     var CRAWL_LEAD_IN = 22;
     var CRAWL_AHEAD = 120;
-    var CRAWL_MAX_STEP = 0.1;
+    var CRAWL_LINE = STAGE_W;
+    var CRAWL_LOOK_MS = 250;
     var CrawlContext = React3.createContext(null);
     function crawlKey(it) {
       if (typeof it === "string") {
@@ -1427,8 +1428,7 @@
       return waiting;
     }
     function crawlStep2(belt, input) {
-      var dt = Math.min(Math.max(num(input.dt, 0), 0), CRAWL_MAX_STEP);
-      var offset = belt.offset + num(input.speed, CRAWL_SPEED) * dt;
+      var offset = num(input.offset, belt.offset);
       var units = belt.units.slice();
       var dropped = 0;
       while (units.length && offset >= units[0].width) {
@@ -1461,6 +1461,10 @@
         if (!(width > 0)) {
           break;
         }
+        if (!laid.length && units.length && end - offset < input.view) {
+          units.push({ key: "gap", item: null, width: input.view - (end - offset) });
+          end = offset + input.view;
+        }
         last = crawlKey(item);
         done[last] = true;
         units.push({ key: last, item, width });
@@ -1470,9 +1474,24 @@
       }
       return { belt: { offset, units, done, last, started }, dropped, laid };
     }
-    function crawlUnit(it) {
+    function crawlRun2(x, width, now) {
+      return {
+        keyframes: [
+          { transform: "translateX(" + CRAWL_LINE + "px)" },
+          { transform: "translateX(" + -width + "px)" }
+        ],
+        duration: (CRAWL_LINE + width) * 1e3 / CRAWL_SPEED,
+        startTime: now - (CRAWL_LINE - x) * 1e3 / CRAWL_SPEED
+      };
+    }
+    function crawlUnit(it, width) {
       var unit = document.createElement("span");
       unit.className = "pn-ticker-unit";
+      if (it === null) {
+        unit.style.width = width + "px";
+        unit.style.paddingRight = "0";
+        return unit;
+      }
       var body = document.createElement("span");
       body.className = "pn-ticker-item";
       var lead = typeof it === "string" ? null : it.lead;
@@ -1492,6 +1511,9 @@
     function crawlWidth(node) {
       return parseFloat(window.getComputedStyle(node).width) || 0;
     }
+    function canCrawl() {
+      return typeof window.Element === "function" && typeof window.Element.prototype.animate === "function";
+    }
     function Belt(props) {
       var shared = React3.useContext(CrawlContext);
       var own = useState3(function() {
@@ -1507,25 +1529,16 @@
         if (!el || !view) {
           return void 0;
         }
-        var clock2 = window.performance && window.performance.now ? function() {
-          return window.performance.now();
-        } : Date.now;
-        var later = window.requestAnimationFrame ? function(f) {
-          return window.requestAnimationFrame(f);
-        } : function(f) {
-          return window.setTimeout(function() {
-            f(clock2());
-          }, 16);
-        };
-        var cancel = window.cancelAnimationFrame ? function(id) {
-          window.cancelAnimationFrame(id);
-        } : function(id) {
-          window.clearTimeout(id);
-        };
         var belt = store.belt || { offset: -CRAWL_LEAD_IN, units: [], done: {}, last: null, started: false };
-        belt.units.forEach(function(u) {
-          el.appendChild(crawlUnit(u.item));
-        });
+        var on = [];
+        var held = null;
+        var watch = typeof window.ResizeObserver === "function" ? new window.ResizeObserver(function() {
+          refit(now());
+        }) : null;
+        function now() {
+          var t = document.timeline ? document.timeline.currentTime : null;
+          return typeof t === "number" ? t : window.performance.now();
+        }
         function measure(item) {
           var probe = crawlUnit(item);
           el.appendChild(probe);
@@ -1533,42 +1546,124 @@
           el.removeChild(probe);
           return width;
         }
-        var raf = 0;
-        var then = null;
-        function step(now) {
-          var dt = then === null ? 0 : (now - then) / 1e3;
-          then = now;
-          for (var i = 0; i < belt.units.length; i++) {
-            var node = el.children[i];
-            var w = node ? crawlWidth(node) : 0;
-            if (w > 0) {
-              belt.units[i].width = w;
-            }
+        function carry(node, x, width, t) {
+          var run = crawlRun2(x, width, t);
+          var anim = node.animate(run.keyframes, { duration: run.duration, fill: "both" });
+          anim.startTime = run.startTime;
+          return anim;
+        }
+        function where(u, t) {
+          return CRAWL_LINE - (t - u.anim.startTime) * CRAWL_SPEED / 1e3;
+        }
+        function lay(unit, x, t) {
+          var node = crawlUnit(unit.item, unit.width);
+          el.appendChild(node);
+          on.push({ node, anim: carry(node, x, unit.width, t) });
+          if (watch) {
+            watch.observe(node);
           }
-          var next = crawlStep2(belt, { dt, speed: CRAWL_SPEED, view: view.clientWidth, items: items.current, measure });
-          for (var d = 0; d < next.dropped; d++) {
-            if (el.firstChild) {
-              el.removeChild(el.firstChild);
-            }
+        }
+        function takeOff(u) {
+          if (watch) {
+            watch.unobserve(u.node);
           }
-          next.laid.forEach(function(item) {
-            el.appendChild(crawlUnit(item));
+          u.anim.cancel();
+          if (u.node.parentNode === el) {
+            el.removeChild(u.node);
+          }
+        }
+        function offsetAt(t) {
+          if (held !== null) {
+            return held;
+          }
+          var n = on.length;
+          if (!n || typeof on[n - 1].anim.startTime !== "number") {
+            return belt.offset;
+          }
+          var before = 0;
+          for (var i = 0; i < n - 1; i++) {
+            before += belt.units[i].width;
+          }
+          return before - where(on[n - 1], t);
+        }
+        function carryAll(offset, t) {
+          var x = -offset;
+          on.forEach(function(u, i) {
+            u.anim.cancel();
+            u.anim = carry(u.node, x, belt.units[i].width, t);
+            x += belt.units[i].width;
           });
+        }
+        function refit(t) {
+          if (held !== null) {
+            return;
+          }
+          var changed = false;
+          var units = belt.units.map(function(unit, i) {
+            var w = on[i] && unit.item !== null ? crawlWidth(on[i].node) : 0;
+            if (w > 0 && w !== unit.width) {
+              changed = true;
+              return { key: unit.key, item: unit.item, width: w };
+            }
+            return unit;
+          });
+          if (!changed) {
+            return;
+          }
+          var offset = offsetAt(t);
+          belt = { offset, units, done: belt.done, last: belt.last, started: belt.started };
+          store.belt = belt;
+          carryAll(offset, t);
+        }
+        function look() {
+          if (held !== null) {
+            return;
+          }
+          var t = now();
+          refit(t);
+          var next = crawlStep2(belt, { offset: offsetAt(t), view: view.clientWidth, items: items.current, measure });
+          on.splice(0, next.dropped).forEach(takeOff);
+          var all = next.belt.units;
+          for (var j = on.length; j < all.length; j++) {
+            lay(all[j], j > 0 ? where(on[j - 1], t) + all[j - 1].width : -next.belt.offset, t);
+          }
           belt = next.belt;
           store.belt = belt;
-          el.style.transform = "translateX(" + -belt.offset + "px)";
         }
-        function frame(now) {
-          step(now);
-          raf = later(frame);
-        }
-        step(clock2());
-        raf = later(frame);
-        return function() {
-          cancel(raf);
-          while (el.firstChild) {
-            el.removeChild(el.firstChild);
+        function onVisibility() {
+          if (document.visibilityState === "hidden") {
+            if (held === null) {
+              held = offsetAt(now());
+            }
+          } else if (held !== null) {
+            var offset = held;
+            held = null;
+            belt.offset = offset;
+            carryAll(offset, now());
           }
+        }
+        var t0 = now();
+        var x0 = -belt.offset;
+        belt.units.forEach(function(unit) {
+          lay(unit, x0, t0);
+          x0 += unit.width;
+        });
+        look();
+        if (document.visibilityState === "hidden") {
+          held = belt.offset;
+        }
+        document.addEventListener("visibilitychange", onVisibility);
+        var timer = window.setInterval(look, CRAWL_LOOK_MS);
+        return function() {
+          window.clearInterval(timer);
+          document.removeEventListener("visibilitychange", onVisibility);
+          if (watch) {
+            watch.disconnect();
+          }
+          belt.offset = offsetAt(now());
+          store.belt = belt;
+          on.forEach(takeOff);
+          on = [];
         };
       }, [store]);
       return h("div", { ref, className: "pn-ticker-belt" });
@@ -1577,7 +1672,7 @@
       var scene = props.sample && SAMPLES[props.sample] || {};
       var items = props.items && props.items.length ? props.items : scene.ticker || [];
       var time = props.time || scene.clock;
-      var crawl = bool(props.animate, false) && !reducedMotion();
+      var crawl = bool(props.animate, false) && !reducedMotion() && canCrawl();
       var offset = num(props.offset, 0);
       function half(prefix) {
         var out = [];
@@ -3677,6 +3772,7 @@
       Mark,
       Stage: Stage2,
       crawlStep: crawlStep2,
+      crawlRun: crawlRun2,
       crawlSpeed: CRAWL_SPEED,
       EVENTS,
       STATES,
@@ -3704,7 +3800,7 @@
   if (PipNews === void 0) {
     throw new Error("the design system did not load: window.React was missing when its bundle ran");
   }
-  var { Broadcast, Stage, Ticker, crawlStep, crawlSpeed, samples } = PipNews;
+  var { Broadcast, Stage, Ticker, crawlStep, crawlRun, crawlSpeed, samples } = PipNews;
 
   // packages/renderer/src/App.tsx
   var TICK_MS = 250;

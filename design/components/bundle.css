@@ -161,19 +161,17 @@
 .pn-ticker-track > * { margin-right: 22px; }
 .pn-ticker-lead { font: italic 900 28px/1 var(--font-display, "Anybody", "Arial Black", sans-serif); font-stretch: 104%; color: var(--gold-hi, #ffe08a); }
 .pn-ticker-sep { width: 10px; height: 10px; flex: none; background: var(--gold, #f2b630); transform: rotate(45deg); }
-/* On air the crawl is a belt the Ticker moves itself, a frame at a time: a unit is one item and the diamond after it, spaced as on the track. The belt is a layer of its own, so a frame moves it and redraws nothing */
+/* On air the crawl is a belt of units, each one item and the diamond after it, spaced as on the track. Every unit is a layer of its own that the compositor carries along its run, so the page draws nothing as the crawl moves */
 .pn-ticker-belt {
   position: absolute;
   left: 0;
   top: 0;
+  right: 0;
   bottom: 0;
-  display: flex;
-  align-items: center;
   white-space: nowrap;
   font: 700 28px/1 var(--font-text, "Archivo", "Helvetica Neue", Arial, sans-serif);
-  will-change: transform;
 }
-.pn-ticker-unit { flex: none; display: flex; align-items: center; box-sizing: border-box; padding-right: 22px; }
+.pn-ticker-unit { position: absolute; left: 0; top: 0; bottom: 0; display: flex; align-items: center; box-sizing: border-box; padding-right: 22px; will-change: transform; }
 .pn-ticker-unit > .pn-ticker-item { margin-right: 22px; }
 /* The clock, at the ticker's right end: the crawl runs out behind it */
 .pn-ticker-clock {

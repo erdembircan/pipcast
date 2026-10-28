@@ -317,14 +317,27 @@
      is laid on the belt's end out of sight behind the clock, and keeps its
      words until it has gone past the tab, so nothing changes on screen
      while it is being read. A new list of items only decides what is laid
-     next. The belt runs at one speed whatever is on it, a frame at a time,
-     and each Stage keeps one belt for every Ticker it shows, so the crawl
-     carries on across the cuts.
+     next. The belt runs at one speed whatever is on it, and each Stage
+     keeps one belt for every Ticker it shows, so the crawl carries on
+     across the cuts.
+
+     The system's compositor moves it, as it moves the opens and outros.
+     Each unit is a layer of its own that the Web Animations API carries
+     in one straight run on the page's timeline, from the ticker's right
+     end, out of sight, to just past the tab, and each run starts as the
+     one before it has carried its unit's width, so the units ride end to
+     end. The page only lays units on and takes them off, four times a
+     second. Moved by the page a frame at a time, the crawl stuttered
+     whenever something kept the page from its frames, as a game running
+     behind the window does, while everything the compositor moved stayed
+     smooth. While the window is hidden the belt stands still, and it
+     carries on from where it stopped.
      ------------------------------------------------------------------ */
   var CRAWL_SPEED = 53; /* stage px a second: the pace of the live board's sample crawl, one pass every 40 s */
   var CRAWL_LEAD_IN = 22; /* a new belt starts its first item this far in from the tab, as a static frame does */
   var CRAWL_AHEAD = 120; /* the belt is laid this far past the clock, out of sight */
-  var CRAWL_MAX_STEP = 0.1; /* seconds: after a pause (a hidden window), the crawl carries on from where it stopped */
+  var CRAWL_LINE = STAGE_W; /* every run starts at the ticker's right end, past the end of any view */
+  var CRAWL_LOOK_MS = 250; /* how often the belt looks at what to lay on and take off */
   var CrawlContext = React.createContext(null);
 
   /* What an item is on the belt: its `key` if it has one, else its words */
@@ -351,18 +364,18 @@
     return waiting;
   }
 
-  /* One step of the belt, with no drawing in it. `belt` is { offset, units,
-     done, last, started }: how far the belt has moved past the left edge of
-     the view (stage px), its units ({ key, item, width }), the keys laid in
-     this round, the key of the last unit laid, and whether anything was
-     ever laid. `input` is { dt, speed, view, items, measure }: seconds since
-     the last step, stage px a second, the view's width, the list as it is
-     now, and measure(item), the width of a unit for that item. Returns
-     { belt, dropped, laid }: the belt after the step, how many units left
-     past the tab, and the items laid at its end. */
+  /* One look at the belt, with no drawing in it. `belt` is { offset,
+     units, done, last, started }: how far the belt had moved past the left
+     edge of the view at the last look (stage px), its units ({ key, item,
+     width }), the keys laid in this round, the key of the last unit laid,
+     and whether anything was ever laid. `input` is { offset, view, items,
+     measure }: how far the belt has moved now, the view's width, the list
+     as it is now, and measure(item), the width of a unit for that item.
+     Returns { belt, dropped, laid }: the belt after the look, how many
+     units have gone past the tab, and the items laid at its end. A unit
+     with no item is an empty stretch. */
   function crawlStep(belt, input) {
-    var dt = Math.min(Math.max(num(input.dt, 0), 0), CRAWL_MAX_STEP);
-    var offset = belt.offset + num(input.speed, CRAWL_SPEED) * dt;
+    var offset = num(input.offset, belt.offset);
     var units = belt.units.slice();
     var dropped = 0;
     while (units.length && offset >= units[0].width) {
@@ -391,6 +404,14 @@
       }
       var width = num(input.measure(item), 0);
       if (!(width > 0)) { break; }
+      if (!laid.length && units.length && end - offset < input.view) {
+        /* The belt's end came into view before this look laid anything
+           after it, as when the page was held up: the stretch to the clock
+           stays empty, and the item comes on from the clock, as on an
+           empty belt */
+        units.push({ key: 'gap', item: null, width: input.view - (end - offset) });
+        end = offset + input.view;
+      }
       last = crawlKey(item);
       done[last] = true;
       units.push({ key: last, item: item, width: width });
@@ -401,10 +422,32 @@
     return { belt: { offset: offset, units: units, done: done, last: last, started: started }, dropped: dropped, laid: laid };
   }
 
-  /* A unit: the item as a static frame draws it, and the diamond after it */
-  function crawlUnit(it) {
+  /* The run that carries a unit `width` stage px wide from the crawl's
+     line to where its right end passes the tab, at the crawl's speed, so
+     that its left edge is `x` px from the view's left edge at `now`, a
+     time in ms on the page's timeline. Returns { keyframes, duration,
+     startTime }, as the Web Animations API takes them. */
+  function crawlRun(x, width, now) {
+    return {
+      keyframes: [
+        { transform: 'translateX(' + CRAWL_LINE + 'px)' },
+        { transform: 'translateX(' + (-width) + 'px)' }
+      ],
+      duration: (CRAWL_LINE + width) * 1000 / CRAWL_SPEED,
+      startTime: now - (CRAWL_LINE - x) * 1000 / CRAWL_SPEED
+    };
+  }
+
+  /* A unit: the item as a static frame draws it, and the diamond after it.
+     With no item it is an empty stretch `width` px wide. */
+  function crawlUnit(it, width) {
     var unit = document.createElement('span');
     unit.className = 'pn-ticker-unit';
+    if (it === null) {
+      unit.style.width = width + 'px';
+      unit.style.paddingRight = '0';
+      return unit;
+    }
     var body = document.createElement('span');
     body.className = 'pn-ticker-item';
     var lead = typeof it === 'string' ? null : it.lead;
@@ -428,8 +471,14 @@
     return parseFloat(window.getComputedStyle(node).width) || 0;
   }
 
+  /* Whether the page can hand a run to the compositor. Without the Web
+     Animations API the crawl stands still, as with reduced motion. */
+  function canCrawl() {
+    return typeof window.Element === 'function' && typeof window.Element.prototype.animate === 'function';
+  }
+
   /* The belt on air. React draws it empty; the units are laid on and taken
-     off here, a frame at a time, so the words on screen never change. */
+     off here, and each one moves on its own run. */
   function Belt(props) {
     var shared = React.useContext(CrawlContext);
     var own = useState(function () { return { belt: null }; })[0];
@@ -441,15 +490,20 @@
       var el = ref.current;
       var view = el ? el.parentNode : null;
       if (!el || !view) { return undefined; }
-      var clock = window.performance && window.performance.now ? function () { return window.performance.now(); } : Date.now;
-      var later = window.requestAnimationFrame
-        ? function (f) { return window.requestAnimationFrame(f); }
-        : function (f) { return window.setTimeout(function () { f(clock()); }, 16); };
-      var cancel = window.cancelAnimationFrame
-        ? function (id) { window.cancelAnimationFrame(id); }
-        : function (id) { window.clearTimeout(id); };
       var belt = store.belt || { offset: -CRAWL_LEAD_IN, units: [], done: {}, last: null, started: false };
-      belt.units.forEach(function (u) { el.appendChild(crawlUnit(u.item)); });
+      /* the units on screen, in the belt's order: each node and its run */
+      var on = [];
+      /* where the belt stands while the window is hidden, or null */
+      var held = null;
+      /* a typeface that lands changes the units' widths, and the belt is set
+         again before the picture is drawn */
+      var watch = typeof window.ResizeObserver === 'function'
+        ? new window.ResizeObserver(function () { refit(now()); })
+        : null;
+      function now() {
+        var t = document.timeline ? document.timeline.currentTime : null;
+        return typeof t === 'number' ? t : window.performance.now();
+      }
       function measure(item) {
         var probe = crawlUnit(item);
         el.appendChild(probe);
@@ -457,33 +511,119 @@
         el.removeChild(probe);
         return width;
       }
-      var raf = 0;
-      var then = null;
-      function step(now) {
-        var dt = then === null ? 0 : (now - then) / 1000;
-        then = now;
-        /* the units as drawn now: a typeface that has landed since changes their widths */
-        for (var i = 0; i < belt.units.length; i++) {
-          var node = el.children[i];
-          var w = node ? crawlWidth(node) : 0;
-          if (w > 0) { belt.units[i].width = w; }
+      /* Hands a unit's node its run, so that its left edge is `x` at `t` */
+      function carry(node, x, width, t) {
+        var run = crawlRun(x, width, t);
+        var anim = node.animate(run.keyframes, { duration: run.duration, fill: 'both' });
+        anim.startTime = run.startTime;
+        return anim;
+      }
+      /* Where a unit's left edge is at `t`, as its run carries it */
+      function where(u, t) {
+        return CRAWL_LINE - (t - u.anim.startTime) * CRAWL_SPEED / 1000;
+      }
+      function lay(unit, x, t) {
+        var node = crawlUnit(unit.item, unit.width);
+        el.appendChild(node);
+        on.push({ node: node, anim: carry(node, x, unit.width, t) });
+        if (watch) { watch.observe(node); }
+      }
+      function takeOff(u) {
+        if (watch) { watch.unobserve(u.node); }
+        u.anim.cancel();
+        if (u.node.parentNode === el) { el.removeChild(u.node); }
+      }
+      /* How far the belt has moved past the view's left edge at `t`, read
+         off the run of the unit laid last, which goes on longest */
+      function offsetAt(t) {
+        if (held !== null) { return held; }
+        var n = on.length;
+        if (!n || typeof on[n - 1].anim.startTime !== 'number') { return belt.offset; }
+        var before = 0;
+        for (var i = 0; i < n - 1; i++) { before += belt.units[i].width; }
+        return before - where(on[n - 1], t);
+      }
+      /* Sets every unit's run again, so that the belt is `offset` past the
+         view's left edge at `t` */
+      function carryAll(offset, t) {
+        var x = -offset;
+        on.forEach(function (u, i) {
+          u.anim.cancel();
+          u.anim = carry(u.node, x, belt.units[i].width, t);
+          x += belt.units[i].width;
+        });
+      }
+      /* The units as drawn now. When a typeface has landed since they were
+         measured, their widths have changed, and the belt is set again from
+         where it is, the first unit staying where it was. */
+      function refit(t) {
+        if (held !== null) { return; }
+        var changed = false;
+        var units = belt.units.map(function (unit, i) {
+          /* an empty stretch keeps the width it was laid with: no typeface
+             changes it, and the layout gives it back rounded */
+          var w = on[i] && unit.item !== null ? crawlWidth(on[i].node) : 0;
+          if (w > 0 && w !== unit.width) {
+            changed = true;
+            return { key: unit.key, item: unit.item, width: w };
+          }
+          return unit;
+        });
+        if (!changed) { return; }
+        var offset = offsetAt(t);
+        belt = { offset: offset, units: units, done: belt.done, last: belt.last, started: belt.started };
+        store.belt = belt;
+        carryAll(offset, t);
+      }
+      function look() {
+        if (held !== null) { return; }
+        var t = now();
+        refit(t);
+        var next = crawlStep(belt, { offset: offsetAt(t), view: view.clientWidth, items: items.current, measure: measure });
+        on.splice(0, next.dropped).forEach(takeOff);
+        /* each new unit goes on at the end of the one before it, and the
+           first on an empty belt where the belt is now */
+        var all = next.belt.units;
+        for (var j = on.length; j < all.length; j++) {
+          lay(all[j], j > 0 ? where(on[j - 1], t) + all[j - 1].width : -next.belt.offset, t);
         }
-        var next = crawlStep(belt, { dt: dt, speed: CRAWL_SPEED, view: view.clientWidth, items: items.current, measure: measure });
-        for (var d = 0; d < next.dropped; d++) { if (el.firstChild) { el.removeChild(el.firstChild); } }
-        next.laid.forEach(function (item) { el.appendChild(crawlUnit(item)); });
         belt = next.belt;
         store.belt = belt;
-        el.style.transform = 'translateX(' + (-belt.offset) + 'px)';
       }
-      function frame(now) {
-        step(now);
-        raf = later(frame);
+      /* While the window is hidden the belt stands where it is, and it
+         carries on from there as the window shows again. WebKit stops a
+         hidden page's clock, but its runs then carry on from where the
+         clock has got to, as if they had run all the while. */
+      function onVisibility() {
+        if (document.visibilityState === 'hidden') {
+          if (held === null) { held = offsetAt(now()); }
+        } else if (held !== null) {
+          var offset = held;
+          held = null;
+          belt.offset = offset;
+          carryAll(offset, now());
+        }
       }
-      step(clock());
-      raf = later(frame);
+      /* the units the belt has already, from where the last Ticker on this
+         Stage left them */
+      var t0 = now();
+      var x0 = -belt.offset;
+      belt.units.forEach(function (unit) {
+        lay(unit, x0, t0);
+        x0 += unit.width;
+      });
+      look();
+      if (document.visibilityState === 'hidden') { held = belt.offset; }
+      document.addEventListener('visibilitychange', onVisibility);
+      var timer = window.setInterval(look, CRAWL_LOOK_MS);
       return function () {
-        cancel(raf);
-        while (el.firstChild) { el.removeChild(el.firstChild); }
+        window.clearInterval(timer);
+        document.removeEventListener('visibilitychange', onVisibility);
+        if (watch) { watch.disconnect(); }
+        belt.offset = offsetAt(now());
+        store.belt = belt;
+        on.forEach(takeOff);
+        on = [];
       };
     }, [store]);
     return h('div', { ref: ref, className: 'pn-ticker-belt' });
@@ -494,7 +634,7 @@
     var scene = (props.sample && SAMPLES[props.sample]) || {};
     var items = props.items && props.items.length ? props.items : (scene.ticker || []);
     var time = props.time || scene.clock;
-    var crawl = bool(props.animate, false) && !reducedMotion();
+    var crawl = bool(props.animate, false) && !reducedMotion() && canCrawl();
     var offset = num(props.offset, 0);
     function half(prefix) {
       var out = [];
@@ -2549,6 +2689,7 @@
     Mark: Mark,
     Stage: Stage,
     crawlStep: crawlStep,
+    crawlRun: crawlRun,
     crawlSpeed: CRAWL_SPEED,
     EVENTS: EVENTS,
     STATES: STATES,
