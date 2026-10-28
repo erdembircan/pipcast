@@ -205,7 +205,7 @@ The directory publishes only from a public repository. Pipcast's is public, with
 
 When the reviewer has cleared Pipcast, select **Publish** on its page in the portal, which by default asks an Anthropic reviewer to publish it. Once it's live, tag the commit that went live `v1.0.0`, push the tag, and publish a GitHub release from it. [Track your directory submission](https://claude.com/docs/directory/submission-status) says what each status in the portal means, and who acts next.
 
-The portal reads the mod by rules of its own, which neither `claude plugin validate` nor `scripts/check-directory.mjs` applies in full, so a change to the mod is known to pass only once the portal has read it. Before Pipcast is submitted, validate the change's branch on the **Source** step, where **Validate** takes any branch under **Branch or tag** and submits nothing. After, read its version's checks on Pipcast's **Versions** tab in the portal.
+The portal reads the mod by rules of its own, which neither `claude plugin validate` nor `scripts/check-directory.mjs` applies in full, so a change to the mod is known to pass only once the portal has read it. Before Pipcast is submitted, validate the change's branch on the **Source** step, where **Validate** takes any branch under **Branch or tag** and submits nothing, then set the field back to `release` before you go on. After, the portal first reads a change when `release` moves to it, as a new version on Pipcast's **Versions** tab: one that doesn't pass doesn't go live, and a listed Pipcast keeps the version before it.
 
 ### Try the directory's copy first
 
