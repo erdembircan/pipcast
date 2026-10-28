@@ -77,7 +77,7 @@ makes the live checkout on master, builds it, installs it from the `pipcast` mar
 scripts/live.sh pr 12
 ```
 
-puts a pull request in the app. `scripts/live.sh <branch or commit>` puts any other commit there and `scripts/live.sh master` puts master there. Each checks the commit out in the live checkout, builds it with the commit's own `scripts/build-dev.sh` and swaps the build in, then turns off the release that is on, and remembers which. A build that fails moves nothing. A commit from before the development build has no `scripts/build-dev.sh`: its `plugin/` goes in as it is, and takes no cues. A station running the build that was in the app is restarted on the new build when the move changes it.
+puts a pull request in the app. `scripts/live.sh <branch or commit>` puts any other commit there and `scripts/live.sh master` puts master there. Each checks the commit out in the live checkout, builds it with the commit's own `scripts/build-dev.sh` and swaps the build in, then turns off the release that is on, and remembers which. A build that fails moves nothing. A commit from before the development build has no `scripts/build-dev.sh`: its `plugin/` goes in as it is, and takes no cues. A station running the build that was in the app is restarted on the new build when the move changes it, and one that a release in Claude Code's plugin list started is replaced with the live checkout's, since the move turned that release off.
 
 ```bash
 scripts/live.sh published
@@ -95,7 +95,7 @@ A copy the desktop app hands in itself, from Anthropic's plugin directory or an 
 
 Each install keeps its own settings, since Claude Code saves a plugin's options under its id.
 
-Any session on air starts the station when it finds none, from the plugin it runs, and a session that hasn't reloaded since you switched the app from one Pipcast to another still runs the one before. So after a switch to the live checkout,
+Any session on air starts the station when it finds none, from the plugin it runs, and a session that hasn't reloaded since you switched the app from one Pipcast to another still runs the one before. A move leaves alone a station that a copy the desktop app hands in started, and says so. Turn that copy off in Customize > Plugins first, and then
 
 ```bash
 scripts/live.sh restart
