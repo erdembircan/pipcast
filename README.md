@@ -140,7 +140,8 @@ What it reads about a session goes only into that session's file, for the statio
 - `git`, only to read (`rev-parse`, `diff-index` and `ls-files`), in the folders where Claude works, and it reads the files there that git doesn't track yet, to count the lines each session changes
 - `ps`, `lsof`, `head` and `tail`, when a turn ends with commands still running in the background, to tell from their processes and the start and end of their output whether they're still at work
 - `find`, to find the folder of the session's transcript when no hook has said where it is
-- `ps`, to find the Claude Code program the session runs on, and that program's `claude plugin list` and `claude plugin configure`, when you run `/pipcast auto` or `/pipcast transparency`
+- `ps`, when you run `/pipcast auto` or `/pipcast transparency`, to find the Claude Code program the session runs on: it lists your processes with their commands, finds among them the `ps` it started by a tag of its own, and keeps only the program that started that `ps`
+- that Claude Code program's `claude plugin list` and `claude plugin configure`, to read and save Pipcast's two settings, when you run `/pipcast auto` or `/pipcast transparency`
 - `mkdir`, `mv`, `rm` and `chmod`, on its own files
 - the station
 

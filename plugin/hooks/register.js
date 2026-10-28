@@ -2071,7 +2071,7 @@ async function engineBinary($) {
     return set;
   }
   const tag = processTag();
-  const listing = await $.process.run(["/bin/ps", "-A", "-o", "pid=", "-o", "ppid=", "-o", `command=${tag}`]);
+  const listing = await $.process.run(["/bin/ps", "-x", "-o", "pid=", "-o", "ppid=", "-o", `command=${tag}`]);
   const parent = listing.exitCode === 0 ? parentOf(listing.stdout, tag) : null;
   if (parent === null) {
     return null;

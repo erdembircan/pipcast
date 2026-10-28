@@ -16,8 +16,10 @@ import { renameShellNames } from './lib/react-dom-names.mjs'
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 
 // The files in plugin/ that the directory's validator can't inspect, each with
-// the reason it ships. Each one holds every version for a reviewer at
-// Anthropic, so a file joins this list only when Pipcast can't do without it.
+// the reason it ships. The pre-submission checklist holds a version with such
+// a file for a reviewer at Anthropic, though the portal's first validation of
+// Pipcast held only the binary, so a file joins this list only when Pipcast
+// can't do without it.
 const HELD = {
   'station/pipcast-station': 'the station, a native macOS program built from station/Sources',
   'station/sounds/breaking.m4a': "BREAKING NEWS's jingle, rendered from the design system's score",
@@ -414,4 +416,4 @@ if (count > 0) {
   process.exit(1)
 }
 const held = Object.keys(HELD).length
-console.log(`plugin/ and the repository pass every check of Anthropic's plugin directory made here. The ${held} files in HELD hold each version for a reviewer.`)
+console.log(`plugin/ and the repository pass every check of Anthropic's plugin directory made here. The ${held} files in HELD can hold a version for a reviewer.`)

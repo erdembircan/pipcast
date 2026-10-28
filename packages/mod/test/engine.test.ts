@@ -7,7 +7,7 @@ const header = `            ${tag}`
 const listing = [
   header,
   '    1     0 /sbin/launchd',
-  `49528 49524 /bin/ps -A -o pid= -o ppid= -o command=${tag}`,
+  `49528 49524 /bin/ps -x -o pid= -o ppid= -o command=${tag}`,
   '49524 49519 /Users/me/Library/Application Support/Claude/claude-code/2.1.309/x/claude.app/Contents/MacOS/claude',
   '',
 ].join('\n')
