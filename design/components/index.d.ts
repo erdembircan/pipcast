@@ -126,17 +126,20 @@ export interface PipSize { width: number; height: number }
 /** PipNews.pipRange(screenWidth, screenHeight, margin?, minScale?): the full size, which is also the largest, and the smallest. */
 export interface PipRange { full: PipSize; min: PipSize }
 
-/** One unit of the crawl: an item and the diamond after it, `width` stage px wide. */
-export interface CrawlUnit { key: string; item: TickerItem; width: number }
+/** One unit of the crawl: an item and the diamond after it, `width` stage px wide; with no item, an empty stretch that wide. */
+export interface CrawlUnit { key: string; item: TickerItem | null; width: number }
 
-/** The crawl between frames: how far it has moved past the view's left edge, its units, the keys laid in this round, the key laid last, and whether anything was ever laid. */
+/** The crawl at a look: how far it had moved past the view's left edge, its units, the keys laid in this round, the key laid last, and whether anything was ever laid. */
 export interface CrawlBelt { offset: number; units: CrawlUnit[]; done: Record<string, boolean>; last: string | null; started: boolean }
 
-/** What one step of the crawl goes by: seconds since the last step, stage px a second, the view's width, the list as it is now, and the width a unit for an item takes. */
-export interface CrawlInput { dt: number; speed: number; view: number; items: TickerItem[]; measure: (item: TickerItem) => number }
+/** What a look at the crawl goes by: how far it has moved past the view's left edge now, the view's width, the list as it is now, and the width a unit for an item takes. */
+export interface CrawlInput { offset: number; view: number; items: TickerItem[]; measure: (item: TickerItem) => number }
 
-/** PipNews.crawlStep(belt, input) moves the crawl one step without drawing anything: the belt after the step, how many units left past the tab, and the items laid. PipNews.crawlSpeed is its speed on air, 53 stage px a second. */
+/** PipNews.crawlStep(belt, input) looks at the crawl without drawing anything: the belt after the look, how many units have gone past the tab, and the items laid. PipNews.crawlSpeed is its speed on air, 53 stage px a second. */
 export interface CrawlStepResult { belt: CrawlBelt; dropped: number; laid: TickerItem[] }
+
+/** PipNews.crawlRun(x, width, now): the run that carries a unit `width` stage px wide from the ticker's right end to past the tab at the crawl's speed, with its left edge `x` px from the view's left edge at `now`, in ms on the page's timeline, as the Web Animations API takes it. */
+export interface CrawlRun { keyframes: { transform: string }[]; duration: number; startTime: number }
 
 export interface PipControlsProps {
   width?: number;
@@ -153,7 +156,7 @@ export interface MarkProps { size?: number; text?: string }
 
 export interface TopBandProps { mark?: string; inline?: boolean }
 
-/** The crawl and the clock at its right end; `sample` takes both from a scene. `animate` crawls at `PipNews.crawlSpeed`, and one crawl runs per Stage. */
+/** The crawl and the clock at its right end; `sample` takes both from a scene. `animate` crawls at `PipNews.crawlSpeed`, each item on a run the compositor plays, and one crawl runs per Stage. */
 export interface TickerProps { items?: TickerItem[]; time?: string; sample?: string; label?: string; animate?: boolean; offset?: number; inline?: boolean }
 
 export interface LowerThirdProps {

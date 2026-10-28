@@ -65,10 +65,10 @@ const HOUR: Scene = { mode: 'ident', hour: '15:00' } as Scene
 const HOUR_OUTRO: Scene = { mode: 'outro', open: 'hour', hour: '15:00', board: { mode: 'board' } } as Scene
 
 const RUNS = [
-  { name: 'BREAKING NEWS', scene: BREAKING, duration: 1400, pieces: 72 },
-  { name: "BREAKING NEWS's outro", scene: BREAKING_OUTRO, duration: 1200, pieces: 73 },
-  { name: 'ON THE HOUR', scene: HOUR, duration: 7500, pieces: 12 },
-  { name: "the hour's outro", scene: HOUR_OUTRO, duration: 1400, pieces: 13 },
+  { name: 'BREAKING NEWS', scene: BREAKING, duration: 1400, pieces: 72, crawl: false },
+  { name: "BREAKING NEWS's outro", scene: BREAKING_OUTRO, duration: 1200, pieces: 73, crawl: true },
+  { name: 'ON THE HOUR', scene: HOUR, duration: 7500, pieces: 12, crawl: false },
+  { name: "the hour's outro", scene: HOUR_OUTRO, duration: 1400, pieces: 13, crawl: true },
 ]
 
 describe('the opens and outros on the compositor', () => {
@@ -202,7 +202,7 @@ describe('the opens and outros on the compositor', () => {
     }
   })
 
-  it.each(RUNS)("leave $name's pictures alone while it plays", ({ scene, duration }) => {
+  it.each(RUNS)("leave $name's pictures alone while it plays", ({ scene, duration, crawl }) => {
     vi.useFakeTimers()
     const interval = vi.spyOn(globalThis, 'setInterval')
     const { container } = play(scene)
@@ -213,7 +213,9 @@ describe('the opens and outros on the compositor', () => {
       vi.advanceTimersByTime(duration + 500)
     })
     expect(open?.outerHTML).toBe(before)
-    expect(interval).not.toHaveBeenCalled()
+    // Nothing draws the open from a timer. The one interval an outro starts is
+    // the crawl's, under the board it fades to: it looks at its belt four times a second
+    expect(interval.mock.calls.map((call) => call[1])).toEqual(crawl ? [250] : [])
   })
 
   it.each(RUNS)('stop $name when it leaves the air', ({ scene, pieces }) => {

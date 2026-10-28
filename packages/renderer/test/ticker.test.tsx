@@ -15,30 +15,45 @@ flag.IS_REACT_ACT_ENVIRONMENT = true
 
 const VIEW = 600
 
+interface FakeRun {
+  node: HTMLElement
+  keyframes: Keyframe[]
+  options: KeyframeAnimationOptions
+  startTime: number | null
+  cancel: ReturnType<typeof vi.fn>
+}
+
 describe('the ticker on air', () => {
   let container: HTMLElement
   let root: Root
 
-  // jsdom has no layout, no frames and no clock of its own worth the name
+  // jsdom has no layout, no compositor and no clock of its own worth the name
   let clock = 0
-  let nextFrame = 1
-  let queued = new Map<number, FrameRequestCallback>()
+  let perChar = 10
+  let runs: FakeRun[] = []
+  let timers = new Map<number, () => void>()
+  let nextTimer = 1
+  let visibility: DocumentVisibilityState = 'visible'
   const original = {
-    requestAnimationFrame: window.requestAnimationFrame,
-    cancelAnimationFrame: window.cancelAnimationFrame,
     matchMedia: window.matchMedia,
     clientWidth: Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'clientWidth'),
   }
 
   beforeEach(() => {
     clock = 1000
-    nextFrame = 1
-    queued = new Map()
+    perChar = 10
+    runs = []
+    timers = new Map()
+    nextTimer = 1
+    visibility = 'visible'
+
+    // jsdom has no document.timeline, so the belt reads performance.now()
+    vi.spyOn(window.performance, 'now').mockImplementation(() => clock)
 
     const getComputedStyle = window.getComputedStyle.bind(window)
     vi.spyOn(window, 'getComputedStyle').mockImplementation((element: Element, pseudo?: string | null) => {
       if (element.classList.contains('pn-ticker-unit')) {
-        return { width: `${(element.textContent ?? '').length * 10}px` } as CSSStyleDeclaration
+        return { width: `${(element.textContent ?? '').length * perChar}px` } as CSSStyleDeclaration
       }
       return getComputedStyle(element, pseudo)
     })
@@ -48,16 +63,25 @@ describe('the ticker on air', () => {
         return this.classList.contains('pn-ticker-view') ? VIEW : 0
       },
     })
-    window.requestAnimationFrame = (callback: FrameRequestCallback) => {
-      const id = nextFrame
-      nextFrame += 1
-      queued.set(id, callback)
+    Object.defineProperty(Element.prototype, 'animate', {
+      configurable: true,
+      writable: true,
+      value: function (this: HTMLElement, keyframes: Keyframe[], options: KeyframeAnimationOptions) {
+        const run: FakeRun = { node: this, keyframes, options, startTime: null, cancel: vi.fn() }
+        runs.push(run)
+        return run
+      },
+    })
+    vi.spyOn(window, 'setInterval').mockImplementation(((fn: () => void) => {
+      const id = nextTimer
+      nextTimer += 1
+      timers.set(id, fn)
       return id
-    }
-    window.cancelAnimationFrame = (id: number) => {
-      queued.delete(id)
-    }
-    vi.spyOn(window.performance, 'now').mockImplementation(() => clock)
+    }) as unknown as typeof window.setInterval)
+    vi.spyOn(window, 'clearInterval').mockImplementation(((id: number) => {
+      timers.delete(id)
+    }) as unknown as typeof window.clearInterval)
+    Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => visibility })
 
     container = document.createElement('div')
     document.body.append(container)
@@ -68,8 +92,9 @@ describe('the ticker on air', () => {
     act(() => root.unmount())
     container.remove()
     vi.restoreAllMocks()
-    window.requestAnimationFrame = original.requestAnimationFrame
-    window.cancelAnimationFrame = original.cancelAnimationFrame
+    Reflect.deleteProperty(Element.prototype, 'animate')
+    Reflect.deleteProperty(document, 'visibilityState')
+    Reflect.deleteProperty(window, 'ResizeObserver')
     window.matchMedia = original.matchMedia
     if (original.clientWidth === undefined) {
       Reflect.deleteProperty(HTMLElement.prototype, 'clientWidth')
@@ -78,18 +103,29 @@ describe('the ticker on air', () => {
     }
   })
 
-  // Advances the clock by `ms` and runs the queued frames with that time, `count` times
-  function frames(count: number, ms: number) {
+  // Advances the clock by `ms` and runs the belt's look once
+  function look(ms: number) {
     act(() => {
-      for (let index = 0; index < count; index += 1) {
-        clock += ms
-        const due = [...queued.values()]
-        queued.clear()
-        for (const callback of due) {
-          callback(clock)
-        }
+      clock += ms
+      for (const fn of [...timers.values()]) {
+        fn()
       }
     })
+  }
+
+  function setVisibility(state: DocumentVisibilityState) {
+    act(() => {
+      visibility = state
+      document.dispatchEvent(new Event('visibilitychange'))
+    })
+  }
+
+  function hide() {
+    setVisibility('hidden')
+  }
+
+  function show() {
+    setVisibility('visible')
   }
 
   function render(element: React.ReactElement) {
@@ -112,14 +148,30 @@ describe('the ticker on air', () => {
     return units().map((unit) => unit.textContent ?? '')
   }
 
-  // How far the belt has moved past the view's left edge, from its transform
-  function offset(): number {
-    const match = /^translateX\((.+)px\)$/.exec(belt().style.transform)
-    const value = match === null ? Number.NaN : Number(match[1])
-    if (!Number.isFinite(value)) {
-      throw new Error(`no transform: ${belt().style.transform}`)
+  // The run a unit is on now: the last one handed to its element
+  function runOf(node: HTMLElement): FakeRun {
+    const found = [...runs].reverse().find((run) => run.node === node)
+    if (found === undefined) {
+      throw new Error('a unit with no run')
     }
-    return -value
+    return found
+  }
+
+  function live(): FakeRun[] {
+    return units().map(runOf)
+  }
+
+  function widthOf(node: HTMLElement): number {
+    return (node.textContent ?? '').length * perChar
+  }
+
+  // where a run has carried its unit's left edge at `t`, in stage px from the view's left edge
+  function at(run: { startTime: number | null }, t: number = clock): number {
+    return 960 - (t - (run.startTime ?? Number.NaN)) * 53 / 1000
+  }
+
+  function ats(): number[] {
+    return live().map((run) => at(run))
   }
 
   const lines: TickerItem[] = [
@@ -129,6 +181,14 @@ describe('the ticker on air', () => {
     { key: 'waiting:c', lead: 'STILL WAITING', text: 'Fix the build needs your input · 4 min' },
   ]
 
+  function renderLines() {
+    render(
+      <Stage width={480} animate>
+        <Ticker items={lines} time="14:32" animate />
+      </Stage>,
+    )
+  }
+
   it('draws a static frame as one pass of the items', () => {
     render(<Ticker items={['A one', 'B two']} time="14:32" />)
     const track = container.querySelector('.pn-ticker-track')
@@ -137,27 +197,47 @@ describe('the ticker on air', () => {
     expect(container.querySelector('.pn-ticker-belt')).toBeNull()
   })
 
-  it('crawls on a belt when animated', () => {
-    render(
-      <Stage width={480} animate>
-        <Ticker items={lines} time="14:32" animate />
-      </Stage>,
-    )
+  it('hands each unit to the compositor on a run of its own', () => {
+    renderLines()
     expect(container.querySelector('.pn-ticker-track')).toBeNull()
-    expect(units().length).toBeGreaterThan(0)
-    expect(belt().style.transform).toBe('translateX(22px)')
-    frames(30, 16)
-    expect(offset()).toBeCloseTo(-22 + 53 * 0.48, 2)
-    expect(belt().style.transform).toMatch(/^translateX\(-3\.4\d*px\)$/)
+    const nodes = units()
+    expect(nodes.length).toBeGreaterThanOrEqual(2)
+    expect(belt().style.transform).toBe('')
+    nodes.forEach((node, index) => {
+      const run = runOf(node)
+      const width = widthOf(node)
+      expect(Object.keys(run.options).sort()).toEqual(['duration', 'fill'])
+      expect(run.options.fill).toBe('both')
+      expect(run.options.duration).toBeCloseTo(((960 + width) * 1000) / 53, 6)
+      expect(run.keyframes).toEqual([{ transform: 'translateX(960px)' }, { transform: `translateX(-${width}px)` }])
+      expect(typeof run.startTime).toBe('number')
+      expect(run.cancel).not.toHaveBeenCalled()
+      if (index === 0) {
+        expect(at(run)).toBeCloseTo(22, 6)
+      } else {
+        const before = nodes[index - 1]!
+        expect(at(run)).toBeCloseTo(at(runOf(before)) + widthOf(before), 6)
+      }
+    })
+  })
+
+  it('moves at 53 stage px a second with nothing from the page', () => {
+    renderLines()
+    const kept = live()
+    const startTimes = kept.map((run) => run.startTime)
+    const first = at(kept[0]!)
+    look(480)
+    expect(at(kept[0]!)).toBeCloseTo(first - 53 * 0.48, 6)
+    kept.forEach((run, index) => {
+      expect(run.startTime).toBe(startTimes[index])
+      expect(run.cancel).not.toHaveBeenCalled()
+    })
   })
 
   it('keeps the words on screen when the items change', () => {
-    render(
-      <Stage width={480} animate>
-        <Ticker items={lines} time="14:32" animate />
-      </Stage>,
-    )
-    frames(10, 16)
+    renderLines()
+    look(250)
+    look(250)
     const nodes = units()
     const before = nodes.map((node) => node.textContent)
     expect(nodes.length).toBeGreaterThan(0)
@@ -171,7 +251,7 @@ describe('the ticker on air', () => {
         />
       </Stage>,
     )
-    frames(5, 16)
+    look(250)
     const stillThere = nodes.filter((node) => node.isConnected)
     expect(stillThere.length).toBeGreaterThan(0)
     for (const node of stillThere) {
@@ -180,21 +260,22 @@ describe('the ticker on air', () => {
   })
 
   it('keeps the view filled when the list gets shorter', () => {
-    render(
-      <Stage width={480} animate>
-        <Ticker items={lines} time="14:32" animate />
-      </Stage>,
-    )
-    frames(20, 16)
+    renderLines()
+    look(250)
+    look(250)
     render(
       <Stage width={480} animate>
         <Ticker items={[{ key: 'desk', text: 'Brief' }]} time="14:32" animate />
       </Stage>,
     )
-    for (let index = 0; index < 600; index += 1) {
-      frames(1, 16)
-      const laid = units().reduce((sum, unit) => sum + (unit.textContent ?? '').length * 10, 0)
-      expect(laid - offset()).toBeGreaterThanOrEqual(VIEW)
+    for (let index = 0; index < 120; index += 1) {
+      look(250)
+      const nodes = units()
+      const last = nodes[nodes.length - 1]!
+      expect(at(runOf(last)) + widthOf(last)).toBeGreaterThanOrEqual(VIEW)
+      for (const word of words()) {
+        expect(word).not.toBe('')
+      }
     }
   })
 
@@ -220,10 +301,12 @@ describe('the ticker on air', () => {
         <Broadcast key="board" scene={board} animate />
       </Stage>,
     )
-    frames(40, 16)
+    for (let index = 0; index < 4; index += 1) {
+      look(250)
+    }
     const wordsBefore = words()
     const beltBefore = belt()
-    const transformBefore = belt().style.transform
+    const atsBefore = ats()
     expect(wordsBefore.length).toBeGreaterThan(0)
 
     render(
@@ -233,7 +316,152 @@ describe('the ticker on air', () => {
     )
     expect(belt()).not.toBe(beltBefore)
     expect(words()).toEqual(wordsBefore)
-    expect(belt().style.transform).toBe(transformBefore)
+    const atsAfter = ats()
+    expect(atsAfter).toHaveLength(atsBefore.length)
+    atsAfter.forEach((value, index) => expect(value).toBeCloseTo(atsBefore[index]!, 6))
+  })
+
+  it('stands still while the window is hidden and carries on from where it stopped', () => {
+    renderLines()
+    look(250)
+    const wordsBefore = words()
+    const atsBefore = ats()
+
+    hide()
+    const made = runs.length
+    for (let index = 0; index < 20; index += 1) {
+      look(250)
+    }
+    expect(runs.length).toBe(made)
+    for (const run of runs) {
+      expect(run.cancel).not.toHaveBeenCalled()
+    }
+
+    show()
+    expect(words()).toEqual(wordsBefore)
+    const atsAfter = ats()
+    expect(atsAfter).toHaveLength(atsBefore.length)
+    atsAfter.forEach((value, index) => expect(value).toBeCloseTo(atsBefore[index]!, 6))
+
+    const first = atsAfter[0]!
+    look(1000)
+    expect(at(live()[0]!)).toBeCloseTo(first - 53, 6)
+  })
+
+  it('holds from the start when it is drawn while the window is hidden', () => {
+    visibility = 'hidden'
+    renderLines()
+    clock += 3000
+    show()
+    expect(at(live()[0]!)).toBeCloseTo(22, 6)
+  })
+
+  it("sets the belt again when a typeface changes the units' widths", () => {
+    renderLines()
+    look(250)
+    const kept = units()
+    const first = at(runOf(kept[0]!))
+    const old = [...runs]
+
+    perChar = 12
+    look(250)
+    const nodes = units()
+    expect(nodes.slice(0, kept.length)).toEqual(kept)
+    expect(at(runOf(nodes[0]!))).toBeCloseTo(first - 53 * 0.25, 6)
+    nodes.forEach((node, index) => {
+      if (index > 0) {
+        const before = nodes[index - 1]!
+        expect(at(runOf(node))).toBeCloseTo(at(runOf(before)) + widthOf(before), 6)
+      }
+    })
+    for (const run of old) {
+      expect(run.cancel).toHaveBeenCalledTimes(1)
+    }
+  })
+
+  it('sets the belt again before the picture is drawn, with ResizeObserver', () => {
+    const callbacks: ResizeObserverCallback[] = []
+    class FakeResizeObserver {
+      constructor(callback: ResizeObserverCallback) {
+        callbacks.push(callback)
+      }
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    }
+    Object.defineProperty(window, 'ResizeObserver', { configurable: true, writable: true, value: FakeResizeObserver })
+
+    renderLines()
+    const first = at(live()[0]!)
+    expect(callbacks).toHaveLength(1)
+
+    perChar = 12
+    act(() => {
+      callbacks[0]!([], new FakeResizeObserver(() => undefined) as unknown as ResizeObserver)
+    })
+    const nodes = units()
+    expect(at(runOf(nodes[0]!))).toBeCloseTo(first, 6)
+    nodes.forEach((node, index) => {
+      if (index > 0) {
+        const before = nodes[index - 1]!
+        expect(at(runOf(node))).toBeCloseTo(at(runOf(before)) + widthOf(before), 6)
+      }
+    })
+  })
+
+  it('takes a unit off once it has gone past the tab', () => {
+    renderLines()
+    const first = units()[0]!
+    const run = runOf(first)
+    const width = widthOf(first)
+    for (let index = 0; index < 200 && at(run) + width > 0; index += 1) {
+      look(250)
+    }
+    look(250)
+    expect(first.isConnected).toBe(false)
+    expect(run.cancel).toHaveBeenCalledTimes(1)
+  })
+
+  it('brings the next unit on from the clock after the page was held up', () => {
+    renderLines()
+    look(250)
+    const kept = units()
+    clock += 6000
+    look(0)
+
+    const nodes = units()
+    const empty = nodes.filter((node) => (node.textContent ?? '') === '')
+    expect(empty).toHaveLength(1)
+    const gap = nodes.indexOf(empty[0]!)
+    expect(gap).toBeGreaterThan(0)
+    for (const node of nodes.slice(0, gap)) {
+      expect(kept).toContain(node)
+    }
+    const before = nodes[gap - 1]!
+    expect(at(runOf(nodes[gap]!))).toBeCloseTo(at(runOf(before)) + widthOf(before), 6)
+    const after = nodes[gap + 1]!
+    expect(after.textContent).not.toBe('')
+    expect(at(runOf(after))).toBeCloseTo(VIEW, 6)
+    for (const node of nodes) {
+      if (!kept.includes(node) && (node.textContent ?? '') !== '') {
+        expect(at(runOf(node))).toBeGreaterThanOrEqual(VIEW - 1e-6)
+      }
+    }
+  })
+
+  it('stops when it leaves the air', () => {
+    renderLines()
+    look(250)
+    expect(runs.length).toBeGreaterThan(0)
+    act(() => root.unmount())
+    for (const run of runs) {
+      expect(run.cancel).toHaveBeenCalledTimes(1)
+    }
+    expect(timers.size).toBe(0)
+    const made = runs.length
+    hide()
+    show()
+    expect(runs.length).toBe(made)
   })
 
   it('stands still with reduced motion', () => {
@@ -245,11 +473,14 @@ describe('the ticker on air', () => {
       addListener: () => undefined,
       removeListener: () => undefined,
     })) as unknown as typeof window.matchMedia
-    render(
-      <Stage width={480} animate>
-        <Ticker items={lines} time="14:32" animate />
-      </Stage>,
-    )
+    renderLines()
+    expect(container.querySelector('.pn-ticker-track')).not.toBeNull()
+    expect(container.querySelector('.pn-ticker-belt')).toBeNull()
+  })
+
+  it('stands still without the Web Animations API', () => {
+    Reflect.deleteProperty(Element.prototype, 'animate')
+    renderLines()
     expect(container.querySelector('.pn-ticker-track')).not.toBeNull()
     expect(container.querySelector('.pn-ticker-belt')).toBeNull()
   })
