@@ -7,4 +7,4 @@ THE HOUR IN REVIEW, the full-frame summary of the report on the hour: one glossy
 - Four rows a page, in the listing's order (needs input, error, ready, working, and within a state the order they are given), so the two graphics agree. With more than four, a tab at the right end of the header says which page it shows, and with `animate` the pages turn every 10 s, as the listing's do. The report gives each page a desk's 10 s.
 - Keep `detail` short: a wait ("Waiting 4 min") or the lines changed ("+182 −40"). Nothing on it drops below 28px.
 
-Used by `Broadcast` in `review` mode, between the desk and the return to the board. A quiet hour skips it.
+Used by `Broadcast` in `review` mode, between the desk and the return to the board, on the board's backdrop: the ring at the top right, sending out the same signal as on the board. A quiet hour skips it.

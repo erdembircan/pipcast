@@ -7,6 +7,7 @@ import '../../../design/components/bundle.js'
 import type { ComponentType, ReactNode } from 'react'
 
 import type {
+  BackdropProps,
   BandProps,
   ClawdProps,
   HourReviewProps,
@@ -50,6 +51,7 @@ export interface PipNewsHandle {
   Pip: ComponentType<PipProps & { children?: ReactNode }>
   PipControls: ComponentType<PipControlsProps>
   Stage: ComponentType<StageProps>
+  Backdrop: ComponentType<BackdropProps>
   TopBand: ComponentType<TopBandProps>
   Ticker: ComponentType<TickerProps>
   LowerThird: ComponentType<LowerThirdProps>

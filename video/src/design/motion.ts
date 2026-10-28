@@ -45,7 +45,7 @@ export function power(ms: number): { scaleY: number; brightness: number } {
   return { scaleY: mix(1.04, 1, e), brightness: mix(1.3, 1, e) }
 }
 
-/** pn-signal: one wave leaving the board's ring, 9 s from the ring to gone. */
+/** pn-signal: one wave of the backdrop's signal, leaving the ring, 9 s from the ring to gone. */
 export function signalWave(ms: number): { scale: number; o: number } {
   const p = (((ms % 9000) + 9000) % 9000) / 9000
   const scale = mix(1, 2.5, SIGNAL(p))

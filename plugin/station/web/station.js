@@ -2489,7 +2489,15 @@
         var lead = (at2 + i * SIGNAL.period / SIGNAL.waves) % SIGNAL.period;
         waves.push(h("i", { key: i, style: { animationDelay: -lead + "ms" } }));
       }
-      return h("div", { className: "pn-signal", "aria-hidden": "true" }, waves);
+      return h("div", { className: "pn-signal" }, waves);
+    }
+    function Backdrop(props) {
+      return h(
+        "div",
+        { className: "pn-backdrop", "aria-hidden": "true" },
+        h("i", { className: "pn-backdrop-ring" }),
+        bool(props.animate, false) ? h(Signal) : null
+      );
     }
     function Broadcast2(props) {
       var animate = bool(props.animate, false);
@@ -2518,7 +2526,7 @@
         parts.push(h(
           "div",
           { key: "under", className: "pn-board-under", style: { position: "absolute", left: 0, top: 0, width: STAGE_W + "px", height: STAGE_H + "px", zIndex: 0 } },
-          animate ? h(Signal) : null,
+          h(Backdrop, { animate }),
           h(SessionBoard, { sessions: back.sessions, limits: back.limits }),
           h(Ticker2, { items: back.ticker, time: back.clock, animate })
         ));
@@ -2526,11 +2534,10 @@
       } else if (mode === "ident") {
         parts.push(h(Ident, { key: "id", hour: scene.hour, progress: scene.progress, animate }));
       } else if (mode === "review") {
+        parts.push(h(Backdrop, { key: "backdrop", animate }));
         parts.push(h(HourReview, { key: "rv", rows: scene.rows, span: scene.span, label: scene.label, animate }));
       } else {
-        if (animate) {
-          parts.push(h(Signal, { key: "signal" }));
-        }
+        parts.push(h(Backdrop, { key: "backdrop", animate }));
         parts.push(h(SessionBoard, { key: "board", sessions: scene.sessions, limits: scene.limits, animate }));
       }
       parts.push(h(TopBand, { key: "top" }));
@@ -3758,6 +3765,7 @@
       Pip,
       PipControls,
       Broadcast: Broadcast2,
+      Backdrop,
       TopBand,
       Ticker: Ticker2,
       LowerThird,
