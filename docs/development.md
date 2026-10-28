@@ -181,9 +181,17 @@ The station's binary is a file the directory's validator can't inspect, so every
 
 ### Submit
 
-1. Put the `release` branch on the commit to submit, as Release, below, says.
-2. From the claude.ai account that should own the listing, on a Pro or Max plan, open [claude.ai/directory/manage](https://claude.ai/directory/manage) and select **Submit new**, then **Plugin bundle**.
-3. On **Source**, enter `erdembircan/pipcast` as the repository, `plugin` as the plugin path, and `release` as the branch. While the repository is private, the portal asks you to connect GitHub, install the Claude GitHub App on the repository, and agree that its source is uploaded to Anthropic for scanning.
+The directory publishes only from a public repository. Pipcast's is public, with GitHub's private vulnerability reporting on, which `SECURITY.md` sends people to.
+
+1. Put the `release` branch on the commit to submit. For the first version, that's master's newest commit, untagged until it goes live (below):
+
+   ```bash
+   git push origin <commit>:refs/heads/release
+   ```
+
+   Later versions are tagged first, and `release` moves to the tag, as Release, below, says.
+2. From the claude.ai account that should own the listing, on a Pro or Max plan, open [claude.ai/directory/manage](https://claude.ai/directory/manage) and select **Submit new**, then **Plugin bundle**. The portal checks that the GitHub account connected to that claude.ai account can push to the repository, and asks you to connect one if none is.
+3. On **Source**, enter `erdembircan/pipcast` as the repository, `plugin` as the plugin path, and `release` as the branch.
 4. Select **Validate**. Fix anything the report marks **Blocking**, push, and select **Re-validate**. The holds above show as **Policy hold**, and don't stop you.
 5. **Listing details** come from the manifest and the README.
 6. On **Data handling**, the answers are:
@@ -193,15 +201,11 @@ The station's binary is a file the directory's validator can't inspect, so every
    - It isn't meant for people under 18.
 7. On **Compliance**, check the contact email and select the four acknowledgements.
 8. On **Review and submit**, keep **GitHub push webhook**, leave **Auto-publish passing versions** off, and select **Submit for review**.
-9. On **Plugin submitted for review**, select **Set up push updates**, which needs admin access to the repository on GitHub. Keeping **GitHub push webhook** doesn't set the webhook up by itself, and without it the directory finds a new commit on `release` only at its next scheduled check. To set it up later, open Pipcast from **Submissions** in the portal, and select **Set up** under **Updates** on its **Settings** tab.
+9. On **Plugin submitted for review**, select **Set up push updates**, which needs admin access to the repository on GitHub. If it asks you to install the Claude GitHub App, install it on this repository only. Keeping **GitHub push webhook** doesn't set the webhook up by itself, and without it the directory finds a new commit on `release` only at its next scheduled check. To set it up later, open Pipcast from **Submissions** in the portal, and select **Set up** under **Updates** on its **Settings** tab.
 
-The listing goes live only once the repository is public. When the reviewer has cleared Pipcast, make the repository public and turn on its private vulnerability reporting, which `SECURITY.md` sends people to and GitHub offers only on public repositories:
+When the reviewer has cleared Pipcast, select **Publish** on its page in the portal, which by default asks an Anthropic reviewer to publish it. Once it's live, tag the commit that went live `v1.0.0`, push the tag, and publish a GitHub release from it. [Track your directory submission](https://claude.com/docs/directory/submission-status) says what each status in the portal means, and who acts next.
 
-```bash
-gh api -X PUT repos/erdembircan/pipcast/private-vulnerability-reporting
-```
-
-Then select **Check for new commits** on Pipcast's page in the portal, and **Publish**. [Track your directory submission](https://claude.com/docs/directory/submission-status) says what each status in the portal means, and who acts next.
+The portal reads the mod by rules of its own, which neither `claude plugin validate` nor `scripts/check-directory.mjs` applies in full, so a change to the mod is known to pass only once the portal has read it. Before Pipcast is submitted, validate the change's branch on the **Source** step, where **Validate** takes any branch under **Branch or tag** and submits nothing, then set the field back to `release` before you go on. After, the portal first reads a change when `release` moves to it, as a new version on Pipcast's **Versions** tab: one that doesn't pass doesn't go live, and a listed Pipcast keeps the version before it.
 
 ### Try the directory's copy first
 
