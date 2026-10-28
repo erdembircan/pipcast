@@ -1,7 +1,7 @@
 // Renders the video's YouTube thumbnail (src/thumbnail) into
 // assets/youtube-thumbnail.jpg at the repository's root, and the same picture
-// with YouTube's play button on it into assets/youtube-thumbnail-play.jpg for
-// the README, in the Chrome installed on this Mac: npm run thumbnail.
+// as YouTube's embedded player shows it into assets/youtube-thumbnail-play.jpg
+// for the README, in the Chrome installed on this Mac: npm run thumbnail.
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { bundle } from '@remotion/bundler'
