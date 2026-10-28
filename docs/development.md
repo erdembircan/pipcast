@@ -133,7 +133,7 @@ A cue waits until the window shows and nothing else is on air or due, so you can
 
 ### The cue
 
-A cue is a JSON file in the store's `dev` folder. The development build's station takes each one, hands it to its page and deletes it. `scripts/live.sh cue` sends one you wrote, from a file, or from its input with `-`, and gives it an `id` when it has none.
+A cue is a JSON file in the store's `dev` folder. The development build's station takes each one, hands it to its page and deletes it. `scripts/live.sh cue` sends one you wrote, from a file, or from its input with `-`, and gives it an `id` of its own, so the same cue can be sent again.
 
 A story cue airs one to eight stories, one after another, each with what `story` takes:
 

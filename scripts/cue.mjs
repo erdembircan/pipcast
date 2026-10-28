@@ -176,6 +176,10 @@ function again(session) {
     input.removed = story.removed ?? 0
     input.files = story.files ?? 0
   }
+  if (story.kind === 'needs-input') {
+    // How long it has waited so far, so it airs waiting as long
+    input.minutes = Math.min(9_999, Math.max(0, Math.floor((Date.now() - story.at) / 60_000)))
+  }
   if (story.kind !== 'needs-input' && story.durationMs !== undefined) {
     input.minutes = Math.round(story.durationMs / 60_000)
   }
@@ -193,7 +197,7 @@ function send(cue, what) {
     fail("The station on air takes no cues: it isn't the live checkout's development build. scripts/live.sh says what the app runs.")
   }
   const name = `${Date.now()}-${randomBytes(2).toString('hex')}`
-  const full = { id: name, ...cue }
+  const full = { ...cue, id: name }
   const checked = checkCue(full)
   if ('problem' in checked) {
     fail(`That cue would be dropped: ${checked.problem}.`)

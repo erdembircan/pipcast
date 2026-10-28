@@ -242,7 +242,7 @@ settle_station() { # <fingerprint of the station before the move>
       echo "Stopped the station, which ran the build before: a session on air starts it again from this one within 10 s."
     fi
   else
-    echo "The station on air runs from $(dirname "$(dirname "$binary")"). Once every session on air has reloaded, run scripts/live.sh restart to start it from the live checkout's build."
+    echo "The station on air runs from $(dirname "$(dirname "$binary")"), not the live checkout's build. If that is a copy the desktop app hands in, from Anthropic's plugin directory or an upload, turn Pipcast off in Customize > Plugins first. Once every session on air has reloaded, run scripts/live.sh restart."
   fi
 }
 
@@ -328,6 +328,12 @@ unmoved() { # <what failed>
   exit 1
 }
 
+# Stops when the build is in place but the marketplace could not be pointed at it
+unmounted() {
+  echo "The live checkout's build of $(git -C "$live" rev-parse --short HEAD) is in $plugin, but the $live_market marketplace could not be pointed there, so the app runs $(running). scripts/live.sh setup tries again." >&2
+  exit 1
+}
+
 need_live() {
   if [[ ! -e "$live/.git" ]]; then
     echo "There is no live checkout at $live: run scripts/live.sh setup first." >&2
@@ -380,7 +386,7 @@ put() {
     unmoved "Could not build $what"
   fi
   if ! mount; then
-    unmoved "Could not point the $live_market marketplace at $mount"
+    unmounted
   fi
   step_in
   moved "$before" "$what"
@@ -419,7 +425,7 @@ case "${1:-}" in
         echo "The station on air takes no cues."
       fi
       if [[ "$now" == 'the live checkout in'* && "$station" != "$plugin/station/pipcast-station" ]]; then
-        echo "It runs from $(dirname "$(dirname "$station")"), not the live checkout's build. Once every session on air has reloaded, run scripts/live.sh restart."
+        echo "It runs from $(dirname "$(dirname "$station")"), not the live checkout's build. If that is a copy the desktop app hands in, from Anthropic's plugin directory or an upload, turn Pipcast off in Customize > Plugins first. Once every session on air has reloaded, run scripts/live.sh restart."
       fi
     fi
     ;;
@@ -438,7 +444,7 @@ case "${1:-}" in
       unmoved "Could not build the live checkout at $(git -C "$live" rev-parse --short HEAD)"
     fi
     if ! mount; then
-      unmoved "Could not point the $live_market marketplace at $mount"
+      unmounted
     fi
     if [[ "$(listed state "$live_id")" == missing ]] && ! "$claude" plugin install "$live_id" --scope user >/dev/null; then
       unmoved "Could not install $live_id from the live checkout"

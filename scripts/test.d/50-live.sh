@@ -124,6 +124,10 @@ check "setup points the pipcast marketplace at the live checkout's build, in .de
 check "which holds the commit's plugin/" cmp -s "$tmp/pipcast-live/plugin/.claude-plugin/plugin.json" "$tmp/pipcast-live/.dev/marketplace/plugin/.claude-plugin/plugin.json"
 check "and names the commit it was built from" test "$(cat "$tmp/pipcast-live/.dev/marketplace/BUILT-FROM")" = "$master"
 check "while the live checkout stays clean around it" test -z "$(git -C "$tmp/pipcast-live" status --porcelain)"
+# A session loads the plugin from the mounted folder: a mark put in its hooks
+# module there shows in what a headless session's /pipcast auto says
+sed -i '' 's/Tune in every new session/&, from the mount,/' "$tmp/pipcast-live/.dev/marketplace/plugin/hooks/register.js"
+check "and a session loads the plugin from there" grep -qF "Tune in every new session, from the mount," <<<"$(cd "$tmp" && "$claude" -p "/pipcast auto" 2>&1)"
 check "setup installs pipcast@pipcast and turns it on" test "$(state pipcast@pipcast)" = enabled
 check "it says the app runs master" grep -q "That is master." <<<"$("$live")"
 check "setup again keeps the live checkout" grep -q "already at" <<<"$("$live" setup)"

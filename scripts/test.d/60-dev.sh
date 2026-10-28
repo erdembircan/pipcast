@@ -112,6 +112,7 @@ on_air() { # [<version>]
   now="$(node -e 'process.stdout.write(String(Date.now()))')"
   printf '{"v":1,"pid":%s,"startedAt":%s,"heartbeatAt":%s,"version":"%s"}' "$stand_in" "$now" "$now" "${1:-1.0.0+dev}" >"$PIPCAST_HOME/station.json"
   printf '{"v":1,"id":"s1","title":"Fix the login form","project":"web-shop","state":"ready","stateAt":%s,"tunedInAt":%s,"checkedInAt":%s,"stories":[{"id":"s1:1","kind":"ready","at":%s,"added":12,"removed":3,"files":2,"durationMs":240000}],"activity":[],"hours":[]}' "$now" "$now" "$now" "$now" >"$PIPCAST_HOME/sessions/s1.json"
+  printf '{"v":1,"id":"s2","title":"Tidy the docs","project":"docs-site","state":"needs-input","stateAt":%s,"tunedInAt":%s,"checkedInAt":%s,"stories":[{"id":"s2:1","kind":"needs-input","at":%s,"command":"npm test","quote":"Run the tests?"}],"activity":[],"hours":[]}' "$((now - 300000))" "$now" "$now" "$((now - 300000))" >"$PIPCAST_HOME/sessions/s2.json"
 }
 
 check "with no station on air, story says so" grep -qF "No station is on air, so nothing would take the cue." <<<"$("${cue[@]}" story 2>&1 || true)"
@@ -145,6 +146,9 @@ check "--session on its own airs that session's newest story again, as it was" f
 on_air
 "${cue[@]}" story complete --session s1 >/dev/null
 check "--session with a kind lands a story of that kind on the session" field_is stories '[{"kind":"complete","session":"s1","title":"Fix the login form","project":"web-shop"}]'
+on_air
+"${cue[@]}" story --session s2 >/dev/null
+check "--session on its own airs a story that needs input waiting as long as it has" field_is stories '[{"kind":"needs-input","session":"s2","title":"Tidy the docs","project":"docs-site","command":"npm test","quote":"Run the tests?","minutes":5}]'
 
 on_air
 before="$(count)"
@@ -153,7 +157,7 @@ check "--quote on a ready story is refused" grep -qF -- "--quote is for needs-in
 check "a figure that isn't a whole number is refused" grep -qF -- "--added takes a whole number." <<<"$("${cue[@]}" story --added lots 2>&1 || true)"
 check "a kind that isn't one is refused" grep -qF "The kind of story is needs-input, ready, complete or error." <<<"$("${cue[@]}" story breaking 2>&1 || true)"
 check "an option that isn't one is refused" grep -qF "Unknown option --colour." <<<"$("${cue[@]}" story --colour red 2>&1 || true)"
-check "--session that matches no session on air is refused, naming the ones on air" grep -qF 'No session on air matches "checkout". On air: Fix the login form (s1).' <<<"$("${cue[@]}" story --session checkout 2>&1 || true)"
+check "--session that matches no session on air is refused, naming the ones on air" grep -qF 'No session on air matches "checkout". On air: Fix the login form (s1); Tidy the docs (s2).' <<<"$("${cue[@]}" story --session checkout 2>&1 || true)"
 check "--session with --title is refused" grep -qF -- "--session takes the title and project of the session it names" <<<"$("${cue[@]}" story --session s1 --title "Other" 2>&1 || true)"
 check "and none of them writes a cue" test "$(count)" = "$before"
 
@@ -177,7 +181,7 @@ check "cue sends a file's cue as it is" field_is stories '[{"kind":"error","quot
 check "with an id of its own" named_by_its_file
 on_air
 printf '{"id":"my-cue","segment":"hour","samples":2}' | "${cue[@]}" cue - >/dev/null
-check "cue takes its input with -, and keeps the cue's own id" field_is id '"my-cue"'
+check "cue takes its input with -, and gives the cue an id of its own, so the same cue can be sent again" named_by_its_file
 printf '{"segment":"story","stories":[{"kind":"error","added":1}]}' >"$tmp/bad.json"
 check "cue refuses one the page would drop, and says why" grep -qF "That cue would be dropped: stories[0].added is for ready stories." <<<"$("${cue[@]}" cue "$tmp/bad.json" 2>&1 || true)"
 
