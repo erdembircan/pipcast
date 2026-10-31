@@ -64,11 +64,10 @@ public struct CubicBezier: Equatable {
 /// screen and out of it. All rectangles are AppKit points, origin bottom left, y up; `visible` is a screen's
 /// `visibleFrame`.
 public enum Minimize {
-    public static let handleSize = CGSize(width: 28, height: 88)   // pip-handle-width, pip-handle-height
-    public static let handleInset: CGFloat = 8
-    public static let handleRadius: CGFloat = 14
+    /// The handle and the tab on a 14-inch MacBook Pro (`pip-handle-width`, `pip-handle-height`); `ControlSizes` sizes
+    /// them for each screen.
+    public static var handleSize: CGSize { ControlSizes.reference.handle }
     public static let tabDark = 0.55                                // pip-tab-dark
-    public static let chevronPointSize: CGFloat = 22
     public static let inDuration = 0.42
     public static let inCurve = CubicBezier(0.65, 0, 0.35, 1)       // the listing's rows leaving
     public static let outDuration = 0.46
@@ -87,21 +86,23 @@ public enum Minimize {
         return CGRect(x: x, y: rest.minY, width: rest.width, height: rest.height)
     }
 
-    /// The handle on a window: the middle of its inner edge, 8 pt in.
-    public static func handle(on window: CGRect, side: Side) -> CGRect {
-        let x = side == .right ? window.minX + handleInset : window.maxX - handleInset - handleSize.width
-        return CGRect(x: x, y: window.midY - handleSize.height / 2, width: handleSize.width, height: handleSize.height)
+    /// The handle on a window: the middle of its inner edge, the screen's inset in.
+    public static func handle(on window: CGRect, side: Side, controls: ControlSizes) -> CGRect {
+        let size = controls.handle
+        let x = side == .right ? window.minX + controls.inset : window.maxX - controls.inset - size.width
+        return CGRect(x: x, y: window.midY - size.height / 2, width: size.width, height: size.height)
     }
 
     /// The tab: flat against the visible frame's `side`, level with the middle of where the window rests.
-    public static func tab(rest: CGRect, visible: CGRect, side: Side) -> CGRect {
-        let x = side == .right ? visible.maxX - handleSize.width : visible.minX
-        return CGRect(x: x, y: rest.midY - handleSize.height / 2, width: handleSize.width, height: handleSize.height)
+    public static func tab(rest: CGRect, visible: CGRect, side: Side, controls: ControlSizes) -> CGRect {
+        let size = controls.handle
+        let x = side == .right ? visible.maxX - size.width : visible.minX
+        return CGRect(x: x, y: rest.midY - size.height / 2, width: size.width, height: size.height)
     }
 
     /// The handle with the window at `window`, never past the tab.
-    public static func handle(on window: CGRect, side: Side, tab: CGRect) -> CGRect {
-        var frame = handle(on: window, side: side)
+    public static func handle(on window: CGRect, side: Side, tab: CGRect, controls: ControlSizes) -> CGRect {
+        var frame = handle(on: window, side: side, controls: controls)
         frame.origin.x = side == .right ? min(frame.minX, tab.minX) : max(frame.minX, tab.minX)
         return frame
     }
@@ -161,9 +162,11 @@ public struct Slide: Equatable {
     public let reduced: Bool
     public let dockedFrom: Double
     public let handleAlphaFrom: Double
+    /// The sizes of the handle and the tab on the slide's screen.
+    public let controls: ControlSizes
 
     public init(direction: Direction, from: CGRect, rest: CGRect, visible: CGRect, side: Side, reduced: Bool,
-                dockedFrom: Double, handleAlphaFrom: Double) {
+                dockedFrom: Double, handleAlphaFrom: Double, controls: ControlSizes) {
         self.direction = direction
         self.from = from
         self.rest = rest
@@ -172,6 +175,7 @@ public struct Slide: Equatable {
         self.reduced = reduced
         self.dockedFrom = dockedFrom
         self.handleAlphaFrom = handleAlphaFrom
+        self.controls = controls
     }
 
     public var duration: Double {
@@ -186,7 +190,7 @@ public struct Slide: Equatable {
 
     public func frame(at elapsed: Double) -> SlideFrame {
         let p = min(1, max(0, elapsed / duration))
-        let tab = Minimize.tab(rest: rest, visible: visible, side: side)
+        let tab = Minimize.tab(rest: rest, visible: visible, side: side, controls: controls)
         let into = direction == .into
 
         if reduced {
@@ -198,7 +202,7 @@ public struct Slide: Equatable {
         let target = to
         let origin = CGPoint(x: from.minX + (target.minX - from.minX) * e, y: from.minY + (target.minY - from.minY) * e)
         let window = CGRect(origin: origin, size: rest.size)
-        let handle = Minimize.handle(on: window, side: side, tab: tab)
+        let handle = Minimize.handle(on: window, side: side, tab: tab, controls: controls)
 
         if into {
             let dockStart = duration - Minimize.dockDuration

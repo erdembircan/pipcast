@@ -54,26 +54,26 @@ private func near(_ a: CGRect, _ b: CGRect, _ tolerance: CGFloat = 0.05) -> Bool
     @Test func goneHandleAndTabOnTheRight() {
         #expect(near(Minimize.gone(rest: restBottomRight, visible: visible, side: .right),
                      CGRect(x: 1512, y: 20, width: 716, height: 403)))
-        #expect(near(Minimize.handle(on: restBottomRight, side: .right), CGRect(x: 784, y: 177.5, width: 28, height: 88)))
-        #expect(near(Minimize.tab(rest: restBottomRight, visible: visible, side: .right),
+        #expect(near(Minimize.handle(on: restBottomRight, side: .right, controls: .reference), CGRect(x: 784, y: 177.5, width: 28, height: 88)))
+        #expect(near(Minimize.tab(rest: restBottomRight, visible: visible, side: .right, controls: .reference),
                      CGRect(x: 1484, y: 177.5, width: 28, height: 88)))
     }
 
     @Test func goneHandleAndTabOnTheLeft() {
         #expect(near(Minimize.gone(rest: restTopLeft, visible: visible, side: .left),
                      CGRect(x: -716, y: 559, width: 716, height: 403)))
-        #expect(near(Minimize.handle(on: restTopLeft, side: .left), CGRect(x: 700, y: 716.5, width: 28, height: 88)))
-        #expect(near(Minimize.tab(rest: restTopLeft, visible: visible, side: .left),
+        #expect(near(Minimize.handle(on: restTopLeft, side: .left, controls: .reference), CGRect(x: 700, y: 716.5, width: 28, height: 88)))
+        #expect(near(Minimize.tab(rest: restTopLeft, visible: visible, side: .left, controls: .reference),
                      CGRect(x: 0, y: 716.5, width: 28, height: 88)))
     }
 
     @Test func theHandleNeverGoesPastTheTab() {
-        let right = Minimize.tab(rest: restBottomRight, visible: visible, side: .right)
+        let right = Minimize.tab(rest: restBottomRight, visible: visible, side: .right, controls: .reference)
         let gone = Minimize.gone(rest: restBottomRight, visible: visible, side: .right)
-        #expect(Minimize.handle(on: gone, side: .right, tab: right).minX == right.minX)
-        let left = Minimize.tab(rest: restTopLeft, visible: visible, side: .left)
+        #expect(Minimize.handle(on: gone, side: .right, tab: right, controls: .reference).minX == right.minX)
+        let left = Minimize.tab(rest: restTopLeft, visible: visible, side: .left, controls: .reference)
         let goneLeft = Minimize.gone(rest: restTopLeft, visible: visible, side: .left)
-        #expect(Minimize.handle(on: goneLeft, side: .left, tab: left).minX == left.minX)
+        #expect(Minimize.handle(on: goneLeft, side: .left, tab: left, controls: .reference).minX == left.minX)
     }
 
     @Test func onlyThePartInsideTheVisibleFrameShows() {
@@ -124,7 +124,7 @@ private func near(_ a: CGRect, _ b: CGRect, _ tolerance: CGFloat = 0.05) -> Bool
     func slide(_ direction: Slide.Direction, from: CGRect, rest: CGRect = restBottomRight, side: Side = .right,
                reduced: Bool = false, dockedFrom: Double = 0, handleAlphaFrom: Double = 0) -> Slide {
         Slide(direction: direction, from: from, rest: rest, visible: visible, side: side, reduced: reduced,
-              dockedFrom: dockedFrom, handleAlphaFrom: handleAlphaFrom)
+              dockedFrom: dockedFrom, handleAlphaFrom: handleAlphaFrom, controls: .reference)
     }
 
     @Test func intoTheRightSide() {
@@ -136,7 +136,7 @@ private func near(_ a: CGRect, _ b: CGRect, _ tolerance: CGFloat = 0.05) -> Bool
         #expect(near(late.docked, 0.16233))
         let end = into.frame(at: 0.42)
         #expect(near(end.window, Minimize.gone(rest: restBottomRight, visible: visible, side: .right)))
-        #expect(near(end.handle, Minimize.tab(rest: restBottomRight, visible: visible, side: .right)))
+        #expect(near(end.handle, Minimize.tab(rest: restBottomRight, visible: visible, side: .right, controls: .reference)))
         #expect(near(end.docked, 1))
         #expect(near(into.frame(at: 0.075).handleAlpha, 0.5))
         #expect(near(into.frame(at: 0.15).handleAlpha, 1))
@@ -154,7 +154,7 @@ private func near(_ a: CGRect, _ b: CGRect, _ tolerance: CGFloat = 0.05) -> Bool
         let end = out.frame(at: 0.46)
         #expect(near(end.window, restBottomRight))
         #expect(near(end.docked, 0))
-        #expect(near(end.handle, Minimize.handle(on: restBottomRight, side: .right)))
+        #expect(near(end.handle, Minimize.handle(on: restBottomRight, side: .right, controls: .reference)))
         #expect(out.isDone(at: 0.46))
     }
 
@@ -177,7 +177,7 @@ private func near(_ a: CGRect, _ b: CGRect, _ tolerance: CGFloat = 0.05) -> Bool
 
     @Test func withReduceMotionTheWindowAndTheTabCrossFade() {
         let into = slide(.into, from: restBottomRight, reduced: true)
-        let tab = Minimize.tab(rest: restBottomRight, visible: visible, side: .right)
+        let tab = Minimize.tab(rest: restBottomRight, visible: visible, side: .right, controls: .reference)
         let half = into.frame(at: 0.1)
         #expect(half.window == restBottomRight)
         #expect(near(half.windowAlpha, 0.5))
@@ -346,6 +346,11 @@ private func near(_ a: CGRect, _ b: CGRect, _ tolerance: CGFloat = 0.05) -> Bool
         #expect(try token("pip-handle-width") == "\(Int(Minimize.handleSize.width))px")
         #expect(try token("pip-handle-height") == "88px")
         #expect(try token("pip-handle-height") == "\(Int(Minimize.handleSize.height))px")
+    }
+
+    @Test func theButtonsAreTheDesignsSize() throws {
+        #expect(try token("pip-control") == "44px")
+        #expect(try token("pip-control") == "\(Int(ControlSizes.reference.button))px")
     }
 
     @Test func theTabIsTheDesignsDark() throws {

@@ -1,23 +1,28 @@
 import AppKit
+import StationCore
 
-/// One of the three 44 pt circles on the window: Liquid Glass on macOS 26 and
-/// later, a HUD-material blur before it, with a white SF Symbol in it.
-/// It sets no tooltip: nothing pops up over it.
+/// One of the three glass circles on the window: Liquid Glass on macOS 26 and
+/// later, a HUD-material blur before it, with a white SF Symbol in it. Its size
+/// is the screen's (`ControlSizes`): 44 pt with a 17 pt symbol on a 14-inch
+/// MacBook Pro. It sets no tooltip: nothing pops up over it.
 final class GlassButton: NSView {
-    static let diameter: CGFloat = 44
-    static let symbolSize: CGFloat = 17
-
     var onPress: (() -> Void)?
 
     private let symbolView = NSImageView()
     private var glass: NSView?
+    private var symbol: String
+    private var label: String
+    private var symbolSize = ControlSizes.reference.symbol
     private var isPressing = false
     private var isHovered = false {
         didSet { updateTint() }
     }
 
     init(symbol: String, label: String) {
-        super.init(frame: NSRect(x: 0, y: 0, width: Self.diameter, height: Self.diameter))
+        self.symbol = symbol
+        self.label = label
+        let diameter = ControlSizes.reference.button
+        super.init(frame: NSRect(x: 0, y: 0, width: diameter, height: diameter))
         wantsLayer = true
 
         symbolView.imageScaling = .scaleNone
@@ -25,11 +30,12 @@ final class GlassButton: NSView {
         symbolView.contentTintColor = .white
         symbolView.setAccessibilityElement(false)
         symbolView.frame = bounds
+        symbolView.autoresizingMask = [.width, .height]
 
         if #available(macOS 26.0, *) {
             let view = NSGlassEffectView(frame: bounds)
             view.style = .clear
-            view.cornerRadius = Self.diameter / 2
+            view.cornerRadius = diameter / 2
             view.contentView = symbolView
             glass = view
         } else {
@@ -37,7 +43,7 @@ final class GlassButton: NSView {
             view.material = .hudWindow
             view.blendingMode = .behindWindow
             view.state = .active
-            view.maskImage = Self.circleMask()
+            view.maskImage = Self.circleMask(diameter: diameter)
             view.addSubview(symbolView)
             glass = view
         }
@@ -59,13 +65,29 @@ final class GlassButton: NSView {
 
     /// Shows another symbol and names the button for VoiceOver.
     func set(symbol: String, label: String) {
-        let configuration = NSImage.SymbolConfiguration(pointSize: Self.symbolSize, weight: .semibold)
+        self.symbol = symbol
+        self.label = label
+        let configuration = NSImage.SymbolConfiguration(pointSize: symbolSize, weight: .semibold)
         symbolView.image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)?
             .withSymbolConfiguration(configuration)
         setAccessibilityLabel(label)
     }
 
-    private static func circleMask() -> NSImage {
+    /// Sizes the button for a screen: its diameter and its symbol's point size. `ChromeView` places it.
+    func size(diameter: CGFloat, symbolSize: CGFloat) {
+        guard diameter != frame.width || symbolSize != self.symbolSize else { return }
+        self.symbolSize = symbolSize
+        setFrameSize(NSSize(width: diameter, height: diameter))
+        if #available(macOS 26.0, *), let view = glass as? NSGlassEffectView {
+            view.cornerRadius = diameter / 2
+        } else if let view = glass as? NSVisualEffectView {
+            view.maskImage = Self.circleMask(diameter: diameter)
+        }
+        symbolView.frame = symbolView.superview?.bounds ?? bounds
+        set(symbol: symbol, label: label)
+    }
+
+    private static func circleMask(diameter: CGFloat) -> NSImage {
         let image = NSImage(size: NSSize(width: diameter, height: diameter), flipped: false) { rect in
             NSColor.black.setFill()
             NSBezierPath(ovalIn: rect).fill()
