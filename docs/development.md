@@ -183,7 +183,7 @@ The station's binary is a file the directory's validator can't inspect, so every
 
 The directory publishes only from a public repository. Pipcast's is public, with GitHub's private vulnerability reporting on, which `SECURITY.md` sends people to.
 
-1. Put the `release` branch on the commit to submit. For the first version, that's master's newest commit, untagged until it goes live (below):
+1. Put the `release` branch on the commit to submit. For the first version, that's master's newest commit:
 
    ```bash
    git push origin <commit>:refs/heads/release
@@ -203,7 +203,7 @@ The directory publishes only from a public repository. Pipcast's is public, with
 8. On **Review and submit**, keep **GitHub push webhook**, leave **Auto-publish passing versions** off, and select **Submit for review**.
 9. On **Plugin submitted for review**, select **Set up push updates**, which needs admin access to the repository on GitHub. If it asks you to install the Claude GitHub App, install it on this repository only. Keeping **GitHub push webhook** doesn't set the webhook up by itself, and without it the directory finds a new commit on `release` only at its next scheduled check. To set it up later, open Pipcast from **Submissions** in the portal, and select **Set up** under **Updates** on its **Settings** tab.
 
-When the reviewer has cleared Pipcast, select **Publish** on its page in the portal, which by default asks an Anthropic reviewer to publish it. Once 1.0.0 is live, tag its commit `v1.0.0`, push the tag, and publish a GitHub release from it. [Track your directory submission](https://claude.com/docs/directory/submission-status) says what each status in the portal means, and who acts next.
+When the reviewer has cleared Pipcast, select **Publish** on its page in the portal, which by default asks an Anthropic reviewer to publish it. [Track your directory submission](https://claude.com/docs/directory/submission-status) says what each status in the portal means, and who acts next.
 
 The portal reads the mod by rules of its own, which neither `claude plugin validate` nor `scripts/check-directory.mjs` applies in full, so a change to the mod is known to pass only once the portal has read it. Before Pipcast is submitted, validate the change's branch on the **Source** step, where **Validate** takes any branch under **Branch or tag** and submits nothing, then set the field back to `release` before you go on. After, the portal first reads a change when `release` moves to it, as a new version on Pipcast's **Versions** tab: one that doesn't pass doesn't go live, and a listed Pipcast keeps the version before it.
 
@@ -258,13 +258,13 @@ People get a new version from each place on its own schedule:
 - **Anthropic's plugin directory** follows the `release` branch. A version reaches people there only when `release` moves to it and a reviewer clears it, and they get it as a session starts.
 - **erdembircan-plugins** installs `plugin/` from master's newest commit. An install already made moves only with the version: `claude plugin update pipcast@erdembircan-plugins` keeps the copy it has while `version` stays the same, whatever changed in `plugin/`.
 
-So a pull request that changes what `plugin/` holds raises the version too: the patch for a fix, as in 1.0.1, and the minor for something new, as in 1.1.0. Raise it in `packages/mod/plugin.json`, in `Constants.version` in `station/Sources/StationCore/Constants.swift`, and in the root `package.json` and `package-lock.json`; tests fail when they differ. Add the version to `CHANGELOG.md` too, in Keep a Changelog's format: what changed for the people who use Pipcast, under Added, Changed or Fixed, dated the day the pull request merges, with its link at the bottom of the file. The station's binary carries its version, so run `scripts/build.sh` on a Mac and commit what it builds. 1.0.0 is out: erdembircan-plugins has offered it since the repository went public on 28 October 2026, and it stays untagged until it goes live in the directory or `release` moves past it.
+Every pull request that changes something for the people who use Pipcast adds it to `CHANGELOG.md` under Unreleased, at the top, in Keep a Changelog's format: under Added, Changed or Fixed. Not every pull request is a release. A release raises the version: the patch when it brings only fixes, as in 1.0.1, and the minor when it brings something new, as in 1.1.0. Raise it in `packages/mod/plugin.json`, in `Constants.version` in `station/Sources/StationCore/Constants.swift`, and in the root `package.json` and `package-lock.json`; tests fail when they differ. In the same pull request, give what Unreleased holds the version's heading, `## [<version>] - <date>`, dated the day the pull request merges, with an empty Unreleased back above it. At the bottom of the file, link the version to the comparison of its tag with the one before, as in `[1.1.0]: https://github.com/erdembircan/pipcast/compare/v1.0.0...v1.1.0`, and Unreleased to the comparison of the new tag with `HEAD`; both work once step 1, below, pushes the tag. The station's binary carries its version, so run `scripts/build.sh` on a Mac and commit what it builds. 1.0.0 is out: erdembircan-plugins has offered it since the repository went public on 28 October 2026.
 
 While a version is with the directory, being scanned, with a reviewer, or approved and not yet live, leave `release` on it: moving it puts another version in front of the reviewer. Master moves on meanwhile, and erdembircan-plugins installs each new version from it. Through the push webhook, GitHub tells the directory of every push, to master, any other branch or a tag, but the directory looks only at `release`, and finds nothing new there until `release` moves.
 
 To release a version once it's on master:
 
-1. Tag its commit `v<version>`, as in `v1.1.0`, push the tag, and publish a GitHub release from it. People who install from erdembircan-plugins have had it since the merge.
+1. Tag its commit `v<version>`, as in `v1.1.0`, and push the tag. Pipcast publishes no GitHub releases. People who install from erdembircan-plugins have had it since the merge.
 2. Move `release` to the newest version's tag once the portal shows Pipcast **Published**, with no newer version being scanned or with a reviewer, and master's CI has passed on the tag's commit:
 
    ```bash
@@ -274,7 +274,7 @@ To release a version once it's on master:
    Versions merged while `release` waited go to the directory as one, the newest.
 3. The directory scans the new commit, at once through the push webhook, and holds it for a reviewer. Follow it on Pipcast's **Versions** tab in the [developer portal](https://claude.ai/directory/manage), and select **Publish update** once it's approved.
 
-When the portal asks for a change, release the fix as above, and step 2 waits only for master's CI. `release` only ever moves along master, so it brings the directory everything master gained since the version it was reviewing, not the fix alone. If that version is 1.0.0, tag its commit `v1.0.0` before `release` moves, since 1.0.0 won't go live in the directory.
+When the portal asks for a change, release the fix as above, and step 2 waits only for master's CI. `release` only ever moves along master, so it brings the directory everything master gained since the version it was reviewing, not the fix alone.
 
 ## The demo video
 
