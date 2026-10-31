@@ -7,7 +7,7 @@ final class TabPanel: NSPanel {
     let handle = HandleView()
 
     init() {
-        super.init(contentRect: NSRect(origin: .zero, size: Minimize.handleSize),
+        super.init(contentRect: NSRect(origin: .zero, size: ControlSizes.reference.handle),
                    styleMask: [.borderless, .nonactivatingPanel],
                    backing: .buffered,
                    defer: false)
@@ -28,11 +28,14 @@ final class TabPanel: NSPanel {
     override var canBecomeKey: Bool { false }
     override var canBecomeMain: Bool { false }
 
+    /// Sizes the handle, and the tab it becomes, for a screen. The station sets the panel's frame.
+    func size(_ controls: ControlSizes) { handle.size(controls) }
+
     // Placed wherever the slide puts it, partly off a screen included.
     override func constrainFrameRect(_ frameRect: NSRect, to screen: NSScreen?) -> NSRect { frameRect }
 }
 
-/// The glass capsule, 28 x 88 pt, on the window's inner edge, and the same piece docked at the screen's edge. Drawn
+/// The glass capsule on the window's inner edge, sized for the screen (28 x 88 pt on a 14-inch MacBook Pro), and the same piece docked at the screen's edge. Drawn
 /// from the bottom up: the glass, a dark overlay that comes with the dock, the chevron.
 final class HandleView: NSView {
     /// A click on it, a pull of the docked tab toward the middle of the screen, or VoiceOver's press.
@@ -47,6 +50,7 @@ final class HandleView: NSView {
     private let overlay = NSView()
     private let chevron = NSImageView()
     private var side = Side.right
+    private var controls = ControlSizes.reference
     private var pressStart: NSPoint?
     private var travelled = false
     private var pulled = false
@@ -55,18 +59,18 @@ final class HandleView: NSView {
     }
 
     init() {
-        let frame = NSRect(origin: .zero, size: Minimize.handleSize)
+        let frame = NSRect(origin: .zero, size: ControlSizes.reference.handle)
         if #available(macOS 26.0, *) {
             let view = NSGlassEffectView(frame: frame)
             view.style = .clear
-            view.cornerRadius = Minimize.handleRadius
+            view.cornerRadius = ControlSizes.reference.handleRadius
             glass = view
         } else {
             let view = NSVisualEffectView(frame: frame)
             view.material = .hudWindow
             view.blendingMode = .behindWindow
             view.state = .active
-            view.maskImage = Self.capsuleMask()
+            view.maskImage = Self.capsuleMask(radius: ControlSizes.reference.handleRadius)
             glass = view
         }
         super.init(frame: frame)
@@ -77,7 +81,7 @@ final class HandleView: NSView {
 
         overlay.wantsLayer = true
         overlay.layer?.backgroundColor = NSColor.black.cgColor
-        overlay.layer?.cornerRadius = Minimize.handleRadius
+        overlay.layer?.cornerRadius = ControlSizes.reference.handleRadius
         overlay.layer?.masksToBounds = true
         overlay.alphaValue = 0
         addSubview(overlay)
@@ -101,8 +105,7 @@ final class HandleView: NSView {
 
     required init?(coder: NSCoder) { fatalError("not loaded from a nib") }
 
-    private static func capsuleMask() -> NSImage {
-        let radius = Minimize.handleRadius
+    private static func capsuleMask(radius: CGFloat) -> NSImage {
         let image = NSImage(size: NSSize(width: radius * 2, height: radius * 2), flipped: false) { rect in
             NSColor.black.setFill()
             NSBezierPath(roundedRect: rect, xRadius: radius, yRadius: radius).fill()
@@ -112,7 +115,24 @@ final class HandleView: NSView {
         return image
     }
 
-    /// Draws the handle (`docked` 0) or the tab (`docked` 1), or a moment between. The glass and the overlay grow 14 pt
+    /// Sizes the handle for a screen: the capsule, its corners and the chevron. The station sets the panel's frame.
+    func size(_ controls: ControlSizes) {
+        guard controls != self.controls else { return }
+        self.controls = controls
+        if #available(macOS 26.0, *), let view = glass as? NSGlassEffectView {
+            view.cornerRadius = controls.handleRadius
+        } else if let view = glass as? NSVisualEffectView {
+            view.maskImage = Self.capsuleMask(radius: controls.handleRadius)
+        }
+        overlay.layer?.cornerRadius = controls.handleRadius
+        // The chevron is laid out unturned, then made again at its new size: show(docked:side:) turns it back.
+        chevron.frameCenterRotation = 0
+        chevron.frame = NSRect(origin: .zero, size: controls.handle)
+        chevron.image = nil
+        show(docked: docked, side: side)
+    }
+
+    /// Draws the handle (`docked` 0) or the tab (`docked` 1), or a moment between. The glass and the overlay grow by the handle's radius
     /// past the outer edge as it docks, where the view clips them, so the outer side shows flat and the inner corners
     /// stay round; the overlay darkens; the chevron turns over. The caller sets it every frame, so nothing animates here.
     func show(docked: Double, side: Side) {
@@ -124,13 +144,13 @@ final class HandleView: NSView {
         if side != self.side || chevron.image == nil {
             self.side = side
             let name = side == .right ? "chevron.compact.right" : "chevron.compact.left"
-            let configuration = NSImage.SymbolConfiguration(pointSize: Minimize.chevronPointSize, weight: .semibold)
+            let configuration = NSImage.SymbolConfiguration(pointSize: controls.chevron, weight: .semibold)
             chevron.image = NSImage(systemSymbolName: name, accessibilityDescription: nil)?
                 .withSymbolConfiguration(configuration)
         }
-        let growth = Minimize.handleRadius * CGFloat(docked)
+        let growth = controls.handleRadius * CGFloat(docked)
         let frame = NSRect(x: side == .right ? 0 : -growth, y: 0,
-                           width: Minimize.handleSize.width + growth, height: Minimize.handleSize.height)
+                           width: controls.handle.width + growth, height: controls.handle.height)
         glass.frame = frame
         overlay.frame = frame
         overlay.alphaValue = CGFloat(Minimize.tabDark * docked)

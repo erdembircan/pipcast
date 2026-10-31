@@ -2,7 +2,7 @@
 // program, so each reader takes `unknown` and returns a well-formed value or
 // a safe default. The rest are the small rules about who is on air.
 
-import { MAX_ACTIVITY, MAX_HOURS, MAX_STORIES, STALE_MS, STATION_STALE_MS } from './constants.ts'
+import { MAX_ACTIVITY, MAX_HOURS, MAX_STORIES, MIN_SCALE, STALE_MS, STATION_STALE_MS } from './constants.ts'
 import type {
   Activity,
   HourStats,
@@ -228,7 +228,7 @@ export function parsePrefs(value: unknown): StationPrefs {
     prefs.quadrant = value.quadrant
   }
   if (isNumber(value.scale)) {
-    prefs.scale = Math.min(1, Math.max(0.7, value.scale))
+    prefs.scale = Math.min(1, Math.max(MIN_SCALE, value.scale))
   }
   if (isNumber(value.lastReportAt)) {
     prefs.lastReportAt = value.lastReportAt

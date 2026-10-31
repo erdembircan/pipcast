@@ -45,6 +45,7 @@ import Testing
             "BED_IN_MS": String(Int(Constants.bedInMs)),
             "BED_OUT_MS": String(Int(Constants.bedOutMs)),
             "HUSH_MS": String(Int(Constants.hushMs)),
+            "MIN_SCALE": String(Constants.minScale),
             "STORE_FOLDER": Constants.storeFolder,
             "CLAUDE_BUNDLE_ID": Constants.claudeBundleID,
         ]

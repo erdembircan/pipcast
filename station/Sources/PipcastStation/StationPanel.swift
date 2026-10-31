@@ -190,12 +190,12 @@ final class InteractionView: NSView {
 /// up: the web view, the dim, the interaction view, the three buttons.
 final class ChromeView: NSView {
     static let cornerRadius: CGFloat = 20
-    static let inset: CGFloat = 8
 
     let interaction = InteractionView(frame: .zero)
     let close = GlassButton(symbol: "xmark", label: "Stop tracking")
     let sound = GlassButton(symbol: "speaker.wave.2.fill", label: "Mute")
     let back = GlassButton(symbol: "pip.exit", label: "Back to Claude")
+    private(set) var controls = ControlSizes.reference
 
     private let dim = NSView()
 
@@ -223,15 +223,11 @@ final class ChromeView: NSView {
         addSubview(interaction)
 
         // Pinned to the top: close at the top left; Back to Claude at the top
-        // right, sound 8 pt to its left.
-        let d = GlassButton.diameter
-        let top = bounds.height - Self.inset - d
-        close.frame = NSRect(x: Self.inset, y: top, width: d, height: d)
+        // right, sound to its left, the screen's inset apart.
         close.autoresizingMask = [.maxXMargin, .minYMargin]
-        back.frame = NSRect(x: bounds.width - Self.inset - d, y: top, width: d, height: d)
         back.autoresizingMask = [.minXMargin, .minYMargin]
-        sound.frame = NSRect(x: bounds.width - Self.inset - d - Self.inset - d, y: top, width: d, height: d)
         sound.autoresizingMask = [.minXMargin, .minYMargin]
+        layOutButtons()
         for button in [close, sound, back] {
             button.alphaValue = 0
             addSubview(button)
@@ -239,6 +235,24 @@ final class ChromeView: NSView {
     }
 
     required init?(coder: NSCoder) { fatalError("not loaded from a nib") }
+
+    /// Sizes the buttons for a screen and puts them in place: the station works the sizes out for the screen the
+    /// window is on.
+    func size(_ controls: ControlSizes) {
+        guard controls != self.controls else { return }
+        self.controls = controls
+        layOutButtons()
+    }
+
+    private func layOutButtons() {
+        for button in [close, sound, back] {
+            button.size(diameter: controls.button, symbolSize: controls.symbol)
+        }
+        let frames = controls.buttonFrames(in: bounds.size)
+        close.frame = frames.close
+        sound.frame = frames.sound
+        back.frame = frames.back
+    }
 
     /// Shows the dim and the buttons, or takes them away. Inside an animation group, pass `animated` and they fade
     /// with it.

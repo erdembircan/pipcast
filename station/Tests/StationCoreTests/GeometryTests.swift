@@ -5,12 +5,12 @@ import Testing
 @Suite struct GeometryTests {
     /// The design system's table: visible size, full, smallest.
     static let table: [(CGSize, CGSize, CGSize)] = [
-        (CGSize(width: 1280, height: 800), CGSize(width: 600, height: 338), CGSize(width: 420, height: 236)),
-        (CGSize(width: 1470, height: 956), CGSize(width: 695, height: 391), CGSize(width: 486, height: 273)),
-        (CGSize(width: 1512, height: 982), CGSize(width: 716, height: 403), CGSize(width: 501, height: 282)),
-        (CGSize(width: 1728, height: 1117), CGSize(width: 824, height: 464), CGSize(width: 577, height: 325)),
-        (CGSize(width: 2560, height: 1440), CGSize(width: 1209, height: 680), CGSize(width: 846, height: 476)),
-        (CGSize(width: 3440, height: 1440), CGSize(width: 1209, height: 680), CGSize(width: 846, height: 476)),
+        (CGSize(width: 1280, height: 800), CGSize(width: 600, height: 338), CGSize(width: 300, height: 169)),
+        (CGSize(width: 1470, height: 956), CGSize(width: 695, height: 391), CGSize(width: 348, height: 196)),
+        (CGSize(width: 1512, height: 982), CGSize(width: 716, height: 403), CGSize(width: 358, height: 201)),
+        (CGSize(width: 1728, height: 1117), CGSize(width: 824, height: 464), CGSize(width: 412, height: 232)),
+        (CGSize(width: 2560, height: 1440), CGSize(width: 1209, height: 680), CGSize(width: 605, height: 340)),
+        (CGSize(width: 3440, height: 1440), CGSize(width: 1209, height: 680), CGSize(width: 605, height: 340)),
     ]
 
     @Test func fullAndSmallestMatchTheDesignSystemTable() {
@@ -42,15 +42,15 @@ import Testing
         #expect(br == CGRect(x: 1512 + 1280 - 20 - 600, y: 60, width: 600, height: 338))
         let tl = Geometry.frame(quadrant: .topLeft, scale: 1, visible: visible)
         #expect(tl == CGRect(x: 1532, y: 40 + 760 - 20 - 338, width: 600, height: 338))
-        let small = Geometry.frame(quadrant: .topRight, scale: 0.7, visible: visible)
-        #expect(small.size == CGSize(width: 420, height: 236))
+        let small = Geometry.frame(quadrant: .topRight, scale: 0.5, visible: visible)
+        #expect(small.size == CGSize(width: 300, height: 169))
         #expect(small.maxX == visible.maxX - 20)
         #expect(small.maxY == visible.maxY - 20)
     }
 
     @Test func scaleIsClamped() {
         let visible = CGRect(x: 0, y: 0, width: 1280, height: 800)
-        #expect(Geometry.frame(quadrant: .bottomLeft, scale: 0.2, visible: visible).width == 420)
+        #expect(Geometry.frame(quadrant: .bottomLeft, scale: 0.2, visible: visible).width == 300)
         #expect(Geometry.frame(quadrant: .bottomLeft, scale: 3, visible: visible).width == 600)
     }
 
@@ -193,15 +193,15 @@ import Testing
         #expect(Geometry.room(width: 600, full: full) == .shrinkOnly)
         #expect(Geometry.room(width: 599.5, full: full) == .shrinkOnly)
         #expect(Geometry.room(width: 599, full: full) == .both)
-        #expect(Geometry.room(width: 420, full: full) == .growOnly)
-        #expect(Geometry.room(width: 420.5, full: full) == .growOnly)
-        #expect(Geometry.room(width: 421, full: full) == .both)
+        #expect(Geometry.room(width: 300, full: full) == .growOnly)
+        #expect(Geometry.room(width: 300.5, full: full) == .growOnly)
+        #expect(Geometry.room(width: 301, full: full) == .both)
         #expect(Geometry.room(width: 500, full: full) == .both)
     }
 
     @Test func scaleForAWidthRoundTrips() {
         let full = Geometry.pipSize(visible: visible.size)
-        for scale in [0.7, 0.75, 0.9, 1.0] {
+        for scale in [0.5, 0.55, 0.7, 0.75, 0.9, 1.0] {
             let width = Geometry.scaledSize(full: full, scale: scale).width
             let back = Geometry.scale(forWidth: width, full: full)
             #expect(Geometry.scaledSize(full: full, scale: back).width == width)

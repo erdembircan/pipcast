@@ -241,11 +241,12 @@ case "expect" where arguments.count == 5 && arguments[2] == "minimized":
     let screen = NSScreen.main ?? NSScreen.screens[0]
     let visible = screen.visibleFrame
     let rest = Geometry.frame(quadrant: quadrant, scale: CGFloat(scale), visible: visible)
-    let expected = Minimize.tab(rest: rest, visible: visible, side: quadrant.side)
+    let controls = ControlSizes(full: Geometry.pipSize(visible: visible.size))
+    let expected = Minimize.tab(rest: rest, visible: visible, side: quadrant.side, controls: controls)
     func close(_ a: CGFloat, _ b: CGFloat) -> Bool { abs(a - b) <= 1 }
     func isTheTab(_ frame: CGRect) -> Bool {
         let edge = quadrant.isRight ? close(frame.maxX, visible.maxX) : close(frame.minX, visible.minX)
-        return close(frame.width, Minimize.handleSize.width) && close(frame.height, Minimize.handleSize.height)
+        return close(frame.width, controls.handle.width) && close(frame.height, controls.handle.height)
             && edge && close(frame.midY, rest.midY)
     }
 

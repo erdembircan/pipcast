@@ -2,7 +2,7 @@ import Foundation
 
 /// `prefs.json`: `{ v, sound, quadrant, scale, lastReportAt, minimized }`. Reading mirrors
 /// the contract's `parsePrefs`: each field that is missing or of the wrong kind
-/// keeps its default, the scale is clamped to 0.7...1, and anything else in the
+/// keeps its default, the scale is clamped to `Constants.minScale`...1, and anything else in the
 /// file is ignored.
 public struct StationPrefs: Codable, Equatable {
     public var v = 1
@@ -48,7 +48,7 @@ public struct StationPrefs: Codable, Equatable {
     }
 
     static func clamp(_ scale: Double) -> Double {
-        min(1, max(0.7, scale))
+        min(1, max(Constants.minScale, scale))
     }
 
     /// The prefs in a file, or the defaults when it is missing or not JSON.

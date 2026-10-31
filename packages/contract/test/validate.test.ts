@@ -299,8 +299,8 @@ describe('the station files', () => {
     expect(parsePrefs({ v: 1, minimized: 'yes' }).minimized).toBe(false)
   })
 
-  it('clamps the scale to 0.7 to 1', () => {
-    expect(parsePrefs({ scale: 0.2 })).toEqual({ v: 1, sound: true, quadrant: 'bottom-right', scale: 0.7, lastReportAt: null, minimized: false })
+  it('clamps the scale to 0.5 to 1', () => {
+    expect(parsePrefs({ scale: 0.2 })).toEqual({ v: 1, sound: true, quadrant: 'bottom-right', scale: 0.5, lastReportAt: null, minimized: false })
     expect(parsePrefs({ scale: 3 }).scale).toBe(1)
   })
 

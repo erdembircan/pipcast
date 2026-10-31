@@ -65,6 +65,7 @@ final class StationController: NSObject, InteractionDelegate, WKNavigationDelega
     private var tabHovered = false
     /// How docked the handle is: 0 on the window, 1 the tab at the edge.
     private var docked = 0.0
+    private var controls = ControlSizes.reference
 
     /// Whether the window is out in its quadrant and still: what the page is told.
     private var windowOut: Bool { model.isOut && slide == nil }
@@ -505,13 +506,25 @@ final class StationController: NSObject, InteractionDelegate, WKNavigationDelega
         return NSScreen.screens.min { distance($0) < distance($1) } ?? NSScreen.main ?? NSScreen.screens[0]
     }
 
+    /// Sizes the controls for `screen`, in proportion to its full window: once for the screen, whatever the window's
+    /// size, so they stay put while it is resized.
+    private func sizeControls(for screen: NSScreen) {
+        let sized = ControlSizes(full: Geometry.pipSize(visible: screen.visibleFrame.size))
+        guard sized != controls else { return }
+        controls = sized
+        chrome.size(sized)
+        tab.size(sized)
+        log.write("controls \(Int(sized.button)) pt, handle \(Int(sized.handle.width)) x \(Int(sized.handle.height)) pt")
+    }
+
     private func place(on screen: NSScreen, animated: Bool) {
         // A slide ends where it was going, at once.
         finishSlide()
+        sizeControls(for: screen)
         let frame = Geometry.frame(quadrant: quadrant, scale: prefs.scale, visible: screen.visibleFrame)
         if model.mode == .minimized {
             // Minimized, the window rests ordered out and the tab sits against the edge.
-            let tabFrame = Minimize.tab(rest: frame, visible: screen.visibleFrame, side: quadrant.side)
+            let tabFrame = Minimize.tab(rest: frame, visible: screen.visibleFrame, side: quadrant.side, controls: controls)
             if frame == panel.frame && tabFrame == tab.frame { return }
             log.write("place \(quadrant.rawValue) in \(NSStringFromRect(screen.visibleFrame)) at \(NSStringFromRect(frame))")
             panel.setFrame(frame, display: false)
@@ -531,7 +544,7 @@ final class StationController: NSObject, InteractionDelegate, WKNavigationDelega
                 // The handle is attached to nothing: it makes the same move.
                 if tab.isVisible && model.mode != .minimized {
                     let side = Minimize.side(of: frame, visible: screen.visibleFrame)
-                    tab.animator().setFrame(Minimize.handle(on: frame, side: side), display: true)
+                    tab.animator().setFrame(Minimize.handle(on: frame, side: side, controls: controls), display: true)
                 }
             }, completionHandler: { [weak self] in
                 self?.panel.invalidateShadow()
@@ -614,14 +627,14 @@ final class StationController: NSObject, InteractionDelegate, WKNavigationDelega
         if model.mode == .minimized {
             let screen = currentScreen()
             let rest = Geometry.frame(quadrant: quadrant, scale: prefs.scale, visible: screen.visibleFrame)
-            tab.setFrame(Minimize.tab(rest: rest, visible: screen.visibleFrame, side: quadrant.side), display: true)
+            tab.setFrame(Minimize.tab(rest: rest, visible: screen.visibleFrame, side: quadrant.side, controls: controls), display: true)
             tab.handle.show(docked: 1, side: quadrant.side)
             docked = 1
             tab.orderFrontRegardless()
             setAlpha(CGFloat(windowAlpha(transparent: transparent, hovered: tabHovered)))
         } else if hovered {
             let side = Minimize.side(of: panel.frame, visible: currentScreen().visibleFrame)
-            tab.setFrame(Minimize.handle(on: panel.frame, side: side), display: true)
+            tab.setFrame(Minimize.handle(on: panel.frame, side: side, controls: controls), display: true)
             tab.handle.show(docked: 0, side: side)
             docked = 0
             if !tab.isVisible { tab.alphaValue = 0 }
@@ -638,7 +651,7 @@ final class StationController: NSObject, InteractionDelegate, WKNavigationDelega
     private func placeHandle() {
         guard slide == nil, model.mode != .minimized, tab.isVisible else { return }
         let side = Minimize.side(of: panel.frame, visible: currentScreen().visibleFrame)
-        tab.setFrame(Minimize.handle(on: panel.frame, side: side), display: true)
+        tab.setFrame(Minimize.handle(on: panel.frame, side: side, controls: controls), display: true)
         tab.handle.show(docked: 0, side: side)
     }
 
@@ -691,6 +704,7 @@ final class StationController: NSObject, InteractionDelegate, WKNavigationDelega
         var dockedFrom = docked
         var handleAlphaFrom = tab.isVisible ? Double(tab.alphaValue) : 0
         let screen = running == nil ? currentScreen() : (slideScreen ?? currentScreen())
+        sizeControls(for: screen)
         let visible = screen.visibleFrame
         let rest = Geometry.frame(quadrant: quadrant, scale: prefs.scale, visible: visible)
         let side = quadrant.side
@@ -711,7 +725,7 @@ final class StationController: NSObject, InteractionDelegate, WKNavigationDelega
         }
         let next = Slide(direction: direction, from: from, rest: rest, visible: visible, side: side,
                          reduced: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion,
-                         dockedFrom: dockedFrom, handleAlphaFrom: handleAlphaFrom)
+                         dockedFrom: dockedFrom, handleAlphaFrom: handleAlphaFrom, controls: controls)
         slide = next
         slideScreen = screen
         slideStart = now
@@ -776,7 +790,7 @@ final class StationController: NSObject, InteractionDelegate, WKNavigationDelega
             panel.alphaValue = 1
             hovered = false
             chrome.showControls(false, animated: false)
-            tab.setFrame(Minimize.tab(rest: rest, visible: slide.visible, side: slide.side), display: true)
+            tab.setFrame(Minimize.tab(rest: rest, visible: slide.visible, side: slide.side, controls: slide.controls), display: true)
             tab.handle.show(docked: 1, side: slide.side)
             tab.alphaValue = 1
             docked = 1
@@ -784,7 +798,7 @@ final class StationController: NSObject, InteractionDelegate, WKNavigationDelega
             panel.setFrame(rest, display: true)
             panel.alphaValue = CGFloat(windowAlpha(transparent: transparent, hovered: hovered))
             panel.invalidateShadow()
-            tab.setFrame(Minimize.handle(on: rest, side: slide.side), display: true)
+            tab.setFrame(Minimize.handle(on: rest, side: slide.side, controls: slide.controls), display: true)
             tab.handle.show(docked: 0, side: slide.side)
             tab.alphaValue = 1
             docked = 0
@@ -802,6 +816,7 @@ final class StationController: NSObject, InteractionDelegate, WKNavigationDelega
     private func settleMinimized() {
         finishSlide()
         let screen = currentScreen()
+        sizeControls(for: screen)
         let rest = Geometry.frame(quadrant: quadrant, scale: prefs.scale, visible: screen.visibleFrame)
         hideTab()
         panel.animationBehavior = .none
@@ -811,7 +826,7 @@ final class StationController: NSObject, InteractionDelegate, WKNavigationDelega
         panel.alphaValue = 1
         chrome.showControls(false, animated: false)
         hovered = false
-        tab.setFrame(Minimize.tab(rest: rest, visible: screen.visibleFrame, side: quadrant.side), display: true)
+        tab.setFrame(Minimize.tab(rest: rest, visible: screen.visibleFrame, side: quadrant.side, controls: controls), display: true)
         tab.handle.show(docked: 1, side: quadrant.side)
         tab.alphaValue = 1
         docked = 1
@@ -821,12 +836,13 @@ final class StationController: NSObject, InteractionDelegate, WKNavigationDelega
     private func settleOpen() {
         finishSlide()
         let screen = currentScreen()
+        sizeControls(for: screen)
         let rest = Geometry.frame(quadrant: quadrant, scale: prefs.scale, visible: screen.visibleFrame)
         hideTab()
         panel.setFrame(rest, display: false)
         content.restLayout()
         panel.alphaValue = CGFloat(windowAlpha(transparent: transparent, hovered: false))
-        tab.setFrame(Minimize.handle(on: rest, side: quadrant.side), display: true)
+        tab.setFrame(Minimize.handle(on: rest, side: quadrant.side, controls: controls), display: true)
         tab.handle.show(docked: 0, side: quadrant.side)
         docked = 0
     }

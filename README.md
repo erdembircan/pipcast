@@ -93,7 +93,7 @@ The window looks and works like macOS's picture in picture for video: a 16:9 win
 
 - **It never takes the keyboard.** Whatever you're typing in keeps typing.
 - **It hides while Claude is in front**, where you can see your sessions anyway, and comes back when you switch away.
-- **Move it** by dragging it to another corner. **Resize it** by dragging an edge, down to 70%.
+- **Move it** by dragging it to another corner. **Resize it** by dragging an edge, down to half its size.
 - **Tuck it away** by pressing the handle on its inner edge, or by dragging a quarter of it past the side of the screen. It slides into that side and leaves a small tab, as picture in picture does on iPhone and iPad. BREAKING NEWS and the hour still bring it out, and it goes back when they end. Click the tab to bring it back for good.
 - **Hover over it** for its controls:
   - **Close** takes every session off the air and closes the window. Tune a session in again to bring it back.

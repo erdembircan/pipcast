@@ -32,7 +32,7 @@ import Testing
         let prefs = StationPrefs.load(from: path)
         #expect(!prefs.sound)
         #expect(prefs.quadrant == .topLeft)
-        #expect(prefs.scale == 0.7)
+        #expect(prefs.scale == 0.5)
         #expect(prefs.lastReportAt == 1_700_000_000_000)
 
         try #"{"sound":"yes","quadrant":"middle","scale":"big","lastReportAt":"x"}"#

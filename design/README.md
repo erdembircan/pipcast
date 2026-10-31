@@ -35,9 +35,9 @@ Write like a local newsroom: present tense, active voice, four words or fewer in
 
 ### The picture
 
-- The window is the size of its screen quadrant: it fills the quadrant at 16:9, 20 pt in from every side (`pip-margin`), and moves between the four quadrants. It opens at that size, never gets bigger, and resizes down to 70% of it (`pip-min-scale`). The Frame section has the numbers per screen.
+- The window is the size of its screen quadrant: it fills the quadrant at 16:9, 20 pt in from every side (`pip-margin`), and moves between the four quadrants. It opens at that size, never gets bigger, and resizes down to 50% of it (`pip-min-scale`). The Frame section has the numbers per screen.
 - Ground every frame in the studio gradient: `studio-top` to `studio-ink` to `studio-deep`, top to bottom. There is one theme, `On air`.
-- Keep every piece of text at 28px or more (`legibility-floor`). That is 12.3 pt in the smallest window (420 pt wide) and 20.9 pt at full size on a 14-inch MacBook Pro.
+- Keep every piece of text at 28px or more (`legibility-floor`). That is 8.8 pt in the smallest window (300 pt wide, on a 1280 × 800 screen), 10.4 pt in a 14-inch MacBook Pro's smallest (358 pt wide) and 20.9 pt at its full size.
 
 ### Colour
 
@@ -112,7 +112,7 @@ On the window, the sound button switches the sound on and off: sound starts on, 
 ## Iconography
 
 - Clawd is pixel art, copied from the engine's own glyphs, and so is the city behind the desk, which follows the clock through morning, afternoon, evening and night (the NewsDesk card). The desk and what stands on it (the station mug, the script) are drawn like the graphics, with gloss and chrome. There are no icons on the stage: states are words on pills (INPUT, ERROR, READY, LIVE). No photographs, no emoji.
-- The window has three controls, close, sound and Back to Claude, shown on hover in the Liquid Glass of macOS's own picture-in-picture: clear glass the picture shows through, a thin rim that catches the light, white glyphs drawn like Apple's, over a light dimming of the picture. The buttons are 44 pt, a third bigger than macOS's. The one under the pointer brightens; nothing pops up, no name and no tooltip. Review boards mimic the glass; the app uses macOS's own material. There is no play, skip or timeline: nothing else sits on the picture.
+- The window has three controls, close, sound and Back to Claude, shown on hover in the Liquid Glass of macOS's own picture-in-picture: clear glass the picture shows through, a thin rim that catches the light, white glyphs drawn like Apple's, over a light dimming of the picture. The buttons are 44 pt on a 14-inch MacBook Pro, a third bigger than macOS's, and sized for each screen in proportion to its full window. The one under the pointer brightens; nothing pops up, no name and no tooltip. Review boards mimic the glass; the app uses macOS's own material. There is no play, skip or timeline: nothing else sits on the picture.
 - The band above the prompt box carries the station into the Claude desktop app, inside the rounded container the desktop draws round every mod's band: one plate, the bug's chrome KLWD on the studio plate and, at its end, TUNE IN on the lower third's gold or TUNE OUT on the ticker clock's blue. No count and no words besides the action's: no status line, no on-air or off-air text. The plate is a picture with its own ground, so it reads the same on the app's light and dark themes. The Band section has the rules.
 
 ## Using the components

@@ -19,6 +19,10 @@ export const STATION_EMPTY_GRACE_MS = 5_000
 export const STATION_START_GRACE_MS = 20_000
 export const SNAPSHOT_EVERY_MS = 1_000
 
+// The window: the smallest it can be resized to, as a share of its full size,
+// its quarter of the screen
+export const MIN_SCALE = 0.5
+
 // A story older than this when the station first sees it does not air
 export const STORY_FRESH_MS = 120_000
 
