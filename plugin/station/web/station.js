@@ -2701,7 +2701,7 @@
     }
     function pipRange(screenW, screenH, margin, minScale) {
       var full = pipSize(screenW, screenH, margin);
-      var nw = Math.round(full.width * pct(minScale, 0.7));
+      var nw = Math.round(full.width * pct(minScale, 0.5));
       return { min: { width: nw, height: Math.round(nw * 9 / 16) }, full };
     }
     var S = {

@@ -21,7 +21,7 @@ public enum ResizeEdge: Equatable {
 /// the rectangles are a screen's `visibleFrame`.
 public enum Geometry {
     public static let margin: CGFloat = 20
-    public static let minScale: CGFloat = 0.7
+    public static let minScale = CGFloat(Constants.minScale)
     /// How close to an edge a drag starts a resize.
     public static let edgeGrip: CGFloat = 8
     /// How close to the inner corner a drag starts a corner resize: the window's corner radius.
@@ -42,13 +42,13 @@ public enum Geometry {
         return CGSize(width: width, height: height)
     }
 
-    /// The smallest the window can be: 70% of the width, at 16:9.
+    /// The smallest the window can be: `minScale` of the width, at 16:9.
     public static func minSize(full: CGSize, scale: CGFloat = Geometry.minScale) -> CGSize {
         let width = (full.width * scale).rounded()
         return CGSize(width: width, height: (width * 9 / 16).rounded())
     }
 
-    /// The window's size at a scale, which is clamped to 0.7...1.
+    /// The window's size at a scale, which is clamped to `minScale`...1.
     public static func scaledSize(full: CGSize, scale: CGFloat) -> CGSize {
         let width = (full.width * clamp(scale)).rounded()
         return CGSize(width: width, height: (width * 9 / 16).rounded())
@@ -118,7 +118,7 @@ public enum Geometry {
     /// screen's corner of its quadrant stays put. A left or right edge changes
     /// the width; a top or bottom edge changes the height and the width
     /// follows at 16:9; a corner takes whichever gives the larger window. The
-    /// width is clamped to 70%...100% of `full` and the height follows at 16:9.
+    /// width is clamped between `minScale` of `full` and all of it, and the height follows at 16:9.
     public static func resize(start: CGRect, quadrant: Quadrant, edge: ResizeEdge,
                               delta: CGVector, full: CGSize) -> CGRect {
         func widthFromHeight(_ height: CGFloat) -> CGFloat { height * 16 / 9 }
@@ -152,7 +152,7 @@ public enum Geometry {
         return CGRect(x: x, y: y, width: width, height: height)
     }
 
-    /// The scale a window of this width stands for, clamped to 0.7...1.
+    /// The scale a window of this width stands for, clamped to `minScale`...1.
     public static func scale(forWidth width: CGFloat, full: CGSize) -> CGFloat {
         guard full.width > 0 else { return 1 }
         return clamp(width / full.width)

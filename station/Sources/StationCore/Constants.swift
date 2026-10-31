@@ -4,7 +4,7 @@
 // these differ. Times are in milliseconds.
 
 public enum Constants {
-    public static let version = "1.0.0"
+    public static let version = "1.1.0"
 
     public static let schemaVersion = 1
 
@@ -20,6 +20,9 @@ public enum Constants {
     public static let stationEmptyGraceMs: Double = 5_000
     public static let stationStartGraceMs: Double = 20_000
     public static let snapshotEveryMs: Double = 1_000
+
+    // The window: the smallest it can be resized to, as a share of its full size
+    public static let minScale = 0.5
 
     // The sound: how the beat mixes in and phases out, and how fast a cut fades everything
     public static let bedInMs: Double = 300

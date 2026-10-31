@@ -4,7 +4,7 @@ The station is designed on the station canvas, one page per part of the broadcas
 
 | Stage | Decides | On the station canvas | Status | Decision |
 | --- | --- | --- | --- | --- |
-| 1 · Frame | The window: its size, how small it may get, its controls | Every frame, in the window at full size; the window itself on the PiP Newsroom · Window canvas | Decided | The window is its quadrant at 16:9, 20 pt in from every side; it never gets bigger and resizes down to 70%. Close, sound and Back to Claude are its controls, on hover. With nothing tracked there is no window |
+| 1 · Frame | The window: its size, how small it may get, its controls | Every frame, in the window at full size; the window itself on the PiP Newsroom · Window canvas | Decided | The window is its quadrant at 16:9, 20 pt in from every side; it never gets bigger and resizes down to 50%. Close, sound and Back to Claude are its controls, on hover. With nothing tracked there is no window |
 | 2 · Look | The broadcast package | Graphics package | Decided | Local at Six |
 | 3 · Anchor | Clawd at the desk | The desk frames on every segment page | Decided | Clawd behind the desk. A 3D Clawd may take the same place later |
 | 4 · Live board | The listing, and what airs with any number of sessions | Live board; PiP Newsroom · More than four for five or more | **For review now** | With more than four sessions the listing pages: B · Push, 8 s a page, chosen on PiP Newsroom · More than four |

@@ -35,9 +35,9 @@ Write like a local newsroom: present tense, active voice, four words or fewer in
 
 ### The picture
 
-- The window is the size of its screen quadrant: it fills the quadrant at 16:9, 20 pt in from every side (`pip-margin`), and moves between the four quadrants. It opens at that size, never gets bigger, and resizes down to 70% of it (`pip-min-scale`). The Frame section has the numbers per screen.
+- The window is the size of its screen quadrant: it fills the quadrant at 16:9, 20 pt in from every side (`pip-margin`), and moves between the four quadrants. It opens at that size, never gets bigger, and resizes down to 50% of it (`pip-min-scale`). The Frame section has the numbers per screen.
 - Ground every frame in the studio gradient: `studio-top` to `studio-ink` to `studio-deep`, top to bottom. There is one theme, `On air`.
-- Keep every piece of text at 28px or more (`legibility-floor`). That is 12.3 pt in the smallest window (420 pt wide) and 20.9 pt at full size on a 14-inch MacBook Pro.
+- Keep every piece of text at 28px or more (`legibility-floor`). That is 8.8 pt in the smallest window (300 pt wide, on a 1280 × 800 screen), 10.4 pt in a 14-inch MacBook Pro's smallest (358 pt wide) and 20.9 pt at its full size.
 
 ### Colour
 
