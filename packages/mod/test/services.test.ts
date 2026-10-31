@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { defaultHome, storePaths } from '@pipcast/contract'
 import type { SessionRecord } from '@pipcast/contract'
 import * as m from '../src/core/model.ts'
-import { ORPHAN_MS, checkIn, ensureStation, readSharedOptions, recordOf, shareOptions, sweepOrphans, tuneIn, tuneOut } from '../src/core/services.ts'
+import { ORPHAN_MS, READY_IDLE_MS, checkIn, ensureStation, readSharedOptions, recordOf, shareOptions, sweepOrphans, tuneIn, tuneOut } from '../src/core/services.ts'
 import type { Io, RunResult } from '../src/core/services.ts'
 
 const HOME = '/store'
@@ -183,7 +183,7 @@ describe('checkIn', () => {
     state.now = T + 10_000
     alive(state)
     const result = await checkIn(state.io, mine(), T)
-    expect(result).toEqual({ closed: false })
+    expect(result).toEqual({ off: null })
     expect(stored(state)).toMatchObject({ tunedInAt: T, checkedInAt: T + 10_000 })
     expect(state.runs).toEqual([])
   })
@@ -193,7 +193,7 @@ describe('checkIn', () => {
     await tuneIn(state.io, mine())
     state.files.set(paths.control, JSON.stringify({ v: 1, closedAt: T }))
     state.now = T + 10_000
-    expect(await checkIn(state.io, mine(), T)).toEqual({ closed: true })
+    expect(await checkIn(state.io, mine(), T)).toEqual({ off: 'closed' })
     expect(stored(state)).toBeUndefined()
   })
 
@@ -202,11 +202,11 @@ describe('checkIn', () => {
     alive(state)
     await tuneIn(state.io, mine())
     state.files.set(paths.control, JSON.stringify({ v: 1, closedAt: T - 1 }))
-    expect((await checkIn(state.io, mine(), T)).closed).toBe(false)
+    expect((await checkIn(state.io, mine(), T)).off).toBeNull()
     state.files.set(paths.control, '{broken')
-    expect((await checkIn(state.io, mine(), T)).closed).toBe(false)
+    expect((await checkIn(state.io, mine(), T)).off).toBeNull()
     state.files.set(paths.control, JSON.stringify({ closedAt: T + 5 }))
-    expect((await checkIn(state.io, mine(), T)).closed).toBe(false)
+    expect((await checkIn(state.io, mine(), T)).off).toBeNull()
   })
 
   it('starts the station again when its file has gone quiet or is missing', async () => {
@@ -232,7 +232,76 @@ describe('checkIn', () => {
     const state = fake()
     await tuneIn(state.io, mine())
     state.launch = { exitCode: 1, stdout: '', stderr: '' }
-    expect((await checkIn(state.io, mine(), T)).closed).toBe(false)
+    expect((await checkIn(state.io, mine(), T)).off).toBeNull()
+  })
+
+  it('takes a session ready for an hour off the air, and writes nothing', async () => {
+    const state = fake()
+    alive(state)
+    await tuneIn(state.io, mine())
+    state.runs.length = 0
+    state.now = T + READY_IDLE_MS
+    alive(state)
+    expect(await checkIn(state.io, mine(), T)).toEqual({ off: 'idle' })
+    expect(stored(state)).toBeUndefined()
+    expect(state.runs).toEqual([])
+  })
+
+  it('keeps a session ready for less than an hour on the air', async () => {
+    const state = fake()
+    alive(state)
+    await tuneIn(state.io, mine())
+    state.now = T + READY_IDLE_MS - 1
+    alive(state)
+    expect(await checkIn(state.io, mine(), T)).toEqual({ off: null })
+    expect(stored(state)).toMatchObject({ checkedInAt: T + READY_IDLE_MS - 1 })
+  })
+
+  it('counts the hour from tuning in, when that came after the session went ready', async () => {
+    const state = fake()
+    alive(state)
+    const tuned = T + READY_IDLE_MS
+    state.now = tuned
+    await tuneIn(state.io, mine())
+    state.now = tuned + READY_IDLE_MS - 1
+    alive(state)
+    expect((await checkIn(state.io, mine(), tuned)).off).toBeNull()
+    state.now = tuned + READY_IDLE_MS
+    alive(state)
+    expect((await checkIn(state.io, mine(), tuned)).off).toBe('idle')
+  })
+
+  it('counts the hour from the newest activity line, as after a reload in the middle of a turn', async () => {
+    const state = fake()
+    alive(state)
+    const busy = m.activity(mine(), T + 30 * 60_000, 'running the test suite')
+    await tuneIn(state.io, busy)
+    state.now = T + READY_IDLE_MS
+    alive(state)
+    expect((await checkIn(state.io, busy, T)).off).toBeNull()
+    state.now = T + 30 * 60_000 + READY_IDLE_MS
+    alive(state)
+    expect((await checkIn(state.io, busy, T)).off).toBe('idle')
+  })
+
+  it('never takes a session working, waiting on you or stopped on an error off the air', async () => {
+    for (const model of [m.turnStarted(mine(), T, 't1'), m.askedQuestion(mine(), T, 'Which one?'), m.failed(mine(), T, 'overloaded')]) {
+      const state = fake()
+      alive(state)
+      await tuneIn(state.io, model)
+      state.now = T + 10 * READY_IDLE_MS
+      alive(state)
+      expect((await checkIn(state.io, model, T)).off).toBeNull()
+    }
+  })
+
+  it('says the window was closed when the hour is up as well', async () => {
+    const state = fake()
+    await tuneIn(state.io, mine())
+    state.files.set(paths.control, JSON.stringify({ v: 1, closedAt: T }))
+    state.now = T + READY_IDLE_MS
+    expect(await checkIn(state.io, mine(), T)).toEqual({ off: 'closed' })
+    expect(stored(state)).toBeUndefined()
   })
 })
 

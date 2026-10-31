@@ -52,7 +52,7 @@ Sessions you start after that have it.
 3. When the session needs your input, finishes, or stops on an error, KLWD airs it as BREAKING NEWS.
 4. Click **Back to Claude** on the window, or switch to Claude yourself, and the window gets out of the way.
 
-A session that was already open, or one you resume, goes on air when you press **TUNE IN** in the band above the prompt box, or run `/pipcast`. The band shows **TUNE IN** in gold while the session is off the air and **TUNE OUT** in blue while it's on. Press **TUNE OUT**, or run `/pipcast` again, to take the session off the air.
+A session that was already open, or one you resume, goes on air when you press **TUNE IN** in the band above the prompt box, or run `/pipcast`. The band shows **TUNE IN** in gold while the session is off the air and **TUNE OUT** in blue while it's on. Press **TUNE OUT**, or run `/pipcast` again, to take the session off the air. A session that has been **READY** for an hour goes off the air by itself. Press **TUNE IN** to bring it back.
 
 ![TUNE IN under the pointer in the band above Claude's prompt box; KLWD's board in the corner of the screen, over a browser; a session that needs your input, on air at the anchor desk; and Back to Claude bringing up the question Claude asked](assets/screenshots/in-use.jpg)
 

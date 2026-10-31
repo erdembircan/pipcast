@@ -30,7 +30,7 @@ import {
   tuneOut,
   writeRecord,
 } from './core/services.ts'
-import type { Io, TuneInResult } from './core/services.ts'
+import type { Io, OffAir, TuneInResult } from './core/services.ts'
 import { optionsHome, readOption, writeOption } from './core/settings.ts'
 import type { OptionsHome } from './core/settings.ts'
 import { TITLE_CHECK_MS, findTranscriptDir, readTitleFile, transcriptDirOf } from './core/title.ts'
@@ -557,13 +557,14 @@ async function lookAgain($: EngineInterface): Promise<void> {
   }
 }
 
-// The heartbeat: a tuned-in session checks in; a held finish's background
-// commands are looked at again
+// The heartbeat: a tuned-in session checks in, or goes off the air when the
+// window was closed or it has been ready for an hour; a held finish's
+// background commands are looked at again
 async function beat($: EngineInterface): Promise<void> {
   await lookAgain($)
   try {
     const io = ioFor($)
-    let outcome: { closed: boolean } | null = null
+    let outcome: { off: OffAir } | null = null
     await enqueue(async () => {
       if (model === null || tunedInAt === null) {
         return
@@ -574,8 +575,8 @@ async function beat($: EngineInterface): Promise<void> {
     if (outcome === null) {
       return
     }
-    const done: { closed: boolean } = outcome
-    if (done.closed) {
+    const done: { off: OffAir } = outcome
+    if (done.off !== null) {
       tunedInAt = null
       stopTimers()
       await setState($, false)
