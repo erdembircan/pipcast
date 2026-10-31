@@ -468,6 +468,13 @@ describe('restored', () => {
     expect(m.restored(fresh(), { ...fresh().record, limits }).record.limits).toEqual(limits)
     expect(m.restored(fresh(), { ...fresh().record, limits: undefined }).record.limits).toEqual([])
   })
+
+  it('keeps the time a ready record went ready, and not a record caught in the middle of a turn', () => {
+    const own = { ...fresh().record, stateAt: T - 30 * 60_000 }
+    expect(m.restored(m.newModel('abc', 'proj', 'Title', T + 5000), own).record.stateAt).toBe(T - 30 * 60_000)
+    const busy = { ...own, state: 'working' as const }
+    expect(m.restored(m.newModel('abc', 'proj', 'Title', T + 5000), busy).record.stateAt).toBe(T + 5000)
+  })
 })
 
 describe('measured', () => {

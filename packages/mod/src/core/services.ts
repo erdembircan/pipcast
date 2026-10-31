@@ -124,21 +124,49 @@ export async function tuneOut(io: Io, home: string, id: string): Promise<void> {
   await io.remove(storePaths(home).session(id))
 }
 
+// A tuned-in session that has been ready this long goes off the air at its
+// next heartbeat. The hour counts from the latest of when it went ready, when
+// it tuned in, its newest story and its newest activity line: tuning in again
+// gives it a full hour, and a turn that a reload left showing ready counts
+// from its last tool call and from its finish
+export const READY_IDLE_MS = 3_600_000
+
+function idleTooLong(record: SessionRecord, tunedInAt: number, now: number): boolean {
+  if (record.state !== 'ready') {
+    return false
+  }
+  const since = Math.max(
+    record.stateAt,
+    tunedInAt,
+    ...record.stories.map((story) => story.at),
+    ...record.activity.map((line) => line.at),
+  )
+  return now - since >= READY_IDLE_MS
+}
+
+// Why a heartbeat took the session off the air: the window's close, or an
+// hour ready; null while it stays on
+export type OffAir = 'closed' | 'idle' | null
+
 // The heartbeat of a tuned-in session
-export async function checkIn(io: Io, model: SessionModel, tunedInAt: number): Promise<{ closed: boolean }> {
+export async function checkIn(io: Io, model: SessionModel, tunedInAt: number): Promise<{ off: OffAir }> {
   const home = await io.storeHome()
   const now = await io.now()
   const paths = storePaths(home)
   const { closedAt } = parseControl(await readJson(io, paths.control))
   if (closedAt !== null && closedAt >= tunedInAt) {
     await io.remove(paths.session(model.record.id))
-    return { closed: true }
+    return { off: 'closed' }
+  }
+  if (idleTooLong(model.record, tunedInAt, now)) {
+    await io.remove(paths.session(model.record.id))
+    return { off: 'idle' }
   }
   await writeRecord(io, home, model, tunedInAt, now)
   if (!isStationAlive(parseStationStatus(await readJson(io, paths.station)), now)) {
     await ensureStation(io, home)
   }
-  return { closed: false }
+  return { off: null }
 }
 
 // options.json, what the station follows of the plugin's options; null when

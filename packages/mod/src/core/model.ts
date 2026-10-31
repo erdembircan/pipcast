@@ -268,7 +268,9 @@ export function aborted(m: SessionModel, now: number): SessionModel {
 }
 
 // After a reload: the stories, hours and usage limits the session's own record kept, and
-// story numbers that carry on after its newest, which the station has seen
+// story numbers that carry on after its newest, which the station has seen. A record
+// that was ready keeps the time it went ready, so its hour on the air and its place
+// in the listing carry on; one caught in the middle of a turn shows ready from now
 export function restored(m: SessionModel, own: SessionRecord): SessionModel {
   const prefix = `${m.record.id}:`
   let seq = m.seq
@@ -280,7 +282,8 @@ export function restored(m: SessionModel, own: SessionRecord): SessionModel {
       }
     }
   }
-  return withRecord(m, { ...m.record, stories: own.stories, hours: own.hours, limits: own.limits ?? [] }, { seq })
+  const since = m.record.state === 'ready' && own.state === 'ready' ? { stateAt: own.stateAt } : {}
+  return withRecord(m, { ...m.record, stories: own.stories, hours: own.hours, limits: own.limits ?? [], ...since }, { seq })
 }
 
 // A reading of the account's usage limits: each limit it holds replaces the

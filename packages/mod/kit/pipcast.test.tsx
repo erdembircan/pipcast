@@ -6,6 +6,7 @@ import { ACTIVITY_WRITE_MS, HEARTBEAT_MS } from '../../contract/src/constants.ts
 import { BAND_ALT, ERROR_WORDS, OPTION_REPLY, REPLY, TOAST_CANNOT_START, optionState } from '../../contract/src/copy.ts'
 import { hourKey } from '../../contract/src/format.ts'
 import { TITLE_CHECK_MS } from '../src/core/title.ts'
+import { READY_IDLE_MS } from '../src/core/services.ts'
 import { BAND, ENGINE, HOME, ID, PROJECT_DIR, ROOT, RECORD, OPTIONS_FILE, RUN, STATION, T0, TITLE_FILE, TRANSCRIPT, WORKTREE, world } from './world.tsx'
 import type { FakeTree, WorldOptions } from './world.tsx'
 
@@ -848,6 +849,91 @@ scenario('a close before tuning in changes nothing', {}, async (w, $) => {
   await tuneIn($)
   await w.clock.advance(10_000)
   expect(w.record()?.checkedInAt).toBe(T0 + 10_000)
+})
+
+scenario('a session ready for an hour goes off the air, and the band shows TUNE IN', {}, async (w, $) => {
+  await tuneIn($)
+  await turn($)
+  await stop($, { last_assistant_message: 'Done.' })
+  expect(w.record()?.state).toBe('ready')
+  await w.clock.advance(READY_IDLE_MS - HEARTBEAT_MS)
+  expect(w.record()?.state).toBe('ready')
+  await w.clock.advance(HEARTBEAT_MS)
+  expect(w.record()).toBeNull()
+  const ui = await mounted($)
+  expect((await ui.find({ type: 'Button' }))?.key).toBe('tune-in')
+  await ui.unmount()
+})
+
+scenario('the hour counts from when the session went ready, not from when it tuned in', {}, async (w, $) => {
+  await tuneIn($)
+  await turn($)
+  await w.clock.advance(30 * 60_000)
+  await stop($, { last_assistant_message: 'Done.' })
+  await w.clock.advance(31 * 60_000)
+  expect(w.record()?.state).toBe('ready')
+  await w.clock.advance(29 * 60_000 - HEARTBEAT_MS)
+  expect(w.record()?.state).toBe('ready')
+  await w.clock.advance(HEARTBEAT_MS)
+  expect(w.record()).toBeNull()
+})
+
+scenario('a session working or waiting on you for hours stays on the air', {}, async (w, $) => {
+  await tuneIn($)
+  await turn($)
+  await w.clock.advance(2 * READY_IDLE_MS)
+  expect(w.record()?.state).toBe('working')
+  await $.classic.PermissionRequest({ tool_name: 'Edit', tool_input: { file_path: `${ROOT}/src/a.ts` } } as never)
+  await w.clock.advance(2 * READY_IDLE_MS)
+  expect(w.record()?.state).toBe('needs-input')
+})
+
+scenario('a session tuned in again after its hour stays on the air for a full hour', {}, async (w, $) => {
+  await tuneIn($)
+  await turn($)
+  await stop($, { last_assistant_message: 'Done.' })
+  await w.clock.advance(READY_IDLE_MS)
+  expect(w.record()).toBeNull()
+  await tuneIn($)
+  expect(w.record()?.state).toBe('ready')
+  await w.clock.advance(READY_IDLE_MS - HEARTBEAT_MS)
+  expect(w.record()?.state).toBe('ready')
+  await w.clock.advance(HEARTBEAT_MS)
+  expect(w.record()).toBeNull()
+})
+
+scenario('a session that went off after its hour stays off when you come back to it', {}, async (w, $) => {
+  await tuneIn($)
+  await turn($)
+  await stop($, { last_assistant_message: 'Done.' })
+  await w.clock.advance(READY_IDLE_MS)
+  expect(w.record()).toBeNull()
+  await turn($, 't2')
+  await stop($, { last_assistant_message: 'Done again.' })
+  await w.clock.advance(HEARTBEAT_MS)
+  expect(w.record()).toBeNull()
+  const ui = await mounted($)
+  expect((await ui.find({ type: 'Button' }))?.key).toBe('tune-in')
+  await ui.unmount()
+})
+
+scenario('a reload carries on the hour of a session sitting ready', {}, async (w, $) => {
+  await tuneIn($)
+  await turn($)
+  await stop($, { last_assistant_message: 'Done.' })
+  const own = w.record()
+  const earlier = T0 - 50 * 60_000
+  // What the module before the reload wrote: tuned in, finished and ready fifty minutes ago
+  w.files.set(
+    RECORD,
+    JSON.stringify({ ...own, tunedInAt: earlier, stateAt: earlier, stories: own?.stories.map((story) => ({ ...story, at: earlier })) }),
+  )
+  // The module starts over; $.state says tuned in
+  await $.session.start(START)
+  await w.clock.advance(10 * 60_000 - HEARTBEAT_MS)
+  expect(w.record()?.state).toBe('ready')
+  await w.clock.advance(HEARTBEAT_MS)
+  expect(w.record()).toBeNull()
 })
 
 scenario('the heartbeat starts the station again when it has gone quiet', {}, async (w, $) => {

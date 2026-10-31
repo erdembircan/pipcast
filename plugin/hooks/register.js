@@ -1182,7 +1182,8 @@ function restored(m, own) {
       }
     }
   }
-  return withRecord(m, { ...m.record, stories: own.stories, hours: own.hours, limits: own.limits ?? [] }, { seq });
+  const since = m.record.state === "ready" && own.state === "ready" ? { stateAt: own.stateAt } : {};
+  return withRecord(m, { ...m.record, stories: own.stories, hours: own.hours, limits: own.limits ?? [], ...since }, { seq });
 }
 function measured(m, read2) {
   if (read2.length === 0) {
@@ -1378,6 +1379,19 @@ async function tuneIn(io, model2) {
 async function tuneOut(io, home, id) {
   await io.remove(storePaths(home).session(id));
 }
+var READY_IDLE_MS = 36e5;
+function idleTooLong(record, tunedInAt2, now) {
+  if (record.state !== "ready") {
+    return false;
+  }
+  const since = Math.max(
+    record.stateAt,
+    tunedInAt2,
+    ...record.stories.map((story) => story.at),
+    ...record.activity.map((line) => line.at)
+  );
+  return now - since >= READY_IDLE_MS;
+}
 async function checkIn(io, model2, tunedInAt2) {
   const home = await io.storeHome();
   const now = await io.now();
@@ -1385,13 +1399,17 @@ async function checkIn(io, model2, tunedInAt2) {
   const { closedAt } = parseControl(await readJson(io, paths.control));
   if (closedAt !== null && closedAt >= tunedInAt2) {
     await io.remove(paths.session(model2.record.id));
-    return { closed: true };
+    return { off: "closed" };
+  }
+  if (idleTooLong(model2.record, tunedInAt2, now)) {
+    await io.remove(paths.session(model2.record.id));
+    return { off: "idle" };
   }
   await writeRecord(io, home, model2, tunedInAt2, now);
   if (!isStationAlive(parseStationStatus(await readJson(io, paths.station)), now)) {
     await ensureStation(io, home);
   }
-  return { closed: false };
+  return { off: null };
 }
 async function readSharedOptions(io, home) {
   return parseSharedOptions(await readJson(io, storePaths(home).options));
@@ -1893,7 +1911,7 @@ async function beat($) {
       return;
     }
     const done = outcome;
-    if (done.closed) {
+    if (done.off !== null) {
       tunedInAt = null;
       stopTimers();
       await setState($, false);
