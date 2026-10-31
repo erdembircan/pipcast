@@ -26,5 +26,5 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - The window never takes the keyboard and hides while Claude is in front. Drag it to another corner, resize it, tuck it into the side of the screen, or let it fade with **Transparent window**. Hover over it for **Close**, **Mute** and **Back to Claude**.
 - **TUNE IN** and **TUNE OUT** in the band above the prompt box, and `/pipcast`, `/pipcast auto` and `/pipcast transparency`. **Tune in every new session** is on by default.
 
-[1.1.0]: https://github.com/erdembircan/pipcast/pull/55
-[1.0.0]: https://github.com/erdembircan/pipcast/tree/9e7695a73483fdd568f33e8b23afbb435ebd5286
+[1.1.0]: https://github.com/erdembircan/pipcast/compare/v1.0.0...v1.1.0
+[1.0.0]: https://github.com/erdembircan/pipcast/releases/tag/v1.0.0
