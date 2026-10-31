@@ -284,6 +284,20 @@ describe('checkIn', () => {
     expect((await checkIn(state.io, busy, T)).off).toBe('idle')
   })
 
+  it('counts the hour from the newest story, as when a turn a reload caught ends', async () => {
+    const state = fake()
+    alive(state)
+    const reloaded = m.activity(mine(), T + 10 * 60_000, 'running the test suite')
+    const done = m.finished(reloaded, T + 40 * 60_000, { lastWords: 'Done.', waiting: { shells: [], others: false } })
+    await tuneIn(state.io, done)
+    state.now = T + 40 * 60_000 + READY_IDLE_MS - 1
+    alive(state)
+    expect((await checkIn(state.io, done, T)).off).toBeNull()
+    state.now = T + 40 * 60_000 + READY_IDLE_MS
+    alive(state)
+    expect((await checkIn(state.io, done, T)).off).toBe('idle')
+  })
+
   it('never takes a session working, waiting on you or stopped on an error off the air', async () => {
     for (const model of [m.turnStarted(mine(), T, 't1'), m.askedQuestion(mine(), T, 'Which one?'), m.failed(mine(), T, 'overloaded')]) {
       const state = fake()

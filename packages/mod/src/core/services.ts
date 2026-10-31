@@ -126,15 +126,21 @@ export async function tuneOut(io: Io, home: string, id: string): Promise<void> {
 
 // A tuned-in session that has been ready this long goes off the air at its
 // next heartbeat. The hour counts from the latest of when it went ready, when
-// it tuned in and its newest activity line: tuning in again gives it a full
-// hour, and so do the tool calls of a turn that a reload left showing ready
+// it tuned in, its newest story and its newest activity line: tuning in again
+// gives it a full hour, and a turn that a reload left showing ready counts
+// from its last tool call and from its finish
 export const READY_IDLE_MS = 3_600_000
 
 function idleTooLong(record: SessionRecord, tunedInAt: number, now: number): boolean {
   if (record.state !== 'ready') {
     return false
   }
-  const since = Math.max(record.stateAt, tunedInAt, ...record.activity.map((line) => line.at))
+  const since = Math.max(
+    record.stateAt,
+    tunedInAt,
+    ...record.stories.map((story) => story.at),
+    ...record.activity.map((line) => line.at),
+  )
   return now - since >= READY_IDLE_MS
 }
 

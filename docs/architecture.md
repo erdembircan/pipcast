@@ -69,7 +69,7 @@ interface SessionRecord {
 - A record is **live** while `now - checkedInAt` is 45 s or less. A session that stops checking in, because it crashed or the Mac slept, leaves the board.
 - **On air** are the live records sorted by `tunedInAt`, then by `id`: all of them, with no limit. Every mod and the station apply this same rule, so they agree on who is on air without talking.
 - `control.json`'s `closedAt` tells every mod that tuned in before that moment to tune out: the window's close took every session off the air.
-- A session that has been ready for an hour with nothing new, `READY_IDLE_MS`, tunes itself out at its next heartbeat, as **TUNE OUT** does: its record goes, its row leaves the board and its band shows **TUNE IN**. The hour counts from the latest of when it went ready, when it tuned in and its newest activity line, so a session tuned in again gets a full hour, and so does a turn that a reload left showing ready, for as long as it calls tools. A reload starts the hour over. No other state times out.
+- A session that has been ready for an hour with nothing new, `READY_IDLE_MS`, tunes itself out at its next heartbeat, as **TUNE OUT** does: its record goes, its row leaves the board and its band shows **TUNE IN**. The hour counts from the latest of when it went ready, when it tuned in, its newest story and its newest activity line, so a session tuned in again gets a full hour, and a turn that a reload left showing ready counts from its last tool call and from its finish. A reload keeps the time a ready record went ready, so its hour carries on. The hour runs on while the Mac sleeps, so a session whose hour ends in a sleep goes off at the first heartbeat after the Mac wakes. No other state times out.
 
 ## The mod
 

@@ -1182,7 +1182,8 @@ function restored(m, own) {
       }
     }
   }
-  return withRecord(m, { ...m.record, stories: own.stories, hours: own.hours, limits: own.limits ?? [] }, { seq });
+  const since = m.record.state === "ready" && own.state === "ready" ? { stateAt: own.stateAt } : {};
+  return withRecord(m, { ...m.record, stories: own.stories, hours: own.hours, limits: own.limits ?? [], ...since }, { seq });
 }
 function measured(m, read2) {
   if (read2.length === 0) {
@@ -1383,7 +1384,12 @@ function idleTooLong(record, tunedInAt2, now) {
   if (record.state !== "ready") {
     return false;
   }
-  const since = Math.max(record.stateAt, tunedInAt2, ...record.activity.map((line) => line.at));
+  const since = Math.max(
+    record.stateAt,
+    tunedInAt2,
+    ...record.stories.map((story) => story.at),
+    ...record.activity.map((line) => line.at)
+  );
   return now - since >= READY_IDLE_MS;
 }
 async function checkIn(io, model2, tunedInAt2) {

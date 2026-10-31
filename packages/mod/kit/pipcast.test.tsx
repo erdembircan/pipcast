@@ -902,6 +902,21 @@ scenario('a session tuned in again after its hour stays on the air for a full ho
   expect(w.record()).toBeNull()
 })
 
+scenario('a session that went off after its hour stays off when you come back to it', {}, async (w, $) => {
+  await tuneIn($)
+  await turn($)
+  await stop($, { last_assistant_message: 'Done.' })
+  await w.clock.advance(READY_IDLE_MS)
+  expect(w.record()).toBeNull()
+  await turn($, 't2')
+  await stop($, { last_assistant_message: 'Done again.' })
+  await w.clock.advance(HEARTBEAT_MS)
+  expect(w.record()).toBeNull()
+  const ui = await mounted($)
+  expect((await ui.find({ type: 'Button' }))?.key).toBe('tune-in')
+  await ui.unmount()
+})
+
 scenario('the heartbeat starts the station again when it has gone quiet', {}, async (w, $) => {
   await tuneIn($)
   expect(w.launched.length).toBe(1)
