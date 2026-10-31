@@ -258,7 +258,7 @@ People get a new version from each place on its own schedule:
 - **Anthropic's plugin directory** follows the `release` branch. A version reaches people there only when `release` moves to it and a reviewer clears it, and they get it as a session starts.
 - **erdembircan-plugins** installs `plugin/` from master's newest commit. An install already made moves only with the version: `claude plugin update pipcast@erdembircan-plugins` keeps the copy it has while `version` stays the same, whatever changed in `plugin/`.
 
-So a pull request that changes what `plugin/` holds raises the version too: the patch for a fix, as in 1.0.1, and the minor for something new, as in 1.1.0. Raise it in `packages/mod/plugin.json`, in `Constants.version` in `station/Sources/StationCore/Constants.swift`, and in the root `package.json` and `package-lock.json`; tests fail when they differ. The station's binary carries its version, so run `scripts/build.sh` on a Mac and commit what it builds. 1.0.0 is out: erdembircan-plugins has offered it since the repository went public on 28 October 2026, and it stays untagged until it goes live in the directory, as Submit, above, says.
+So a pull request that changes what `plugin/` holds raises the version too: the patch for a fix, as in 1.0.1, and the minor for something new, as in 1.1.0. Raise it in `packages/mod/plugin.json`, in `Constants.version` in `station/Sources/StationCore/Constants.swift`, and in the root `package.json` and `package-lock.json`; tests fail when they differ. The station's binary carries its version, so run `scripts/build.sh` on a Mac and commit what it builds. 1.0.0 is out: erdembircan-plugins has offered it since the repository went public on 28 October 2026, and it stays untagged until it goes live in the directory or `release` moves past it.
 
 While a version is with the directory, being scanned, with a reviewer, or approved and not yet live, leave `release` on it: moving it puts another version in front of the reviewer. Master moves on meanwhile, and erdembircan-plugins installs each new version from it. Through the push webhook, GitHub tells the directory of every push, to master, any other branch or a tag, but the directory looks only at `release`, and finds nothing new there until `release` moves.
 
@@ -274,7 +274,7 @@ To release a version once it's on master:
    Versions merged while `release` waited go to the directory as one, the newest.
 3. The directory scans the new commit, at once through the push webhook, and holds it for a reviewer. Follow it on Pipcast's **Versions** tab in the [developer portal](https://claude.ai/directory/manage), and select **Publish update** once it's approved.
 
-When the portal asks for a change, the fix can reach the directory only through `release`, so the wait in step 2 doesn't apply. Moved to master's newest tag, `release` brings the directory everything master gained since the version it was reviewing, not the fix alone. If master gained changes to `plugin/` besides the fix, choose before `release` moves: let them go along, or send the fix alone, as a commit of its own on top of the version under review. The steps above don't cover that second way.
+When the portal asks for a change, release the fix as above, and step 2 waits only for master's CI. `release` only ever moves along master, so it brings the directory everything master gained since the version it was reviewing, not the fix alone. If that version is 1.0.0, tag its commit `v1.0.0` before `release` moves, since 1.0.0 won't go live in the directory.
 
 ## The demo video
 
