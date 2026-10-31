@@ -26,6 +26,7 @@ Our plate sits on that box, so it is its ground in both themes.
 | TUNE IN | Puts this session on KLWD: its row joins the listing and its stories air. The first session on air brings the window, which shows when you switch to another app | The proof of concept's Track session |
 | TUNE OUT | Takes this session off KLWD: its row leaves the listing. With nothing on air there is no window | The same, Stop tracking |
 | The window's close | Takes every session off at once, and the channel ends. TUNE OUT takes only this one | Frame, "Close stops tracking" |
+| An hour at READY | Takes this session off by itself, as TUNE OUT does, once it has been READY for an hour with nothing new; its band shows TUNE IN again | Your rule, backlog item 128 |
 | No limit | Every session can tune in, so TUNE IN never dims, and the band shows no count | Your rule, on PiP Newsroom · More than four |
 | The slash command | Does what the plate does, from the prompt, as `/session-pip` does in the proof of concept | The proof of concept |
 | A session that ends | /clear, /resume or exit takes its row off the listing; its band shows TUNE IN again | Event desks, "Not tracked" |

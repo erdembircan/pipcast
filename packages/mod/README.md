@@ -20,7 +20,7 @@ Watch the demo on YouTube (1:44): https://youtu.be/WZc3zm6nB9g
 3. When the session needs your input, finishes, or stops on an error, KLWD airs it as BREAKING NEWS.
 4. Click **Back to Claude** on the window, or switch to Claude yourself, and the window gets out of the way.
 
-A session that was already open, or one you resume, goes on air when you press **TUNE IN** in the band above the prompt box, or run `/pipcast`. Press **TUNE OUT**, or run `/pipcast` again, to take the session off the air. In Claude Code in a terminal, `/pipcast` is how a session goes on air.
+A session that was already open, or one you resume, goes on air when you press **TUNE IN** in the band above the prompt box, or run `/pipcast`. Press **TUNE OUT**, or run `/pipcast` again, to take the session off the air. A session that has been **READY** for an hour goes off the air by itself. Press **TUNE IN** to bring it back. In Claude Code in a terminal, `/pipcast` is how a session goes on air.
 
 ## What's on
 
