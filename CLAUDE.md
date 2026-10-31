@@ -8,7 +8,7 @@ The README is for people who install Pipcast. How to build, test and try a chang
 
 - Never edit `plugin/` by hand. The mod is in `packages/mod`, with its manifest in `packages/mod/plugin.json` and its README in `packages/mod/README.md`; the contract it shares with the station and the broadcast is in `packages/contract`; the broadcast is in `packages/director` and `packages/renderer`; the station is in `station/`.
 - After changing any of them, run `scripts/build.sh` and commit what it builds with the change. CI builds again and fails when the result differs from what is committed.
-- A change to what `plugin/` holds reaches the people who installed Pipcast only with a new version, so the pull request that makes it raises the version too. Release in `docs/development.md` says how. Until the first release, nobody has a copy to update, so the version stays 1.0.0.
+- A change to what `plugin/` holds reaches the people who installed Pipcast only with a new version, so the pull request that makes it raises the version too. Release in `docs/development.md` says how. 1.0.0 is out through erdembircan-plugins, untagged until it goes live in the directory, so no change to `plugin/` can ship as 1.0.0.
 - A change to `station/Sources` or `scripts/build-station.sh` means a new station binary, which only builds on a Mac. Run `scripts/build.sh` after the last such change, then commit.
 - A change to the icon's drawing, in `scripts/build-icon.mjs` or in a token or letter outline it takes in, means new PNGs of the icon and its layers, which only render on a Mac with Chrome. Run `scripts/build.sh` there after the last such change, then commit.
 - Keep sources, tests and tools out of `plugin/`. A new file the plugin needs goes in `SHIPS` in `scripts/build-plugin.mjs`, and in the build step that makes it.
@@ -19,6 +19,7 @@ The README is for people who install Pipcast. How to build, test and try a chang
 
 Anthropic's plugin directory, one of the two places people install Pipcast from, reads only `plugin/` and checks every version against its rules. Anthropic's plugin directory in `docs/development.md` says what they are and how a version reaches people.
 
+- The directory takes Pipcast's versions from the `release` branch alone, and erdembircan-plugins from master, so a push anywhere but `release` changes nothing in the directory. While a version is with the directory, being scanned, with a reviewer, or approved and not yet live, leave `release` on it, however far master moves: moving it puts another version in front of the reviewer. Release in `docs/development.md` says when `release` moves.
 - `scripts/check-directory.mjs` checks the rules that can be checked here, and CI runs it. Fix what it reports. A file the directory's validator can't inspect, such as the station's binary, goes in its `HELD` list only with the reason it ships, and holds every version for a reviewer.
 - `plugin/README.md`, built from `packages/mod/README.md`, is Pipcast's listing, and tells the people who add Pipcast everything it runs, reads and keeps. When the mod or the station starts to run, read or keep anything new, say so in its **What Pipcast runs and reads** or **Privacy** section, and in the same section of the root README, word for word.
 - Never minify what ships: the directory holds code it can't read for a reviewer.
