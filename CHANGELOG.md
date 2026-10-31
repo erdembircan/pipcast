@@ -11,7 +11,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Changed
 
 - The window resizes down to half its full size, where it stopped at 70%. On a 14-inch MacBook Pro that's 358 × 201 pt instead of 501 × 282.
-- The window's buttons and minimize handle are sized for each screen, in proportion to the largest the window gets there, so the handle stays clear of the close button down to the smallest window, where it used to run into it on small screens. On a 14-inch MacBook Pro they keep the size they had.
+- The window's buttons and minimize handle are sized for each screen, in proportion to the largest the window gets there. On a 14-inch MacBook Pro they keep the size they had.
+
+### Fixed
+
+- On small screens, such as 1024 × 640, the minimize handle no longer runs into the close button when the window is at its smallest.
 
 ## [1.0.0] - 2026-10-28
 

@@ -89,7 +89,7 @@ The window goes into its own screen's edge and never slides onto a display besid
 1. **One layout, scaled uniformly.** The picture is a TV picture, 960 × 540 (`stage-width`, `stage-height`), and scales with the window without reflowing.
 2. **Text is 28px or larger** (`legibility-floor`): 8.8 pt in the smallest window, 300 pt wide, and 10.4 pt in a 14-inch MacBook Pro's smallest, 358 pt wide.
 3. **Corners stay empty.** No text inside a 64px square at any corner.
-4. **The bug sits at x 40**, the title-safe inset, level with the listing; on hover, close covers its first letters. Nothing in the top band reaches x 678, where sound sits in the smallest window. The clock lives at the bottom right, in the ticker.
+4. **The bug sits at x 40**, the title-safe inset, level with the listing; on hover, close covers its first letters. Nothing in the top band reaches x 678, where sound sits in the smallest window on a 1280 × 800 screen (x 681 on a 14-inch MacBook Pro). The clock lives at the bottom right, in the ticker.
 5. **The window is its quadrant.** It opens filling its quadrant at 16:9, 20 pt in from every side, never gets bigger, and resizes down to 50% of that.
 6. **A smaller size you choose is kept as a share of the quadrant**, so it carries to another screen. The technical reference proposes `$.store` for remembering the corner; the size can sit beside it.
 
