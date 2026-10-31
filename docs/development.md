@@ -203,7 +203,7 @@ The directory publishes only from a public repository. Pipcast's is public, with
 8. On **Review and submit**, keep **GitHub push webhook**, leave **Auto-publish passing versions** off, and select **Submit for review**.
 9. On **Plugin submitted for review**, select **Set up push updates**, which needs admin access to the repository on GitHub. If it asks you to install the Claude GitHub App, install it on this repository only. Keeping **GitHub push webhook** doesn't set the webhook up by itself, and without it the directory finds a new commit on `release` only at its next scheduled check. To set it up later, open Pipcast from **Submissions** in the portal, and select **Set up** under **Updates** on its **Settings** tab.
 
-When the reviewer has cleared Pipcast, select **Publish** on its page in the portal, which by default asks an Anthropic reviewer to publish it. Once it's live, tag the commit that went live `v1.0.0`, push the tag, and publish a GitHub release from it. [Track your directory submission](https://claude.com/docs/directory/submission-status) says what each status in the portal means, and who acts next.
+When the reviewer has cleared Pipcast, select **Publish** on its page in the portal, which by default asks an Anthropic reviewer to publish it. Once 1.0.0 is live, tag its commit `v1.0.0`, push the tag, and publish a GitHub release from it. [Track your directory submission](https://claude.com/docs/directory/submission-status) says what each status in the portal means, and who acts next.
 
 The portal reads the mod by rules of its own, which neither `claude plugin validate` nor `scripts/check-directory.mjs` applies in full, so a change to the mod is known to pass only once the portal has read it. Before Pipcast is submitted, validate the change's branch on the **Source** step, where **Validate** takes any branch under **Branch or tag** and submits nothing, then set the field back to `release` before you go on. After, the portal first reads a change when `release` moves to it, as a new version on Pipcast's **Versions** tab: one that doesn't pass doesn't go live, and a listed Pipcast keeps the version before it.
 
@@ -274,7 +274,7 @@ To release a version once it's on master:
    Versions merged while `release` waited go to the directory as one, the newest.
 3. The directory scans the new commit, at once through the push webhook, and holds it for a reviewer. Follow it on Pipcast's **Versions** tab in the [developer portal](https://claude.ai/directory/manage), and select **Publish update** once it's approved.
 
-When the portal asks for a change, the fix can reach the directory only through `release`. Moved to master's newest tag, `release` brings the directory everything master gained since the version it was reviewing, not the fix alone.
+When the portal asks for a change, the fix can reach the directory only through `release`, so the wait in step 2 doesn't apply. Moved to master's newest tag, `release` brings the directory everything master gained since the version it was reviewing, not the fix alone. If master gained changes to `plugin/` besides the fix, choose before `release` moves: let them go along, or send the fix alone, as a commit of its own on top of the version under review. The steps above don't cover that second way.
 
 ## The demo video
 
