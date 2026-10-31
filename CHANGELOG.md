@@ -1,0 +1,28 @@
+# Changelog
+
+All notable changes to Pipcast are documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and Pipcast adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+## [1.1.0] - 2026-10-31
+
+### Changed
+
+- The window resizes down to half its full size, where it stopped at 70%. On a 14-inch MacBook Pro that's 358 × 201 pt instead of 501 × 282.
+
+## [1.0.0] - 2026-10-28
+
+### Added
+
+- KLWD, a picture-in-picture window that floats in a corner of your screen over every app and shows what your Claude Code sessions are up to, styled as a 1990s local TV news broadcast.
+- The board: every session on air, one row each, with its project, its title and where it stands (INPUT, ERROR, READY or LIVE), four at a time, and two meters for your account's usage limits.
+- BREAKING NEWS when a session needs your input, finishes with changes ready for review, finishes without changing anything, or stops on an error, read by Clawd at the anchor desk, with its jingle and a beat under the story.
+- A report every hour on the hour: the station clock, the headlines and THE HOUR IN REVIEW.
+- The window never takes the keyboard and hides while Claude is in front. Drag it to another corner, resize it, tuck it into the side of the screen, or let it fade with **Transparent window**. Hover over it for **Close**, **Mute** and **Back to Claude**.
+- **TUNE IN** and **TUNE OUT** in the band above the prompt box, and `/pipcast`, `/pipcast auto` and `/pipcast transparency`. **Tune in every new session** is on by default.
+
+[Unreleased]: https://github.com/erdembircan/pipcast/commits/master
+[1.1.0]: https://github.com/erdembircan/pipcast/pull/55
+[1.0.0]: https://github.com/erdembircan/pipcast/tree/9e7695a73483fdd568f33e8b23afbb435ebd5286
