@@ -917,6 +917,25 @@ scenario('a session that went off after its hour stays off when you come back to
   await ui.unmount()
 })
 
+scenario('a reload carries on the hour of a session sitting ready', {}, async (w, $) => {
+  await tuneIn($)
+  await turn($)
+  await stop($, { last_assistant_message: 'Done.' })
+  const own = w.record()
+  const earlier = T0 - 50 * 60_000
+  // What the module before the reload wrote: tuned in, finished and ready fifty minutes ago
+  w.files.set(
+    RECORD,
+    JSON.stringify({ ...own, tunedInAt: earlier, stateAt: earlier, stories: own?.stories.map((story) => ({ ...story, at: earlier })) }),
+  )
+  // The module starts over; $.state says tuned in
+  await $.session.start(START)
+  await w.clock.advance(10 * 60_000 - HEARTBEAT_MS)
+  expect(w.record()?.state).toBe('ready')
+  await w.clock.advance(HEARTBEAT_MS)
+  expect(w.record()).toBeNull()
+})
+
 scenario('the heartbeat starts the station again when it has gone quiet', {}, async (w, $) => {
   await tuneIn($)
   expect(w.launched.length).toBe(1)
