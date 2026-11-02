@@ -171,7 +171,7 @@ KLWD is an ordinary window, so it appears in screen shares and recordings, with 
 
 ## Update and uninstall
 
-**From Anthropic's plugin directory**, Pipcast updates by itself: once a new version is out, new sessions get it. To uninstall it, open **Customize**, then **Plugins**, open **Pipcast**, open its menu and select **Remove**. New sessions start without it.
+**From Anthropic's plugin directory**, once it's listed there, Pipcast updates by itself: once a new version is out, new sessions get it. To uninstall it, open **Customize**, then **Plugins**, open **Pipcast**, open its menu and select **Remove**. New sessions start without it.
 
 **From erdembircan-plugins**, update or uninstall it from a terminal, then start a new session:
 
