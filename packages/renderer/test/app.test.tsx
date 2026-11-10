@@ -97,6 +97,7 @@ describe('the live page', () => {
       sounds: [{ type: 'cue', jingle: 'breaking' }],
       reported: null,
       wantsWindow: false,
+      weather: null,
     }
     act(() => root.render(<App reducedMotion={false} createSource={() => ({ tick: () => program })} />))
     act(() => receive(snapshot([record({})])))

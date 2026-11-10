@@ -18,10 +18,21 @@ import type { SessionRecord, Snapshot, StoryCounts } from '@pipcast/contract'
 import type { HourRow, Scene } from '@pipcast/design'
 
 import type { TickerExtra } from './board.ts'
+import type { Forecast } from './forecast.ts'
 import { inListingOrder, waitingSince } from './listing.ts'
 import type { Segment } from './story.ts'
-import { DESK_MS, HOUR_OUTRO_MS, IDENT_MS, REDUCED_OPENER_MS, REVIEW_MS, REVIEW_ROWS } from './timing.ts'
+import {
+  DESK_MS,
+  HOUR_OUTRO_MS,
+  IDENT_MS,
+  REDUCED_OPENER_MS,
+  REVIEW_MS,
+  REVIEW_ROWS,
+  STORMTRACKER_MS,
+  WEATHER_PAGE_MS,
+} from './timing.ts'
 import type { Step } from './types.ts'
+import { hasOutlook, weatherScene } from './weather.ts'
 
 export interface HourReport {
   segment: Segment
@@ -88,13 +99,16 @@ function rowFor(session: SessionRecord, from: number, hour: number, now: number)
 }
 
 // The report on the hour, covering `from` to `hour`. Its numbers are taken
-// from the snapshot as the report starts.
+// from the snapshot as the report starts. With a forecast that has an outlook,
+// KLWD WEATHER follows the review (or the desk, in a quiet hour): CURRENT
+// CONDITIONS, EXTENDED FORECAST, and with a storm STORMTRACKER.
 export function hourReport(
   hour: number,
   from: number,
   snapshot: Snapshot,
   now: number,
   reducedMotion: boolean,
+  forecast: Forecast | null = null,
 ): HourReport {
   const sessions = snapshot.sessions
   const counts: StoryCounts = { needsInput: 0, ready: 0, complete: 0, error: 0 }
@@ -155,6 +169,21 @@ export function hourReport(
       ticker,
     }),
   }
+  // KLWD WEATHER, drawn from the forecast as the report starts
+  const weatherSteps: Step[] = []
+  if (hasOutlook(forecast)) {
+    const weather = weatherScene(forecast, now)
+    const page = (mode: 'weather-now' | 'weather-days' | 'stormtracker', length: number): Step => ({
+      role: 'weather',
+      length,
+      bed: 'beat-major',
+      scene: ({ now: at, ticker }): Scene => ({ mode, clock: clock(at), ticker, weather }),
+    })
+    weatherSteps.push(page('weather-now', WEATHER_PAGE_MS), page('weather-days', WEATHER_PAGE_MS))
+    if (forecast.outlook === 'storm') {
+      weatherSteps.push(page('stormtracker', STORMTRACKER_MS))
+    }
+  }
   const outro: Step = {
     role: 'outro',
     length: HOUR_OUTRO_MS,
@@ -170,7 +199,7 @@ export function hourReport(
   }
 
   const id = `hour:${hour}`
-  const shown = stories > 0 ? [ident, desk, review] : [ident, desk]
+  const shown = [...(stories > 0 ? [ident, desk, review] : [ident, desk]), ...weatherSteps]
   const ticker = (live: Snapshot): TickerExtra => ({
     lead: {
       lead: LEAD.onTheHour,

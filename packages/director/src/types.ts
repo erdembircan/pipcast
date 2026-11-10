@@ -1,9 +1,12 @@
 import type { Bed, Jingle, Story } from '@pipcast/contract'
 import type { Scene, TickerItem } from '@pipcast/design'
 
+import type { Forecast } from './forecast.ts'
+
 export type QueueItem =
   | { kind: 'story'; sessionId: string; story: Story }
   | { kind: 'hour'; hour: number }
+  | { kind: 'warning' }
 
 // A story whose segment has ended, remembered for the ticker
 export interface Carried {
@@ -29,6 +32,8 @@ export interface BoardState {
   // When the last report's segment ended; null while it is on air, or when
   // the report is only remembered from an earlier run
   reportEndedAt: number | null
+  // The week's forecast as it stands; null before the first reading
+  forecast: Forecast | null
 }
 
 // What a step draws itself from, each tick
@@ -42,7 +47,7 @@ export interface StepContext {
 // One step of a segment. Its scene is rebuilt on every tick, so the clock,
 // the waiting time and the ticker are always current.
 export interface Step {
-  role: 'opener' | 'desk' | 'review' | 'outro'
+  role: 'opener' | 'desk' | 'review' | 'weather' | 'outro'
   length: number
   // A jingle that starts with the step
   cue?: Jingle

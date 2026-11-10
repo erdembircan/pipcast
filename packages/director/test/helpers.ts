@@ -1,4 +1,4 @@
-import type { Jingle, SessionRecord, Snapshot, Sound, Story } from '@pipcast/contract'
+import type { Jingle, SessionRecord, Snapshot, Sound, Story, UsageLimit, WeatherMemory } from '@pipcast/contract'
 import { createDirector } from '@pipcast/director'
 import type { DirectorOptions, Program } from '@pipcast/director'
 
@@ -34,6 +34,8 @@ export interface World {
   visible: boolean
   windowOut?: boolean
   lastReportAt: number | null
+  // The station's weather.json, sent with every snapshot
+  weather?: WeatherMemory | null
 }
 
 export interface Sample {
@@ -60,6 +62,7 @@ export function harness(start: number, sessions: SessionRecord[] = [], options: 
       ...(world.windowOut === undefined ? {} : { windowOut: world.windowOut }),
       sessions: world.sessions,
       lastReportAt: world.lastReportAt,
+      ...(world.weather === undefined ? {} : { weather: world.weather }),
     }
     const sample = { now, program: director.tick({ now, snapshot }) }
     history.push(sample)
@@ -106,5 +109,33 @@ export function harness(start: number, sessions: SessionRecord[] = [], options: 
     keys(): string[] {
       return [...new Set(history.map((sample) => sample.program.key))]
     },
+  }
+}
+
+// The week the weather tests go by resets Mon 16 Nov 2026 at 18:00, local time,
+// so they hold in any time zone
+export const RESET = new Date(2026, 10, 16, 18, 0).getTime()
+export const WEEK_START = RESET - 7 * 24 * 3_600_000
+
+export const local = (day: number, hour: number, minute = 0, second = 0): number =>
+  new Date(2026, 10, day, hour, minute, second).getTime()
+
+// A steady week up to `until`: `rate` percent an hour from 09:00 to 21:00
+// local, a point every quarter hour. Its memory, and the week limit a session
+// would read at the last point.
+export function steadyWeek(rate: number, until: number): { memory: WeatherMemory; limit: UsageLimit } {
+  const points: [number, number][] = []
+  let cum = 0
+  for (let t = WEEK_START; t + 900_000 <= until; t += 900_000) {
+    const hour = new Date(t).getHours()
+    if (hour >= 9 && hour < 21) {
+      cum += rate / 4
+    }
+    points.push([t + 900_000, Math.round(cum * 10) / 10])
+  }
+  const last = points[points.length - 1] as [number, number]
+  return {
+    memory: { v: 1, resetsAt: RESET, points, warnedAt: null },
+    limit: { kind: 'week', percentUsed: last[1], resetsAt: RESET, at: last[0] },
   }
 }

@@ -1,16 +1,20 @@
 import { hourStart, STORY_FRESH_MS } from '@pipcast/contract'
-import type { Bed, Snapshot, Sound, Story } from '@pipcast/contract'
+import type { Bed, Snapshot, Sound, Story, WeatherMemory } from '@pipcast/contract'
 import type { Scene } from '@pipcast/design'
 
 import { boardScene, boardTicker } from './board.ts'
+import type { Forecast, WeekHistory } from './forecast.ts'
 import { hourReport } from './hour.ts'
 import { movedOn, storySegment } from './story.ts'
 import type { Segment } from './story.ts'
 import { GAP_MS, HOUR_MS, IDENT_LEAD_MS, LAST_REPORT_KEEP_MS } from './timing.ts'
 import type { BoardState, Carried, QueueItem, ReportMemory } from './types.ts'
+import { createWeatherDesk, hasOutlook, warningSegment } from './weather.ts'
 
 export interface DirectorOptions {
   reducedMotion?: boolean
+  // Tests count how often the forecast runs; the release passes nothing
+  forecastWeek?: (history: WeekHistory, used: number, now: number) => Forecast | null
 }
 
 export interface Tick {
@@ -33,6 +37,9 @@ export interface Program {
   // start, or one is waiting while the window is out between two segments.
   // The page posts it to the station whenever it changes
   wantsWindow: boolean
+  // The weather desk's memory for the station to keep, when it has changed this
+  // tick: the week's readings, and when STORM WARNING last came due
+  weather: WeatherMemory | null
 }
 
 interface OnAir {
@@ -46,6 +53,7 @@ interface OnAir {
 
 export function createDirector(options: DirectorOptions = {}): { tick(input: Tick): Program } {
   const reducedMotion = options.reducedMotion === true
+  const desk = createWeatherDesk(options.forecastWeek === undefined ? {} : { forecastWeek: options.forecastWeek })
 
   let initialized = false
   const seen = new Set<string>()
@@ -65,17 +73,23 @@ export function createDirector(options: DirectorOptions = {}): { tick(input: Tic
       onAirStoryId: story === null ? null : story.id,
       lastReport,
       reportEndedAt,
+      forecast: desk.forecast(),
     }
   }
 
-  // Takes every story out of the queue and leaves the report on the hour. In
-  // place: the board reads this same array.
-  function dropWaitingStories(): void {
+  // Takes every story and STORM WARNING out of the queue and leaves the report
+  // on the hour. Says whether a warning went. In place: the board reads this
+  // same array.
+  function dropWaitingStories(): boolean {
+    let warning = false
     for (let index = queue.length - 1; index >= 0; index -= 1) {
-      if (queue[index]?.kind === 'story') {
+      const kind = queue[index]?.kind
+      if (kind === 'story' || kind === 'warning') {
+        warning = warning || kind === 'warning'
         queue.splice(index, 1)
       }
     }
+    return warning
   }
 
   // Takes out the stories waiting their turn whose session has moved on, so
@@ -111,7 +125,7 @@ export function createDirector(options: DirectorOptions = {}): { tick(input: Tic
       const { item, segment, bed } = onAir
       if (item.kind === 'story') {
         carried.set(item.story.id, { endedAt: at, kind: item.story.kind, sessionId: item.sessionId })
-      } else {
+      } else if (item.kind === 'hour') {
         reportEndedAt = at
       }
       if (!normally) {
@@ -202,13 +216,30 @@ export function createDirector(options: DirectorOptions = {}): { tick(input: Tic
         queue.push({ kind: 'hour', hour: next })
         scheduledHour = next
       }
+
+      // The weather. A storm in the forecast brings STORM WARNING, at most
+      // once an hour: it joins the queue like a story, and like a story it
+      // never airs while Claude is in front. One that comes due then is skipped
+      // and the hour counts from now all the same
+      desk.tick(snapshot, now)
+      const warningWaits = queue.some((item) => item.kind === 'warning') || onAir?.item.kind === 'warning'
+      if (desk.due(now, warningWaits)) {
+        if (visible) {
+          queue.push({ kind: 'warning' })
+        } else {
+          desk.markDue(now)
+        }
+      }
     }
 
     if (!visible) {
       // 4. Hidden: what is on air is cut and not restarted, and the stories
-      // waiting their turn are dropped. The report on the hour waits on
+      // waiting their turn are dropped, a STORM WARNING with them: it came due
+      // at this moment. The report on the hour waits on
       end(now, false)
-      dropWaitingStories()
+      if (dropWaitingStories()) {
+        desk.markDue(now)
+      }
     } else if (!windowOut) {
       // 5. Minimized to the side, or on its way out or in: a segment on air
       // is cut, as when the window hides, and not restarted. What waits
@@ -257,12 +288,22 @@ export function createDirector(options: DirectorOptions = {}): { tick(input: Tic
               continue
             }
             onAir = { item, segment: storySegment(item.sessionId, item.story, snapshot, reducedMotion), index: 0, stepStartedAt: now, bed: undefined }
+          } else if (item.kind === 'warning') {
+            // Airs only if the storm is still in the forecast
+            const forecast = desk.forecast()
+            if (!hasOutlook(forecast) || forecast.outlook !== 'storm') {
+              continue
+            }
+            onAir = { item, segment: warningSegment(forecast, now, reducedMotion), index: 0, stepStartedAt: now, bed: undefined }
+            // The hour is counted from when it airs, as the report's is
+            desk.markDue(now)
           } else {
             if (snapshot === null) {
               continue
             }
             const from = lastReport !== null && lastReport.hour < item.hour ? lastReport.hour : item.hour - HOUR_MS
-            const report = hourReport(item.hour, from, snapshot, now, reducedMotion)
+            // The report goes by a forecast worked out as it starts
+            const report = hourReport(item.hour, from, snapshot, now, reducedMotion, desk.refresh(now))
             onAir = { item, segment: report.segment, index: 0, stepStartedAt: now, bed: undefined }
             lastReport = { hour: item.hour, stories: report.stories }
             reportEndedAt = null
@@ -279,21 +320,25 @@ export function createDirector(options: DirectorOptions = {}): { tick(input: Tic
     const wantsWindow = visible && (onAir !== null || due || (windowOut && queue.length > 0))
 
     // 9. The scene
+    const weather = desk.memory()
     const board = boardScene(now, snapshot, boardState())
     const current: OnAir | null = onAir
     const step = current?.segment.steps[current.index]
     if (current === null || step === undefined) {
-      return { scene: board, key: 'board', sounds, reported, wantsWindow }
+      return { scene: board, key: 'board', sounds, reported, wantsWindow, weather }
     }
-    // At the desk and the review the ticker also carries the segment's own line
+    // At the desk, the review and the weather pages the ticker also carries the
+    // segment's own line
     const extra = current.segment.ticker
-    const atDesk = step.role === 'desk' || step.role === 'review'
+    const atDesk = step.role === 'desk' || step.role === 'review' || step.role === 'weather'
     const ticker =
       atDesk && snapshot !== null && extra !== undefined
         ? boardTicker(now, snapshot, boardState(), extra(snapshot))
         : (board.ticker ?? [])
-    const scene = step.scene({ now, ticker, board })
-    return { scene, key: `${current.segment.id}:${current.index}`, sounds, reported, wantsWindow }
+    const made = step.scene({ now, ticker, board })
+    // While a storm warning holds, every page's crawl reads WARNING, as the board's does
+    const scene = board.tickerLabel !== undefined && made.tickerLabel === undefined ? { ...made, tickerLabel: board.tickerLabel } : made
+    return { scene, key: `${current.segment.id}:${current.index}`, sounds, reported, wantsWindow, weather }
   }
 
   return { tick }

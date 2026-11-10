@@ -1,24 +1,32 @@
 import {
   activityLine,
   afterReportLine,
+  aroundTime,
   clock,
+  dayTime,
   deskLine,
+  forecastLine,
+  forecastStartsLine,
   hourLabel,
   LEAD,
   reportComingUp,
   stillWaitingLine,
   storyLine,
+  warningLine,
+  WEATHER,
   wholeMinutes,
   waitingForReviewLine,
 } from '@pipcast/contract'
 import type { SessionRecord, Snapshot, Story } from '@pipcast/contract'
 import type { Scene, Session, TickerItem } from '@pipcast/design'
 
+import type { Forecast } from './forecast.ts'
 import { movedOn } from './story.ts'
 import { limitMeters } from './limits.ts'
 import { inListingOrder, waitingSince } from './listing.ts'
 import { AFTER_REPORT_MS, BREAKING_MS, HOUR_MS } from './timing.ts'
 import type { BoardState } from './types.ts'
+import { hasOutlook, skyFor } from './weather.ts'
 
 const MAX_TICKER = 6
 const MAX_COMING_UP = 2
@@ -56,6 +64,26 @@ export interface TickerExtra {
   skipWaitingFor?: string
 }
 
+// The FORECAST line, with the sky it draws before its lead: the week's end for
+// clear skies and clouds, when the outlook starts in the week's first day. A
+// storm has its warning at the head of the crawl in its place.
+function forecastItem(forecast: Forecast): TickerItem | undefined {
+  if (forecast.outlook === 'early') {
+    return forecast.startsAt === null
+      ? undefined
+      : { lead: LEAD.forecast, text: forecastStartsLine(dayTime(forecast.startsAt)), key: 'forecast' }
+  }
+  if (!hasOutlook(forecast) || forecast.outlook === 'storm') {
+    return undefined
+  }
+  return {
+    lead: LEAD.forecast,
+    text: forecastLine(forecast.outlook, Math.min(99, Math.round(forecast.end)), dayTime(forecast.resetsAt)),
+    key: 'forecast',
+    sky: skyFor(forecast.end),
+  }
+}
+
 export function boardTicker(now: number, snapshot: Snapshot, state: BoardState, extra: TickerExtra = {}): TickerItem[] {
   const leads: TickerItem[] = extra.lead === undefined ? [] : [extra.lead]
 
@@ -68,7 +96,7 @@ export function boardTicker(now: number, snapshot: Snapshot, state: BoardState, 
     if (item.kind === 'hour') {
       leads.push({ lead: LEAD.comingUp, text: reportComingUp(hourLabel(item.hour)), key: `coming:hour:${item.hour}` })
       comingUp += 1
-    } else if (!movedOn(snapshot, item.sessionId, item.story)) {
+    } else if (item.kind === 'story' && !movedOn(snapshot, item.sessionId, item.story)) {
       const title = titleOf(snapshot, item.sessionId)
       if (title !== undefined) {
         leads.push({ lead: LEAD.comingUp, text: storyLine(item.story.kind, title), key: `coming:${item.story.id}` })
@@ -149,11 +177,25 @@ export function boardTicker(now: number, snapshot: Snapshot, state: BoardState, 
     })
   }
 
-  // 6. How the desk is, always: the items before it make room for it
+  // 6. How the desk is, always: the items before it make room for it. With a
+  // storm in the forecast its warning leads everything; otherwise the FORECAST
+  // line follows the desk, and makes room for itself as well.
   const onAir = snapshot.sessions.length
   const working = snapshot.sessions.filter((session) => session.state === 'working')
-  const items: TickerItem[] = leads.slice(0, MAX_TICKER - 1)
+  const { forecast } = state
+  const outlook = forecast === null ? undefined : forecastItem(forecast)
+  if (forecast !== null && forecast.outlook === 'storm' && forecast.runsOutAt !== null) {
+    leads.unshift({
+      lead: LEAD.stormWarning,
+      text: warningLine(aroundTime(forecast.runsOutAt), dayTime(forecast.resetsAt)),
+      key: 'warning',
+    })
+  }
+  const items: TickerItem[] = leads.slice(0, MAX_TICKER - (outlook === undefined ? 1 : 2))
   items.push({ lead: LEAD.onTheDesk, text: deskLine(working.length, onAir), key: 'desk' })
+  if (outlook !== undefined) {
+    items.push(outlook)
+  }
 
   // 7. What the working sessions are doing, newest first
   const activity = working
@@ -190,6 +232,10 @@ export function boardScene(now: number, snapshot: Snapshot | null, state: BoardS
     state: session.state,
   }))
   const scene: Scene = { mode: 'board', clock: clock(now), sessions, ticker: boardTicker(now, snapshot, state) }
+  // While a storm warning holds, the crawl's tab reads WARNING
+  if (state.forecast !== null && state.forecast.outlook === 'storm') {
+    scene.tickerLabel = WEATHER.warningLabel
+  }
   // With no reading, no meters: the board as it always was
   const limits = limitMeters(snapshot.sessions, now)
   return limits.length === 0 ? scene : { ...scene, limits }

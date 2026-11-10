@@ -43,16 +43,16 @@ export interface NewsEvent {
 }
 
 /** A line of the crawl. `lead` is a caps word in gold; `key` says what the line is about (a story, a session), so the crawl knows the line when its words change. */
-export type TickerItem = string | { lead?: string; text: string; key?: string };
+export type TickerItem = string | { lead?: string; text: string; key?: string; /** The forecast line's icon: the sky it draws before the lead. */ sky?: Sky };
 
 /** One moment of the feed: the contract shared by review boards and the renderer. */
 export interface Scene {
-  /** `ident` and `review` belong to the report on the hour. */
-  mode: 'board' | 'stinger' | 'desk' | 'outro' | 'ident' | 'review';
+  /** `ident` and `review` belong to the report on the hour, `weather-now`, `weather-days` and `stormtracker` to KLWD WEATHER's pages, and `alert` to STORM WARNING's open. */
+  mode: 'board' | 'stinger' | 'desk' | 'outro' | 'ident' | 'review' | 'weather-now' | 'weather-days' | 'stormtracker' | 'alert';
   /** The outro: the board scene it hands back to, drawn underneath as the open fades. */
   board?: Scene;
-  /** The outro: 'hour' for the report's (the ident run out, with `hour`), else BREAKING NEWS's. */
-  open?: 'hour';
+  /** The outro: 'hour' for the report's (the ident run out, with `hour`), 'alert' for WEATHER ALERT's, else BREAKING NEWS's. */
+  open?: 'hour' | 'alert';
   /** 24-hour clock: "14:32". */
   clock?: string;
   sessions?: Session[];
@@ -75,8 +75,36 @@ export interface Scene {
   /** THE HOUR IN REVIEW: one row per session, four a page. */
   rows?: HourRow[];
   label?: string;
+  /** KLWD WEATHER's pages and STORMTRACKER: the weekly forecast they draw. */
+  weather?: WeatherScene;
 }
 
+/** A sky on KLWD WEATHER: by the share of the week a day's high reaches, sun below 70%, partly cloudy to 89%, overcast to 99%, storms at 100%. */
+export type Sky = 'sun' | 'partly' | 'overcast' | 'storm';
+
+/** One day on EXTENDED FORECAST. */
+export interface WeatherDay { name: string; sky: Sky; high: string; low: string; out?: boolean }
+
+/** A mark on STORMTRACKER's track: a day's close the storm passes, its time ("SAT 00:00"), the week's share then ("78%"), and how far along the track it is, 0 to 1. */
+export interface TrackMark { when: string; share: string; at: number }
+
+/** The weekly forecast as KLWD WEATHER and STORMTRACKER show it. */
+export interface WeatherScene {
+  outlook: 'clear' | 'clouds' | 'storm';
+  /** The week used now, "48%". */
+  used: string;
+  /** CURRENT CONDITIONS's sky. */
+  sky: Sky;
+  /** The outlook in words: "CLOUDS GATHERING". */
+  word: string;
+  /** The verdict: "The week ends near 86%", "The week runs out Sun around 05:00". */
+  strap: string;
+  /** EXTENDED FORECAST's tab: "TO MON 18:00". */
+  until: string;
+  days: WeatherDay[];
+  /** STORMTRACKER, with a storm: the marks before the week runs out, and when it does, "SUN 05:00". */
+  track?: { marks: TrackMark[]; out: string };
+}
 
 /** One session's hour, as THE HOUR IN REVIEW shows it, read as the session's row on the board. */
 export interface HourRow {
@@ -267,10 +295,10 @@ export interface PlayWithSoundProps {
  * name renders one turn of its loop, at 48 kHz.
  * PipNews.playJingles([{ name, at }, { bed, at, until }]) plays several in one mix, each at its time: a
  * segment's intro and outro, and the beat, mixing in at `at` and phasing out from `until`.
- * PipNews.jingles lists the jingles there are: "breaking" (the intro), "breaking-out" (the outro), "hour" (the ident) and "hour-out" (the hour's outro).
+ * PipNews.jingles lists the jingles there are: "breaking" (the intro), "breaking-out" (the outro), "hour" (the ident), "hour-out" (the hour's outro) and "weather-alert" (WEATHER ALERT's open).
  * PipNews.beds lists the beds: "beat-minor" (under BREAKING NEWS's desk) and "beat-major" (under the hour's desk and review).
  * PipNews.beat is the beat's timing, in seconds: `turn`, one turn of its loop; `warm`, the turns rendered
  * before the one that is kept; `fadeIn` and `fadeOut`, how it mixes in and phases out.
  */
-export type JingleName = 'breaking' | 'breaking-out' | 'hour' | 'hour-out';
+export type JingleName = 'breaking' | 'breaking-out' | 'hour' | 'hour-out' | 'weather-alert';
 export type BedName = 'beat-minor' | 'beat-major';

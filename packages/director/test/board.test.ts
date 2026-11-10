@@ -4,6 +4,7 @@ import type { Snapshot } from '@pipcast/contract'
 import type { TickerItem } from '@pipcast/design'
 
 import { boardScene, boardTicker } from '../src/board.ts'
+import type { Forecast } from '../src/forecast.ts'
 import type { BoardState } from '../src/types.ts'
 import { at, session, story, T0 } from './helpers.ts'
 
@@ -13,6 +14,7 @@ const empty: BoardState = {
   onAirStoryId: null,
   lastReport: null,
   reportEndedAt: null,
+  forecast: null,
 }
 
 function snap(...sessions: ReturnType<typeof session>[]): Snapshot {
@@ -190,5 +192,77 @@ describe('the ticker', () => {
     const snapshot = snap(session('a'))
     expect(text(boardTicker(T0 + 599_000, snapshot, state))[0]).toBe('ON THE HOUR 1 story at 15:00 · next report 16:00')
     expect(text(boardTicker(T0 + 600_000, snapshot, state))[0]).toBe('ON THE DESK 1 session working')
+  })
+})
+
+describe('the forecast in the ticker', () => {
+  const forecast = (outlook: Forecast['outlook'], rest: Partial<Forecast> = {}): Forecast => ({
+    computedAt: T0,
+    resetsAt: Date.UTC(2026, 9, 24, 18, 0),
+    outlook,
+    startsAt: null,
+    used: 48,
+    end: 86,
+    chance: 0.1,
+    runsOutAt: null,
+    days: [],
+    ...rest,
+  })
+  const storm = forecast('storm', { used: 72, end: 112, chance: 0.8, runsOutAt: Date.UTC(2026, 9, 24, 5, 10) })
+  const waiting = story('w:1', 'needs-input', T0 - 27 * 60_000)
+  const sessions = [session('a', { state: 'working' }), session('w', { state: 'needs-input', stateAt: waiting.at, stories: [waiting] })]
+
+  it('puts a FORECAST line right after ON THE DESK, under the sky the week ends in', () => {
+    const items = boardTicker(T0, snap(...sessions), { ...empty, forecast: forecast('clouds') })
+    expect(text(items)).toEqual([
+      'STILL WAITING Title w needs your input · 27 min',
+      'ON THE DESK 1 session working',
+      'FORECAST Clouds gathering: the week ends near 86%, resets Sat 18:00',
+    ])
+    expect(items[2]).toMatchObject({ key: 'forecast', sky: 'partly' })
+    const clear = boardTicker(T0, snap(...sessions), { ...empty, forecast: forecast('clear', { end: 55 }) })
+    expect(text(clear)[2]).toBe('FORECAST Clear skies: the week ends near 55%, resets Sat 18:00')
+    expect(clear[2]).toMatchObject({ sky: 'sun' })
+  })
+
+  it('never says the week ends at 100%', () => {
+    const items = boardTicker(T0, snap(...sessions), { ...empty, forecast: forecast('clouds', { end: 99.7 }) })
+    expect(text(items)[2]).toContain('ends near 99%')
+    expect(items[2]).toMatchObject({ sky: 'overcast' })
+  })
+
+  it('says when the outlook starts in the week’s first day', () => {
+    const items = boardTicker(T0, snap(...sessions), { ...empty, forecast: forecast('early', { startsAt: Date.UTC(2026, 9, 22, 18, 0) }) })
+    expect(text(items)[2]).toBe('FORECAST The week’s outlook starts Thu 18:00')
+    expect(items[2]).not.toHaveProperty('sky')
+  })
+
+  it('leads with the STORM WARNING line, and has no FORECAST line', () => {
+    const items = boardTicker(T0, snap(...sessions), { ...empty, forecast: storm })
+    expect(text(items)).toEqual([
+      'STORM WARNING in effect until Sat 18:00: at this pace the week runs out Sat around 05:00',
+      'STILL WAITING Title w needs your input · 27 min',
+      'ON THE DESK 1 session working',
+    ])
+    expect(keys(items)[0]).toBe('warning')
+  })
+
+  it('keeps the crawl to six lines', () => {
+    const many = Array.from({ length: 8 }, (_, i) => session(`s${i}`, { state: 'working', activity: [{ at: T0 - i, text: `edit ${i}` }] }))
+    const needs = Array.from({ length: 6 }, (_, i) => {
+      const entry = story(`n${i}:1`, 'needs-input', T0 - (i + 1) * 60_000)
+      return session(`n${i}`, { state: 'needs-input', stateAt: entry.at, stories: [entry] })
+    })
+    for (const held of [forecast('clouds'), storm, null]) {
+      const items = boardTicker(T0, snap(...many, ...needs), { ...empty, forecast: held })
+      expect(items.length).toBe(6)
+      expect(items.some((item) => typeof item !== 'string' && item.key === 'desk')).toBe(true)
+    }
+  })
+
+  it('reads WARNING on the board’s tab only while a storm holds', () => {
+    expect(boardScene(T0, snap(...sessions), { ...empty, forecast: storm }).tickerLabel).toBe('WARNING')
+    expect(boardScene(T0, snap(...sessions), { ...empty, forecast: forecast('clouds') }).tickerLabel).toBeUndefined()
+    expect(boardScene(T0, snap(...sessions), empty).tickerLabel).toBeUndefined()
   })
 })

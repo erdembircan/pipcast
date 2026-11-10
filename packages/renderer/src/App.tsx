@@ -59,6 +59,10 @@ export function App({ reducedMotion = prefersReducedMotion(), createSource = cre
       if (next.reported !== null) {
         post({ type: 'reported', at: next.reported })
       }
+      // The station keeps the weather desk's readings and when STORM WARNING came due
+      if (next.weather !== null) {
+        post({ type: 'weather', memory: next.weather })
+      }
       // Nothing is drawn until the station has sent its first snapshot
       if (snapshot.current !== null) {
         setProgram(next)
