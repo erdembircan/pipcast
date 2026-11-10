@@ -1,4 +1,4 @@
-/* @ds-bundle: {"format":4,"namespace":"PipNews","components":[{"name":"Pip"},{"name":"PipControls"},{"name":"Broadcast"},{"name":"Backdrop"},{"name":"TopBand"},{"name":"Ticker"},{"name":"LowerThird"},{"name":"Stinger"},{"name":"Ident"},{"name":"SessionBoard"},{"name":"StatePill"},{"name":"NewsDesk"},{"name":"OTSBox"},{"name":"HourReview"},{"name":"Clawd"},{"name":"Mark"},{"name":"PlayWithSound"},{"name":"Band"},{"name":"PromptSketch"}]} */
+/* @ds-bundle: {"format":4,"namespace":"PipNews","components":[{"name":"Pip"},{"name":"PipControls"},{"name":"Broadcast"},{"name":"Backdrop"},{"name":"TopBand"},{"name":"Ticker"},{"name":"LowerThird"},{"name":"Stinger"},{"name":"Ident"},{"name":"SessionBoard"},{"name":"StatePill"},{"name":"NewsDesk"},{"name":"OTSBox"},{"name":"HourReview"},{"name":"WeatherIcon"},{"name":"WeatherNow"},{"name":"WeatherDays"},{"name":"Stormtracker"},{"name":"AlertOpen"},{"name":"Clawd"},{"name":"Mark"},{"name":"PlayWithSound"},{"name":"Band"},{"name":"PromptSketch"}]} */
 (function () {
   'use strict';
 
