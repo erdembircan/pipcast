@@ -2,6 +2,7 @@ import { parseLimits } from '@pipcast/contract'
 import type { LimitKind, SessionRecord, UsageLimit } from '@pipcast/contract'
 import type { LimitMeter } from '@pipcast/design'
 
+import { RESET_TOLERANCE_MS } from './forecast.ts'
 import type { WeekReading } from './forecast.ts'
 
 const KINDS: readonly LimitKind[] = ['session', 'week']
@@ -38,19 +39,34 @@ export function limitMeters(sessions: readonly SessionRecord[], now: number): Li
   return meters
 }
 
-// The week's newest reading among the sessions on air, for the forecast; null
-// when none has a reset time, or the newest has passed it
+// The week's reading among the sessions on air, for the forecast: of the latest
+// reset window any of them reads (reset times within RESET_TOLERANCE_MS are one
+// window), the one with the highest share, since a window's share never falls
+// and a lower one is a session's older answer, as one gives when it tunes in.
+// With equal shares, the later reading. Null when none has a reset time, or the
+// latest window's reset has passed.
 export function newestWeekReading(sessions: readonly SessionRecord[], now: number): WeekReading | null {
-  let newest: UsageLimit | undefined
+  const weeks: { limit: UsageLimit; resetsAt: number; percent: number }[] = []
+  let latest = -Infinity
   for (const session of sessions) {
     for (const limit of parseLimits(session.limits)) {
-      if (limit.kind === 'week' && (newest === undefined || limit.at > newest.at)) {
-        newest = limit
+      if (limit.kind === 'week' && limit.resetsAt !== null) {
+        weeks.push({ limit, resetsAt: limit.resetsAt, percent: Math.min(100, Math.max(0, limit.percentUsed)) })
+        latest = Math.max(latest, limit.resetsAt)
       }
     }
   }
-  if (newest === undefined || newest.resetsAt === null || newest.resetsAt <= now) {
+  if (weeks.length === 0 || latest <= now) {
     return null
   }
-  return { percent: Math.min(100, Math.max(0, newest.percentUsed)), resetsAt: newest.resetsAt, at: newest.at }
+  let best: (typeof weeks)[number] | undefined
+  for (const week of weeks) {
+    if (latest - week.resetsAt > RESET_TOLERANCE_MS) {
+      continue
+    }
+    if (best === undefined || week.percent > best.percent || (week.percent === best.percent && week.limit.at > best.limit.at)) {
+      best = week
+    }
+  }
+  return best === undefined ? null : { percent: best.percent, resetsAt: best.resetsAt, at: best.limit.at }
 }

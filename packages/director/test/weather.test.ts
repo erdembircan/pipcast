@@ -313,6 +313,28 @@ describe('newestWeekReading', () => {
     expect(reading).toEqual({ percent: 30.5, resetsAt: RESET, at: 300 })
   })
 
+  it('takes the highest share, not the newest reading, since a window’s share never falls', () => {
+    // A session that tuned in gives its last answer, stamped now, with a lower share
+    const reading = newestWeekReading([hold(week(100, 55)), hold(week(900, 41))], T)
+    expect(reading).toEqual({ percent: 55, resetsAt: RESET, at: 100 })
+    expect(newestWeekReading([hold(week(900, 41)), hold(week(100, 55))], T)).toEqual(reading)
+  })
+
+  it('takes the later reading of equal shares', () => {
+    expect(newestWeekReading([hold(week(100, 50)), hold(week(300, 50)), hold(week(200, 50))], T)).toEqual({ percent: 50, resetsAt: RESET, at: 300 })
+  })
+
+  it('reads only the latest reset window: another window’s higher share is not the reading', () => {
+    const later = RESET + 7 * 24 * 3_600_000
+    // A session still reading last week's window, at a share that is higher than the new week has
+    expect(newestWeekReading([hold(week(500, 97, RESET)), hold(week(400, 3, later))], T)).toEqual({ percent: 3, resetsAt: later, at: 400 })
+  })
+
+  it('counts reset times within the tolerance as one window', () => {
+    const reading = newestWeekReading([hold(week(100, 55, RESET)), hold(week(200, 41, RESET + 9 * MIN))], T)
+    expect(reading).toEqual({ percent: 55, resetsAt: RESET, at: 100 })
+  })
+
   it('holds the percent to 0..100', () => {
     expect(newestWeekReading([hold(week(100, 140))], T)?.percent).toBe(100)
     expect(newestWeekReading([hold(week(100, -3))], T)?.percent).toBe(0)

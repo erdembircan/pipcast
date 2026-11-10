@@ -534,76 +534,6 @@
     return { id, steps: [opener, desk, outro], ticker };
   }
 
-  // packages/director/src/limits.ts
-  var KINDS = ["session", "week"];
-  function limitPercent(limit, now) {
-    if (limit.resetsAt !== null && limit.resetsAt <= now) {
-      return 0;
-    }
-    return Math.min(100, Math.max(0, Math.round(limit.percentUsed)));
-  }
-  function limitMeters(sessions, now) {
-    const newest2 = /* @__PURE__ */ new Map();
-    for (const session of sessions) {
-      for (const limit of parseLimits(session.limits)) {
-        const held = newest2.get(limit.kind);
-        if (held === void 0 || limit.at > held.at) {
-          newest2.set(limit.kind, limit);
-        }
-      }
-    }
-    const meters = [];
-    for (const kind of KINDS) {
-      const limit = newest2.get(kind);
-      if (limit !== void 0) {
-        meters.push({ kind, percent: limitPercent(limit, now) });
-      }
-    }
-    return meters;
-  }
-  function newestWeekReading(sessions, now) {
-    let newest2;
-    for (const session of sessions) {
-      for (const limit of parseLimits(session.limits)) {
-        if (limit.kind === "week" && (newest2 === void 0 || limit.at > newest2.at)) {
-          newest2 = limit;
-        }
-      }
-    }
-    if (newest2 === void 0 || newest2.resetsAt === null || newest2.resetsAt <= now) {
-      return null;
-    }
-    return { percent: Math.min(100, Math.max(0, newest2.percentUsed)), resetsAt: newest2.resetsAt, at: newest2.at };
-  }
-
-  // packages/director/src/listing.ts
-  var STATE_ORDER = {
-    "needs-input": 0,
-    error: 1,
-    ready: 2,
-    working: 3
-  };
-  function waitingSince(session) {
-    let at2;
-    for (const story of session.stories) {
-      if (story.kind === session.state && (at2 === void 0 || story.at >= at2)) {
-        at2 = story.at;
-      }
-    }
-    return at2 ?? session.stateAt;
-  }
-  function inListingOrder(sessions) {
-    return [...sessions].sort((a, b) => {
-      if (a.state !== b.state) {
-        return STATE_ORDER[a.state] - STATE_ORDER[b.state];
-      }
-      if (a.state === "needs-input" || a.state === "error") {
-        return waitingSince(a) - waitingSince(b);
-      }
-      return b.stateAt - a.stateAt;
-    });
-  }
-
   // packages/director/src/forecast.ts
   var WEEK_MS = 7 * 24 * HOUR_MS;
   var DAY_MS = 24 * HOUR_MS;
@@ -628,9 +558,9 @@
     if (reading.at < reading.resetsAt - WEEK_MS || reading.at > reading.resetsAt) {
       return history;
     }
-    let percent = clamp(reading.percent, 0, 100);
+    const percent = clamp(reading.percent, 0, 100);
     const last = history === null ? void 0 : history.points[history.points.length - 1];
-    if (history === null || Math.abs(reading.resetsAt - history.resetsAt) > RESET_TOLERANCE_MS || last !== void 0 && last[1] > percent + 0.5) {
+    if (history === null || Math.abs(reading.resetsAt - history.resetsAt) > RESET_TOLERANCE_MS) {
       return { resetsAt: reading.resetsAt, points: [[reading.at, percent]] };
     }
     let points = history.points;
@@ -638,7 +568,9 @@
       if (reading.at <= last[0]) {
         return history;
       }
-      percent = Math.max(percent, last[1]);
+      if (percent < last[1]) {
+        return history;
+      }
       if (hourStart(reading.at) === hourStart(last[0])) {
         points = points.slice(0, -1);
       }
@@ -939,6 +871,87 @@
     return { ...base, outlook, startsAt: null, end, chance, runsOutAt, days };
   }
 
+  // packages/director/src/limits.ts
+  var KINDS = ["session", "week"];
+  function limitPercent(limit, now) {
+    if (limit.resetsAt !== null && limit.resetsAt <= now) {
+      return 0;
+    }
+    return Math.min(100, Math.max(0, Math.round(limit.percentUsed)));
+  }
+  function limitMeters(sessions, now) {
+    const newest2 = /* @__PURE__ */ new Map();
+    for (const session of sessions) {
+      for (const limit of parseLimits(session.limits)) {
+        const held = newest2.get(limit.kind);
+        if (held === void 0 || limit.at > held.at) {
+          newest2.set(limit.kind, limit);
+        }
+      }
+    }
+    const meters = [];
+    for (const kind of KINDS) {
+      const limit = newest2.get(kind);
+      if (limit !== void 0) {
+        meters.push({ kind, percent: limitPercent(limit, now) });
+      }
+    }
+    return meters;
+  }
+  function newestWeekReading(sessions, now) {
+    const weeks = [];
+    let latest = -Infinity;
+    for (const session of sessions) {
+      for (const limit of parseLimits(session.limits)) {
+        if (limit.kind === "week" && limit.resetsAt !== null) {
+          weeks.push({ limit, resetsAt: limit.resetsAt, percent: Math.min(100, Math.max(0, limit.percentUsed)) });
+          latest = Math.max(latest, limit.resetsAt);
+        }
+      }
+    }
+    if (weeks.length === 0 || latest <= now) {
+      return null;
+    }
+    let best;
+    for (const week of weeks) {
+      if (latest - week.resetsAt > RESET_TOLERANCE_MS) {
+        continue;
+      }
+      if (best === void 0 || week.percent > best.percent || week.percent === best.percent && week.limit.at > best.limit.at) {
+        best = week;
+      }
+    }
+    return best === void 0 ? null : { percent: best.percent, resetsAt: best.resetsAt, at: best.limit.at };
+  }
+
+  // packages/director/src/listing.ts
+  var STATE_ORDER = {
+    "needs-input": 0,
+    error: 1,
+    ready: 2,
+    working: 3
+  };
+  function waitingSince(session) {
+    let at2;
+    for (const story of session.stories) {
+      if (story.kind === session.state && (at2 === void 0 || story.at >= at2)) {
+        at2 = story.at;
+      }
+    }
+    return at2 ?? session.stateAt;
+  }
+  function inListingOrder(sessions) {
+    return [...sessions].sort((a, b) => {
+      if (a.state !== b.state) {
+        return STATE_ORDER[a.state] - STATE_ORDER[b.state];
+      }
+      if (a.state === "needs-input" || a.state === "error") {
+        return waitingSince(a) - waitingSince(b);
+      }
+      return b.stateAt - a.stateAt;
+    });
+  }
+
   // packages/director/src/weather.ts
   function createWeatherDesk(options = {}) {
     const forecastFn = options.forecastWeek ?? forecastWeek;
@@ -976,7 +989,8 @@
         cached = null;
         return;
       }
-      cached = forecastFn(history, reading.percent, now);
+      const lastPoint = history.points[history.points.length - 1];
+      cached = forecastFn(history, lastPoint === void 0 ? reading.percent : Math.max(reading.percent, lastPoint[1]), now);
     }
     function stormy() {
       return cached !== null && cached.outlook === "storm";
@@ -999,8 +1013,15 @@
       }
       const first = reading === null;
       const moved = reading !== null && Math.abs(found.resetsAt - reading.resetsAt) > RESET_TOLERANCE_MS;
-      const fell = reading !== null && found.percent < reading.percent - 0.5;
       if (reading !== null && !moved && found.at <= reading.at) {
+        return;
+      }
+      const lastPoint = history === null ? void 0 : history.points[history.points.length - 1];
+      if (history !== null && lastPoint !== void 0 && Math.abs(found.resetsAt - history.resetsAt) <= RESET_TOLERANCE_MS && found.percent < lastPoint[1]) {
+        if (reading === null) {
+          reading = { percent: lastPoint[1], resetsAt: history.resetsAt, at: lastPoint[0] };
+          compute(now);
+        }
         return;
       }
       reading = found;
@@ -1013,7 +1034,7 @@
         cached = null;
         return;
       }
-      if (first || moved || fell || cached !== null && found.percent - cached.used >= 1) {
+      if (first || moved || cached !== null && found.percent - cached.used >= 1) {
         compute(now);
       }
     }
@@ -1022,7 +1043,7 @@
       if (now.hour !== posted.hour || now.resetsAt !== posted.resetsAt || now.warnedAt !== posted.warnedAt) {
         return true;
       }
-      return now.last !== null && posted.last !== null && (now.last < posted.last || now.last - posted.last >= 1);
+      return now.last !== null && posted.last !== null && now.last - posted.last >= 1;
     }
     return {
       tick(snapshot, now) {

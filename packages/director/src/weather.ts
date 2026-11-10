@@ -109,7 +109,9 @@ export function createWeatherDesk(options: WeatherDeskOptions = {}): WeatherDesk
       cached = null
       return
     }
-    cached = forecastFn(history, reading.percent, now)
+    // Never from a share lower than the week's last
+    const lastPoint = history.points[history.points.length - 1]
+    cached = forecastFn(history, lastPoint === undefined ? reading.percent : Math.max(reading.percent, lastPoint[1]), now)
   }
 
   function stormy(): boolean {
@@ -130,10 +132,10 @@ export function createWeatherDesk(options: WeatherDeskOptions = {}): WeatherDesk
     }
   }
 
-  // Looks at the week's newest reading. Nothing happens unless it is newer than
-  // the last, or of another week. The forecast is worked out then only for the
-  // first reading the desk takes, a new week (the reset moved, or the share
-  // fell), or a share a whole point or more above the one the forecast holds.
+  // Looks at the week's reading. Nothing happens unless it is newer than the
+  // last, or of another week. The forecast is worked out then only for the first
+  // reading the desk takes, a new week (the reset moved), or a share a whole
+  // point or more above the one the forecast holds.
   function scan(found: WeekReading | null, now: number): void {
     if (found === null) {
       reading = null
@@ -142,8 +144,20 @@ export function createWeatherDesk(options: WeatherDeskOptions = {}): WeatherDesk
     }
     const first = reading === null
     const moved = reading !== null && Math.abs(found.resetsAt - reading.resetsAt) > RESET_TOLERANCE_MS
-    const fell = reading !== null && found.percent < reading.percent - 0.5
     if (reading !== null && !moved && found.at <= reading.at) {
+      return
+    }
+    // A share lower than the week's last, in the same window, is a stale reading
+    // (a session tuning in gives its last answer, which may be hours old) and
+    // changes nothing: the share never falls, and only the reset moving starts a
+    // new week. When it is the first the desk sees, the week as it stands is what
+    // it forecasts from.
+    const lastPoint = history === null ? undefined : history.points[history.points.length - 1]
+    if (history !== null && lastPoint !== undefined && Math.abs(found.resetsAt - history.resetsAt) <= RESET_TOLERANCE_MS && found.percent < lastPoint[1]) {
+      if (reading === null) {
+        reading = { percent: lastPoint[1], resetsAt: history.resetsAt, at: lastPoint[0] }
+        compute(now)
+      }
       return
     }
     reading = found
@@ -156,7 +170,7 @@ export function createWeatherDesk(options: WeatherDeskOptions = {}): WeatherDesk
       cached = null
       return
     }
-    if (first || moved || fell || (cached !== null && found.percent - cached.used >= 1)) {
+    if (first || moved || (cached !== null && found.percent - cached.used >= 1)) {
       compute(now)
     }
   }
@@ -164,14 +178,14 @@ export function createWeatherDesk(options: WeatherDeskOptions = {}): WeatherDesk
   // Whether what the station holds is behind what the desk has, by anything it
   // is worth a write to keep: a new hour's point, the hour's point a whole point
   // higher since the last post (the station quits seconds after the last
-  // session, and would otherwise keep each hour's first reading), another week
-  // or a share that fell, or STORM WARNING's time
+  // session, and would otherwise keep each hour's first reading), another week,
+  // or STORM WARNING's time
   function behind(): boolean {
     const now = stand()
     if (now.hour !== posted.hour || now.resetsAt !== posted.resetsAt || now.warnedAt !== posted.warnedAt) {
       return true
     }
-    return now.last !== null && posted.last !== null && (now.last < posted.last || now.last - posted.last >= 1)
+    return now.last !== null && posted.last !== null && now.last - posted.last >= 1
   }
 
   return {

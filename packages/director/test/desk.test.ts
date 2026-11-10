@@ -21,18 +21,21 @@ const oneDecimal = (value: number): number => Math.round(value * 10) / 10
 function counted(start: number, sessions: SessionRecord[] = [], options: { weather?: WeatherMemory | null } = {}) {
   const scans: number[] = []
   const forecasts: number[] = []
+  // The share each forecast was worked out from
+  const used: number[] = []
   const h = harness(start, sessions, {
     ...(options.weather === undefined ? {} : { weather: options.weather }),
     weekReading: (found, now) => {
       scans.push(now)
       return newestWeekReading(found, now)
     },
-    forecastWeek: (history, used, now) => {
+    forecastWeek: (history, share, now) => {
       forecasts.push(now)
-      return forecastWeek(history, used, now)
+      used.push(share)
+      return forecastWeek(history, share, now)
     },
   })
-  return { h, scans, forecasts }
+  return { h, scans, forecasts, used }
 }
 
 // The forecasts that were not for a report on the hour, which is worked out at
@@ -209,23 +212,27 @@ describe('the forecast runs on these events only', () => {
     expect(forecasts).toEqual([start, tick])
   })
 
-  it('for a new week: the share fell, and the memory is told of it at once', () => {
+  it('for a new week: the reset moved, and the memory is told of it at once, starting over', () => {
     const { h, forecasts } = feed([60, 60.2])
-    expect(forecasts).toHaveLength(1)
     const tick = start + 2 * MIN
-    h.world.sessions = [session('a', { limits: [weekLimit(4, tick - 1_000)] })]
+    // The reset moves a day on, so the reading is still within its window
+    const next = RESET + 24 * HOUR
+    h.world.sessions = [session('a', { limits: [weekLimit(4, tick - 1_000, next)] })]
     h.until(tick)
     expect(forecasts).toEqual([start, tick])
     const told = posts(h.history)
+    expect(told[told.length - 1]?.memory.resetsAt).toBe(next)
     expect(told[told.length - 1]?.memory.points.map(([, percent]) => percent)).toEqual([4])
   })
 
-  it('and not for a share that fell by half a point or less', () => {
+  it.each([59.8, 59, 30, 0])('and not for a share of %s after 60.2 in the same week: it is stale, so nothing runs and nothing is posted', (lower) => {
     const { h, forecasts } = feed([60, 60.2])
+    const told = posts(h.history).length
     const tick = start + 2 * MIN
-    h.world.sessions = [session('a', { limits: [weekLimit(59.8, tick - 1_000)] })]
+    h.world.sessions = [session('a', { limits: [weekLimit(lower, tick - 1_000)] })]
     h.until(tick)
     expect(forecasts).toHaveLength(1)
+    expect(posts(h.history)).toHaveLength(told)
   })
 
   it('for the report on the hour, and for a warning’s hour up while the forecast says storm', () => {
@@ -237,6 +244,87 @@ describe('the forecast runs on these events only', () => {
     counting.h.until(T + 2 * HOUR + 2 * MIN)
     // The first reading; the report at 11:00; the hour up at 11:15; the report at 12:00; the hour up at 12:15
     expect(counting.forecasts).toEqual([T, local(13, 10, 59, 55), T + HOUR, local(13, 11, 59, 55), T + 2 * HOUR])
+  })
+})
+
+describe('a stale reading', () => {
+  const start = local(13, 13, 0, 10)
+  const { memory, limit } = steadyWeek(0.9, start)
+  const share = limit.percentUsed
+
+  it('from a session tuning in, an older and lower share stamped now, neither restarts the week, nor lowers the share forecast from, nor posts', () => {
+    const { h, forecasts, used } = counted(start, [session('a', { limits: [weekLimit(share - 8, start)] })])
+    h.world.weather = memory
+    h.until(start + 30 * MIN)
+    // The forecast is worked out once, from the week as it stands
+    expect(forecasts).toEqual([start])
+    expect(used).toEqual([share])
+    expect(posts(h.history)).toEqual([])
+    // Then the week's own next reading: the history is whole, with every earlier point
+    const next = start + 31 * MIN
+    h.until(next - 250)
+    h.world.sessions = [session('a', { limits: [weekLimit(share + 1.2, next)] })]
+    h.until(next)
+    const told = posts(h.history)
+    expect(told).toHaveLength(1)
+    expect(told[0]?.memory.resetsAt).toBe(RESET)
+    expect(told[0]?.memory.points.slice(0, memory.points.length - 1)).toEqual(memory.points.slice(0, -1))
+    expect(told[0]?.memory.points[told[0].memory.points.length - 1]).toEqual([next, share + 1.2])
+  })
+
+  it('that comes while the desk holds the week changes nothing, and a true reading dated before it is still taken', () => {
+    const { h, forecasts, scans } = counted(start, [], { weather: null })
+    h.world.sessions = [session('a', { limits: [weekLimit(50, start)] })]
+    h.until(start + 10 * MIN)
+    expect(forecasts).toEqual([start])
+    const told = posts(h.history).length
+    // The stale one, stamped later than the reading that follows it
+    h.world.sessions = [session('a', { limits: [weekLimit(40, start + 20 * MIN)] })]
+    h.until(start + 21 * MIN)
+    expect(scans.length).toBeGreaterThan(1)
+    expect(forecasts).toEqual([start])
+    expect(posts(h.history)).toHaveLength(told)
+    // A true reading from before the stale stamp, a whole point higher: taken
+    h.world.sessions = [session('a', { limits: [weekLimit(51.5, start + 15 * MIN)] })]
+    h.until(start + 22 * MIN)
+    expect(forecasts).toHaveLength(2)
+    const last = posts(h.history).pop()
+    expect(last?.memory.points[last.memory.points.length - 1]).toEqual([start + 15 * MIN, 51.5])
+  })
+
+  it('from a share that steps down a point and back up leaves the points whole', () => {
+    const desk = createWeatherDesk({ memory: null })
+    const tick = (percent: number, at: number, limits: number) =>
+      desk.tick({ now: at, visible: true, sessions: [session('a', { limits: [weekLimit(percent, at)] })], lastReportAt: null, limits }, at)
+    tick(41, local(13, 10, 5), 1)
+    expect(desk.memory()?.points).toEqual([[local(13, 10, 5), 41]])
+    tick(40, local(13, 11, 5), 2)
+    expect(desk.memory()).toBeNull()
+    tick(41.3, local(13, 12, 5), 3)
+    expect(desk.memory()?.points).toEqual([
+      [local(13, 10, 5), 41],
+      [local(13, 12, 5), 41.3],
+    ])
+  })
+
+  it('takes the highest share across the sessions on air, not the newest reading', () => {
+    const { h, used } = counted(start, [
+      session('a', { limits: [weekLimit(55, start - 600_000)] }),
+      session('b', { limits: [weekLimit(41, start)] }),
+    ], { weather: null })
+    h.until(start + 10_000)
+    expect(used).toEqual([55])
+    expect(posts(h.history)[0]?.memory.points).toEqual([[start - 600_000, 55]])
+  })
+
+  it('works a forecast out when the first reading is stale against the memory it was handed, from that memory', () => {
+    // The memory ends at `share`; a session reads far below it
+    const { h, forecasts, used } = counted(start, [session('a', { limits: [weekLimit(10, start)] })], { weather: memory })
+    h.until(start + 250)
+    expect(forecasts).toEqual([start])
+    expect(used).toEqual([share])
+    const items = h.history[h.history.length - 1]?.program.scene.ticker ?? []
+    expect(items.some((item) => typeof item !== 'string' && item.key === 'forecast')).toBe(true)
   })
 })
 
@@ -421,13 +509,6 @@ describe('what the station is told to keep', () => {
     expect(told[0]?.memory.points).toHaveLength(MAX_POINTS)
     expect(told[0]?.memory.points[0]).toEqual(points[1])
     expect(told[0]?.memory.points[MAX_POINTS - 1]).toEqual([next, 30.2])
-  })
-
-  it('is a post when the week changes or the share falls', () => {
-    const { h } = day([oneDecimal(last + 0.2), 3], 15 * MIN)
-    const told = posts(h.history)
-    expect(told).toHaveLength(1)
-    expect(told[0]?.memory.points.map(([, percent]) => percent)).toEqual([3])
   })
 
   it('is the hour’s last whole-point reading when the station quits mid-hour after the share rose 3 points in it', () => {

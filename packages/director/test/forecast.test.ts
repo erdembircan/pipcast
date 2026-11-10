@@ -329,15 +329,26 @@ describe('recordReading', () => {
     expect(jitter.points).toHaveLength(2)
   })
 
-  it('starts over when the share falls by more than half a point, and keeps the old share for a smaller fall', () => {
+  it('ignores a lower share in the same window, by any amount: it is a stale reading, not a reset', () => {
     const first = recordReading(null, reading(40, NOW)) as WeekHistory
-    const restart = recordReading(first, reading(10, NOW + HOUR_MS)) as WeekHistory
-    expect(restart.points).toEqual([[NOW + HOUR_MS, 10]])
-    const small = recordReading(first, reading(39.8, NOW + HOUR_MS)) as WeekHistory
-    expect(small.points).toEqual([
-      [NOW, 40],
-      [NOW + HOUR_MS, 40],
+    for (const lower of [39.9, 39.5, 39, 10, 0]) {
+      expect(recordReading(first, reading(lower, NOW + HOUR_MS))).toBe(first)
+    }
+    // Nor does it restart for a reset time that jitters within the tolerance
+    expect(recordReading(first, reading(10, NOW + HOUR_MS, RESET + 9 * 60_000))).toBe(first)
+  })
+
+  it('keeps the same share as a flat point, and leaves the points whole for a share that steps down a point and back up', () => {
+    let history = recordReading(null, reading(41, NOW)) as WeekHistory
+    const stepDown = recordReading(history, reading(40, NOW + HOUR_MS)) as WeekHistory
+    expect(stepDown).toBe(history)
+    history = recordReading(stepDown, reading(41, NOW + 2 * HOUR_MS)) as WeekHistory
+    expect(history.points).toEqual([
+      [NOW, 41],
+      [NOW + 2 * HOUR_MS, 41],
     ])
+    history = recordReading(history, reading(41.6, NOW + 3 * HOUR_MS)) as WeekHistory
+    expect(history.points.map(([, percent]) => percent)).toEqual([41, 41, 41.6])
   })
 
   it('keeps the newest points when there are more than the cap', () => {

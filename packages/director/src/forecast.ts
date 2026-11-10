@@ -108,14 +108,10 @@ export function recordReading(history: WeekHistory | null, reading: WeekReading)
   if (reading.at < reading.resetsAt - WEEK_MS || reading.at > reading.resetsAt) {
     return history
   }
-  let percent = clamp(reading.percent, 0, 100)
+  const percent = clamp(reading.percent, 0, 100)
   const last = history === null ? undefined : history.points[history.points.length - 1]
-  // A new window, or a share that fell: the window reset under us
-  if (
-    history === null ||
-    Math.abs(reading.resetsAt - history.resetsAt) > RESET_TOLERANCE_MS ||
-    (last !== undefined && last[1] > percent + 0.5)
-  ) {
+  // A new window: the reset moved. Only that starts the points over.
+  if (history === null || Math.abs(reading.resetsAt - history.resetsAt) > RESET_TOLERANCE_MS) {
     return { resetsAt: reading.resetsAt, points: [[reading.at, percent]] }
   }
   let points = history.points
@@ -123,8 +119,11 @@ export function recordReading(history: WeekHistory | null, reading: WeekReading)
     if (reading.at <= last[0]) {
       return history
     }
-    // The share never falls
-    percent = Math.max(percent, last[1])
+    // The share never falls within a window, so a lower one is a stale reading (a
+    // session's older answer, or a share that jitters by a point) and says nothing
+    if (percent < last[1]) {
+      return history
+    }
     // One point an hour, in the hours the model bins by: a reading in the same
     // hour replaces the last point
     if (hourStart(reading.at) === hourStart(last[0])) {
