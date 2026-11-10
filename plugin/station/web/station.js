@@ -1034,7 +1034,7 @@
         cached = null;
         return;
       }
-      if (first || moved || cached !== null && found.percent - cached.used >= 1) {
+      if (first || moved || cached === null || found.percent - cached.used >= 1) {
         compute(now);
       }
     }

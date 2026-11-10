@@ -134,7 +134,8 @@ export function createWeatherDesk(options: WeatherDeskOptions = {}): WeatherDesk
 
   // Looks at the week's reading. Nothing happens unless it is newer than the
   // last, or of another week. The forecast is worked out then only for the first
-  // reading the desk takes, a new week (the reset moved), or a share a whole
+  // reading the desk takes, a new week (the reset moved), a desk that holds no
+  // forecast (its first reading was out of its window, say), or a share a whole
   // point or more above the one the forecast holds.
   function scan(found: WeekReading | null, now: number): void {
     if (found === null) {
@@ -170,7 +171,7 @@ export function createWeatherDesk(options: WeatherDeskOptions = {}): WeatherDesk
       cached = null
       return
     }
-    if (first || moved || (cached !== null && found.percent - cached.used >= 1)) {
+    if (first || moved || cached === null || found.percent - cached.used >= 1) {
       compute(now)
     }
   }

@@ -328,6 +328,36 @@ describe('a stale reading', () => {
   })
 })
 
+describe('a desk with a reading and no forecast', () => {
+  const start = local(13, 13, 0, 10)
+
+  it('works one out when a newer reading comes, once, though the first reading was outside its window', () => {
+    const forecasts: number[] = []
+    const desk = createWeatherDesk({
+      memory: null,
+      forecastWeek: (history, used, now) => {
+        forecasts.push(now)
+        return forecastWeek(history, used, now)
+      },
+    })
+    const tick = (percent: number, at: number, now: number, limits: number) =>
+      desk.tick({ now, visible: true, sessions: [session('a', { limits: [weekLimit(percent, at)] })], lastReportAt: null, limits }, now)
+    // Read before its own window began: not one of this week's, so the desk has a reading and no history
+    tick(20, WEEK_START - HOUR, start, 1)
+    expect(forecasts).toEqual([])
+    expect(desk.forecast()).toBeNull()
+    expect(desk.memory()).toBeNull()
+    // The next, inside it, with a share under a point above nothing held
+    tick(20.2, start + MIN, start + MIN, 2)
+    expect(forecasts).toEqual([start + MIN])
+    expect(desk.forecast()).not.toBeNull()
+    expect(desk.memory()?.points).toEqual([[start + MIN, 20.2]])
+    // And then it holds one again, so a small rise works nothing out
+    tick(20.5, start + 2 * MIN, start + 2 * MIN, 3)
+    expect(forecasts).toHaveLength(1)
+  })
+})
+
 describe('the moments that come by the clock alone', () => {
   it('works out the forecast once when the week’s first day ends, with no new reading', () => {
     const start = WEEK_START + 20 * HOUR
