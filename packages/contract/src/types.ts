@@ -7,7 +7,7 @@ export type StoryKind = 'needs-input' | 'ready' | 'complete' | 'error'
 
 export type Quadrant = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right'
 
-export type Jingle = 'breaking' | 'breaking-out' | 'hour' | 'hour-out'
+export type Jingle = 'breaking' | 'breaking-out' | 'hour' | 'hour-out' | 'weather-alert'
 
 // The beat under a desk, in its segment's key: D minor under BREAKING NEWS, D
 // major under the hour. The station loops it for as long as it plays
@@ -114,6 +114,18 @@ export interface SharedOptions {
   transparent: boolean
 }
 
+// weather.json: the week's usage readings the forecast goes by, and when STORM
+// WARNING last aired. The station keeps it for the page, which sends it whole
+export interface WeatherMemory {
+  v: 1
+  // When the week the readings belong to resets, in ms; null before the first reading
+  resetsAt: number | null
+  // [when, in ms; percent of the week used], oldest first, at most one a quarter hour
+  points: [number, number][]
+  // When STORM WARNING last came due, in ms: when it aired, or when it was skipped while you were in Claude
+  warnedAt: number | null
+}
+
 // The bridge between the station and its web page
 
 export interface Snapshot {
@@ -123,6 +135,8 @@ export interface Snapshot {
   windowOut?: boolean
   sessions: SessionRecord[]
   lastReportAt: number | null
+  // The station's weather.json, sent with every snapshot; the director reads it on its first tick
+  weather?: WeatherMemory | null
 }
 
 export interface SnapshotMessage extends Snapshot {
@@ -163,6 +177,7 @@ export type PageMessage =
   | { type: 'ready' }
   | Sound
   | { type: 'reported'; at: number }
+  | { type: 'weather'; memory: WeatherMemory }
   | { type: 'window'; wanted: boolean }
   | { type: 'rendered' }
   | { type: 'log'; level: 'info' | 'error'; text: string }

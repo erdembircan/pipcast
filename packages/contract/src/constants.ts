@@ -39,6 +39,10 @@ export const HUSH_MS = 80
 export const STORE_FOLDER = 'Pipcast'
 export const CLAUDE_BUNDLE_ID = 'com.anthropic.claudefordesktop'
 
+// How many readings of the week's usage the forecast keeps: one every quarter
+// of an hour for a week is 672
+export const WEATHER_MAX_POINTS = 700
+
 // Text limits
 export const COMMAND_MAX = 60
 export const QUESTION_MAX = 200

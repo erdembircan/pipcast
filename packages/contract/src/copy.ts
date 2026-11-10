@@ -80,6 +80,8 @@ export const LEAD = {
   ready: 'READY',
   onTheHour: 'ON THE HOUR',
   onTheDesk: 'ON THE DESK',
+  forecast: 'FORECAST',
+  stormWarning: 'STORM WARNING',
 } as const
 
 export function storyLine(kind: StoryKind, title: string): string {
@@ -344,4 +346,64 @@ export function reviewDetail(row: { kind: 'waiting'; minutes: number } | { kind:
     case 'lines':
       return row.added + row.removed > 0 ? figure(row.added, row.removed) : 'No changes this hour'
   }
+}
+
+// The weekly forecast
+
+export type OutlookWord = 'clear' | 'clouds' | 'storm'
+
+export const OUTLOOK_WORDS: Record<OutlookWord, string> = {
+  clear: 'CLEAR SKIES',
+  clouds: 'CLOUDS GATHERING',
+  storm: 'STORM WARNING',
+}
+
+export const WEATHER = {
+  // The crawl's tab while a storm warning holds
+  warningLabel: 'WARNING',
+  // KLWD WEATHER's pages
+  now: 'CURRENT CONDITIONS',
+  days: 'EXTENDED FORECAST',
+  tracker: 'STORMTRACKER',
+  // Over CURRENT CONDITIONS's figure
+  week: 'THE WEEK',
+  // STORMTRACKER's list, and the pin where the storm forms
+  arrival: 'TIME OF ARRIVAL',
+  start: 'NOW',
+  // A day the week has run out by, and a low on a day after it
+  out: 'OUT',
+  none: '—',
+  // WEATHER ALERT's open
+  alert: ['WEATHER', 'ALERT'],
+} as const
+
+// The crawl's FORECAST line: "Clouds gathering: the week ends near 86%, resets Mon 18:00"
+export function forecastLine(outlook: 'clear' | 'clouds', end: number, resets: string): string {
+  const sky = outlook === 'clear' ? 'Clear skies' : 'Clouds gathering'
+  return `${sky}: the week ends near ${end}%, resets ${resets}`
+}
+
+// In the week's first day: "The week’s outlook starts Tue 18:00"
+export function forecastStartsLine(starts: string): string {
+  return `The week’s outlook starts ${starts}`
+}
+
+// After the STORM WARNING lead: "in effect until Mon 18:00: at this pace the week runs out Sun around 05:00"
+export function warningLine(runsOut: string, resets: string): string {
+  return `in effect until ${resets}: at this pace the week runs out ${runsOut}`
+}
+
+// The strap under KLWD WEATHER's pages
+export function weatherStrap(outlook: OutlookWord, end: number, runsOut: string): string {
+  return outlook === 'storm' ? `The week runs out ${runsOut}` : `The week ends near ${end}%`
+}
+
+// EXTENDED FORECAST's tab: "TO MON 18:00"
+export function untilTab(resets: string): string {
+  return `TO ${resets.toUpperCase()}`
+}
+
+// STORMTRACKER's tag at landfall: "OUT · SUN 05:00"
+export function outTag(when: string): string {
+  return `${WEATHER.out} · ${when}`
 }

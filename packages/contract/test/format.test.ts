@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
+  aroundTime,
   clock,
+  dayName,
+  dayTime,
   duration,
   figure,
   hourKey,
@@ -78,5 +81,28 @@ describe('local time', () => {
   it('keys an hour', () => {
     expect(hourKey(at)).toBe('2026-10-21T14')
     expect(hourKey(Date.UTC(2026, 0, 2, 3))).toBe('2026-01-02T03')
+  })
+})
+
+describe('the forecast days', () => {
+  it('names a day and a time', () => {
+    // Mon 16 Nov 2026
+    expect(dayTime(new Date(2026, 10, 16, 18, 0).getTime())).toBe('Mon 18:00')
+    expect(dayTime(new Date(2026, 10, 15, 5, 7).getTime())).toBe('Sun 05:07')
+  })
+
+  it('rounds a time to the nearest hour', () => {
+    expect(aroundTime(new Date(2026, 10, 15, 5, 29).getTime())).toBe('Sun around 05:00')
+    expect(aroundTime(new Date(2026, 10, 15, 5, 30).getTime())).toBe('Sun around 06:00')
+  })
+
+  it('rounds into the next day', () => {
+    expect(aroundTime(new Date(2026, 10, 14, 23, 40).getTime())).toBe('Sun around 00:00')
+  })
+
+  it('names the day that holds a moment, in capitals', () => {
+    expect(dayName(new Date(2026, 10, 13, 15, 12).getTime())).toBe('FRI')
+    expect(dayName(new Date(2026, 10, 14, 0, 0).getTime() - 1)).toBe('FRI')
+    expect(dayName(new Date(2026, 10, 16, 0, 0).getTime())).toBe('MON')
   })
 })
