@@ -73,9 +73,8 @@ describe('the forecast runs only when it can have changed', () => {
       },
     })
     h.world.visible = visible
-    let at = start
     for (let reading = 0; reading < 120; reading += 1) {
-      at = start + reading * 30_000
+      const at = start + reading * 30_000
       const limit: UsageLimit = { kind: 'week', percentUsed: 30 + (reading / 30) * 0.4, resetsAt: RESET, at }
       h.world.sessions = [session('a', { limits: [limit] })]
       h.until(at)
