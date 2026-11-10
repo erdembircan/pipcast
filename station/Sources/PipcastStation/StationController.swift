@@ -127,6 +127,9 @@ final class StationController: NSObject, InteractionDelegate, WKNavigationDelega
         log.write(spaces != nil
                   ? "spaces: off the target's own full-screen Spaces"
                   : "error cannot keep the window off the target's own full-screen Spaces; it can show there as you switch to it")
+        log.write(web.canReadFiles
+                  ? "webgl: the page may read the pictures beside it"
+                  : "error cannot let the page read the pictures of the Earth beside it; STORMTRACKER shows no globe")
         transparent = SharedOptions.load(from: paths.options).transparent
         log.write(transparent ? "transparent on" : "transparent off")
         if model.mode == .minimized { log.write("minimized") }

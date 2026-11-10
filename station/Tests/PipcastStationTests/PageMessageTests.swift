@@ -41,3 +41,14 @@ import StationCore
         #expect(read(#"{"type":"fly"}"#) == nil)
     }
 }
+
+/// The web view the station and its snapshot command show the page in.
+@Suite @MainActor struct StationWebViewTests {
+    @Test func letsThePageReadTheFilesBesideItWhereWebKitHasTheSwitch() {
+        let preferences = makeStationWebView(bridge: PageBridge()).configuration.preferences
+        let has = ["_setAllowFileAccessFromFileURLs:", "setAllowFileAccessFromFileURLs:"].contains { preferences.responds(to: NSSelectorFromString($0)) }
+        #expect(makeStationWebView(bridge: PageBridge()).canReadFiles == has)
+        // This macOS has it, as the off-screen test the switch was found by had
+        #expect(has)
+    }
+}

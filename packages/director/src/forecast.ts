@@ -59,7 +59,8 @@ export interface WeekReading {
   at: number
 }
 
-export type Outlook = 'early' | 'clear' | 'clouds' | 'storm'
+// `out`: the week is already used up, so there is nothing left to forecast
+export type Outlook = 'early' | 'clear' | 'clouds' | 'storm' | 'out'
 
 export interface DayForecast {
   // When the day closes: a local midnight, or the reset for the reset's own day
@@ -79,13 +80,13 @@ export interface Forecast {
   // Percent used now
   used: number
   // The central path's value at the reset (the Gamma median of the end); equals
-  // `used` for early
+  // `used` for early and out
   end: number
-  // The chance that the share reaches 100 before the reset; 0 for early
+  // The chance that the share reaches 100 before the reset; 0 for early, 1 for out
   chance: number
   // The first time the central path reaches 100; null unless the outlook is storm
   runsOutAt: number | null
-  // From today to the reset's day, at most 7; empty for early
+  // From today to the reset's day, at most 7; empty for early and out
   days: DayForecast[]
 }
 
@@ -268,18 +269,11 @@ export function forecastWeek(history: WeekHistory, usedNow: number, now: number)
   if (now - start < MIN_ELAPSED_MS) {
     return { ...base, outlook: 'early', startsAt: start + MIN_ELAPSED_MS, end: used, chance: 0, runsOutAt: null, days: [] }
   }
-  const closes = closesBetween(now, reset)
+  // A week already used up has run out: a storm that has hit is no warning
   if (used >= 100) {
-    return {
-      ...base,
-      outlook: 'storm',
-      startsAt: null,
-      end: used,
-      chance: 1,
-      runsOutAt: now,
-      days: closes.map((closesAt) => ({ closesAt, low: used, high: used })),
-    }
+    return { ...base, outlook: 'out', startsAt: null, end: used, chance: 1, runsOutAt: null, days: [] }
   }
+  const closes = closesBetween(now, reset)
 
   // 1. The readings of this week up to now. Nothing after the last is data.
   const points = history.points.filter(([when]) => when >= start && when <= now)

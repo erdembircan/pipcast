@@ -170,11 +170,12 @@ export function skyFor(share: number): Sky {
   return share >= 70 ? 'partly' : 'sun'
 }
 
-// A forecast with an outlook to show: not the week's first day
+// A forecast with an outlook to show: not the week's first day, and not a week
+// that is used up
 export type Outlooked = Forecast & { outlook: 'clear' | 'clouds' | 'storm' }
 
 export function hasOutlook(forecast: Forecast | null): forecast is Outlooked {
-  return forecast !== null && forecast.outlook !== 'early'
+  return forecast !== null && forecast.outlook !== 'early' && forecast.outlook !== 'out'
 }
 
 // A figure for a share that has not run out: a whole percent, never 100
@@ -190,7 +191,7 @@ export function weatherScene(forecast: Outlooked, now: number): WeatherScene {
   const runsOut = runsOutAt === null ? '' : aroundTime(runsOutAt)
   const scene: WeatherScene = {
     outlook,
-    used: `${Math.round(forecast.used)}%`,
+    used: share(forecast.used),
     sky: outlook === 'storm' ? 'storm' : skyFor(end),
     word: OUTLOOK_WORDS[outlook],
     strap: weatherStrap(outlook, Math.min(99, Math.round(end)), runsOut),

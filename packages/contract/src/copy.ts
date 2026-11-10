@@ -388,6 +388,11 @@ export function forecastStartsLine(starts: string): string {
   return `The week’s outlook starts ${starts}`
 }
 
+// Once the week is used up: "The week is used up until it resets Mon 18:00"
+export function forecastOutLine(resets: string): string {
+  return `The week is used up until it resets ${resets}`
+}
+
 // After the STORM WARNING lead: "in effect until Mon 18:00: at this pace the week runs out Sun around 05:00"
 export function warningLine(runsOut: string, resets: string): string {
   return `in effect until ${resets}: at this pace the week runs out ${runsOut}`

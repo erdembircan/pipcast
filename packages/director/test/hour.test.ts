@@ -228,6 +228,11 @@ describe('the report on the hour with KLWD WEATHER', () => {
     expect(scene?.weather).toMatchObject({ outlook: 'storm', used: '72%', until: 'TO SAT 18:00' })
   })
 
+  it('has no weather once the week is used up', () => {
+    const out = week('out', { used: 100, end: 100, chance: 1, days: [] })
+    expect(steps(out).map((step) => step.scene(context).mode)).toEqual(['ident', 'desk', 'review', 'outro'])
+  })
+
   it('has no weather in the week’s first day, or before a session has read the week', () => {
     const modes = (forecast: Forecast | null) => steps(forecast).map((step) => step.scene(context).mode)
     expect(modes(week('early', { startsAt: at(18) }))).toEqual(['ident', 'desk', 'review', 'outro'])

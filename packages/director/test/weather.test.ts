@@ -321,6 +321,38 @@ describe('the crawl while the week is forecast', () => {
   })
 })
 
+describe('a week that is used up', () => {
+  function usedUp(start: number) {
+    const { memory } = steadyWeek(1.6, start)
+    const limit: UsageLimit = { kind: 'week', percentUsed: 100, resetsAt: RESET, at: start }
+    const h = harness(start, [session('a', { limits: [limit] })])
+    h.world.weather = memory
+    return h
+  }
+
+  it('airs no STORM WARNING in two hours, and its report on the hour has no weather', () => {
+    const h = usedUp(T)
+    h.until(T + 2 * 60 * MIN)
+    expect(warnings(h.history)).toEqual([])
+    expect(h.keys().some((key) => key.startsWith('warning:'))).toBe(false)
+    for (const hour of [local(13, 11), local(13, 12)]) {
+      expect(modes(h.history, `hour:${hour}`)).toEqual(['ident', 'desk', 'outro'])
+    }
+    // Nothing was ever skipped or aired, so nothing was kept
+    expect(posts(h.history).every((post) => post.memory.warnedAt === null)).toBe(true)
+  })
+
+  it('says so on the crawl, with a storm’s sky, and no WARNING tab', () => {
+    const h = usedUp(T)
+    const scene = h.until(T + 1_000).program.scene
+    const items = scene.ticker ?? []
+    const desk = items.findIndex((item) => typeof item !== 'string' && item.key === 'desk')
+    expect(items[desk + 1]).toEqual({ lead: 'FORECAST', text: 'The week is used up until it resets Mon 18:00', key: 'forecast', sky: 'storm' })
+    expect(items.some((item) => typeof item !== 'string' && item.lead === 'STORM WARNING')).toBe(false)
+    expect(scene.tickerLabel).toBeUndefined()
+  })
+})
+
 describe('newestWeekReading', () => {
   const week = (at: number, percentUsed: number, resetsAt: number | null = RESET): UsageLimit => ({ kind: 'week', percentUsed, resetsAt, at })
   const sessionLimit = (at: number): UsageLimit => ({ kind: 'session', percentUsed: 90, resetsAt: RESET, at })
@@ -408,6 +440,12 @@ describe('weatherScene', () => {
     expect(scene.word).toBe('CLOUDS GATHERING')
     expect(scene.strap).toMatch(/^The week ends near (7\d|8\d|9\d)%$/)
     expect(scene.days.some((day) => day.out === true)).toBe(false)
+  })
+
+  it('never reads 100% for a week that has not run out', () => {
+    const forecast = { ...storm(), used: 99.6 }
+    expect(weatherScene(forecast, NOW).used).toBe('99%')
+    expect(weatherScene({ ...forecast, used: 48.4 }, NOW).used).toBe('48%')
   })
 
   it('chooses a sky for a share', () => {

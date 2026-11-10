@@ -6,6 +6,7 @@ import {
   dayTime,
   deskLine,
   forecastLine,
+  forecastOutLine,
   forecastStartsLine,
   hourLabel,
   LEAD,
@@ -65,13 +66,17 @@ export interface TickerExtra {
 }
 
 // The FORECAST line, with the sky it draws before its lead: the week's end for
-// clear skies and clouds, when the outlook starts in the week's first day. A
-// storm has its warning at the head of the crawl in its place.
+// clear skies and clouds, when the outlook starts in the week's first day, and
+// that the week is used up once it is. A storm has its warning at the head of
+// the crawl in its place.
 function forecastItem(forecast: Forecast): TickerItem | undefined {
   if (forecast.outlook === 'early') {
     return forecast.startsAt === null
       ? undefined
       : { lead: LEAD.forecast, text: forecastStartsLine(dayTime(forecast.startsAt)), key: 'forecast' }
+  }
+  if (forecast.outlook === 'out') {
+    return { lead: LEAD.forecast, text: forecastOutLine(dayTime(forecast.resetsAt)), key: 'forecast', sky: 'storm' }
   }
   if (!hasOutlook(forecast) || forecast.outlook === 'storm') {
     return undefined

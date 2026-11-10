@@ -11,6 +11,7 @@ import {
   errorWords,
   fallbackTitle,
   forecastLine,
+  forecastOutLine,
   forecastStartsLine,
   hourHeadline,
   hourSoFarLine,
@@ -135,6 +136,10 @@ describe('the weekly forecast', () => {
 
   it("says when the outlook starts in the week's first day", () => {
     expect(forecastStartsLine('Tue 18:00')).toBe('The week’s outlook starts Tue 18:00')
+  })
+
+  it('says the week is used up, with when it resets', () => {
+    expect(forecastOutLine('Mon 18:00')).toBe('The week is used up until it resets Mon 18:00')
   })
 
   it('writes the line after the STORM WARNING lead', () => {

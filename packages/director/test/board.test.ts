@@ -266,3 +266,29 @@ describe('the forecast in the ticker', () => {
     expect(boardScene(T0, snap(...sessions), empty).tickerLabel).toBeUndefined()
   })
 })
+
+describe('a week that is used up in the ticker', () => {
+  const out: Forecast = {
+    computedAt: T0,
+    resetsAt: Date.UTC(2026, 9, 24, 18, 0),
+    outlook: 'out',
+    startsAt: null,
+    used: 100,
+    end: 100,
+    chance: 1,
+    runsOutAt: null,
+    days: [],
+  }
+  const sessions = [session('a', { state: 'working' })]
+
+  it('says so after ON THE DESK, under a storm’s sky, with no STORM WARNING lead', () => {
+    const items = boardTicker(T0, snap(...sessions), { ...empty, forecast: out })
+    expect(text(items)).toEqual(['ON THE DESK 1 session working', 'FORECAST The week is used up until it resets Sat 18:00'])
+    expect(items[1]).toEqual({ lead: 'FORECAST', text: 'The week is used up until it resets Sat 18:00', key: 'forecast', sky: 'storm' })
+    expect(text(items).some((line) => line.startsWith('STORM WARNING'))).toBe(false)
+  })
+
+  it('leaves the crawl’s tab as it is', () => {
+    expect(boardScene(T0, snap(...sessions), { ...empty, forecast: out }).tickerLabel).toBeUndefined()
+  })
+})

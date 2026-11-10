@@ -312,6 +312,9 @@
   function forecastStartsLine(starts) {
     return `The week\u2019s outlook starts ${starts}`;
   }
+  function forecastOutLine(resets) {
+    return `The week is used up until it resets ${resets}`;
+  }
   function warningLine(runsOut, resets) {
     return `in effect until ${resets}: at this pace the week runs out ${runsOut}`;
   }
@@ -768,18 +771,10 @@
     if (now - start < MIN_ELAPSED_MS) {
       return { ...base, outlook: "early", startsAt: start + MIN_ELAPSED_MS, end: used, chance: 0, runsOutAt: null, days: [] };
     }
-    const closes = closesBetween(now, reset);
     if (used >= 100) {
-      return {
-        ...base,
-        outlook: "storm",
-        startsAt: null,
-        end: used,
-        chance: 1,
-        runsOutAt: now,
-        days: closes.map((closesAt) => ({ closesAt, low: used, high: used }))
-      };
+      return { ...base, outlook: "out", startsAt: null, end: used, chance: 1, runsOutAt: null, days: [] };
     }
+    const closes = closesBetween(now, reset);
     const points = history.points.filter(([when]) => when >= start && when <= now);
     const lastAt = points.length > 0 ? points[points.length - 1][0] : now;
     const origin = hourStart(start);
@@ -1047,7 +1042,7 @@
     return share2 >= 70 ? "partly" : "sun";
   }
   function hasOutlook(forecast) {
-    return forecast !== null && forecast.outlook !== "early";
+    return forecast !== null && forecast.outlook !== "early" && forecast.outlook !== "out";
   }
   function share(value) {
     return `${Math.min(99, Math.round(value))}%`;
@@ -1057,7 +1052,7 @@
     const runsOut = runsOutAt === null ? "" : aroundTime(runsOutAt);
     const scene = {
       outlook,
-      used: `${Math.round(forecast.used)}%`,
+      used: share(forecast.used),
       sky: outlook === "storm" ? "storm" : skyFor(end),
       word: OUTLOOK_WORDS[outlook],
       strap: weatherStrap(outlook, Math.min(99, Math.round(end)), runsOut),
@@ -1139,6 +1134,9 @@
   function forecastItem(forecast) {
     if (forecast.outlook === "early") {
       return forecast.startsAt === null ? void 0 : { lead: LEAD.forecast, text: forecastStartsLine(dayTime(forecast.startsAt)), key: "forecast" };
+    }
+    if (forecast.outlook === "out") {
+      return { lead: LEAD.forecast, text: forecastOutLine(dayTime(forecast.resetsAt)), key: "forecast", sky: "storm" };
     }
     if (!hasOutlook(forecast) || forecast.outlook === "storm") {
       return void 0;
@@ -3268,10 +3266,32 @@
         });
         function loaded() {
           pending -= 1;
-          if (hold !== null && pending <= 0 && running) {
-            draw(hold);
+          if (hold !== null && pending <= 0 && running && drawSafely(hold)) {
             drawn3 = true;
             settle();
+          }
+        }
+        function broke() {
+          if (!running) {
+            return;
+          }
+          dispose();
+          Object.keys(labels).forEach(function(key) {
+            labels[key].classList.remove("pn-wx-on");
+            labels[key].style.transform = "";
+          });
+          root.classList.remove("pn-wx-st3-tracking", "pn-wx-st3-held");
+          if (options.onFail) {
+            options.onFail();
+          }
+        }
+        function drawSafely(t) {
+          try {
+            draw(t);
+            return true;
+          } catch (e) {
+            broke();
+            return false;
           }
         }
         function tex(url, srgb) {
@@ -3545,7 +3565,9 @@
           if (canvas.width !== W * 2 || canvas.height !== H * 2) {
             renderer.setSize(W, H, false);
           }
-          draw(Math.min(DUR, (performance.now() - start) / 1e3));
+          if (!drawSafely(Math.min(DUR, (performance.now() - start) / 1e3))) {
+            return;
+          }
           requestAnimationFrame(frame);
         }
         function dispose() {
@@ -3576,6 +3598,7 @@
           [earthMap, cloudMap, topoMap, waterMap, spiralTex].forEach(free);
           renderer.dispose();
           renderer.forceContextLoss();
+          settle();
         }
         if (hold === null) {
           requestAnimationFrame(frame);
@@ -3614,7 +3637,14 @@
         if (!root || !hasWebGL()) {
           return void 0;
         }
-        var scene = stormScene(root, { textures: props.textures, marks, hold });
+        var scene = null;
+        try {
+          scene = stormScene(root, { textures: props.textures, marks, hold, onFail: function() {
+            failed[1](true);
+          } });
+        } catch (e) {
+          scene = null;
+        }
         if (!scene) {
           failed[1](true);
           return void 0;

@@ -152,18 +152,21 @@ describe('the forecast follows how the week is going', () => {
     expect(Math.abs((forecast?.end ?? 0) - 85)).toBeLessThan(2)
   })
 
-  it('a week that has used everything is a storm now', () => {
+  it('a week that has used everything is out: there is nothing left to forecast', () => {
     const forecast = forecastWeek({ resetsAt: RESET, points: [[NOW - 600_000, 100]] }, 100, NOW)
-    expect(forecast?.outlook).toBe('storm')
-    expect(forecast?.chance).toBe(1)
-    expect(forecast?.end).toBe(100)
-    expect(forecast?.runsOutAt).toBe(NOW)
-    expect(forecast?.days.map((day) => [day.low, day.high])).toEqual([
-      [100, 100],
-      [100, 100],
-      [100, 100],
-      [100, 100],
-    ])
+    expect(forecast).toEqual({
+      computedAt: NOW,
+      resetsAt: RESET,
+      outlook: 'out',
+      startsAt: null,
+      used: 100,
+      end: 100,
+      chance: 1,
+      runsOutAt: null,
+      days: [],
+    })
+    expect(forecastWeek({ resetsAt: RESET, points: [[NOW - 600_000, 100]] }, 130, NOW)?.outlook).toBe('out')
+    expect(forecastWeek({ resetsAt: RESET, points: [[NOW - 600_000, 99.9]] }, 99.9, NOW)?.outlook).not.toBe('out')
   })
 })
 

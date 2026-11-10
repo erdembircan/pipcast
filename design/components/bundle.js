@@ -1407,8 +1407,10 @@
      four pictures, and `options.hold` the moment of the timeline to draw
      once, or null to run it once from now and keep its last picture. It
      returns { dispose, ready }, or null when there is no graphics context;
-     `ready` comes once a held moment has been drawn. Colours are read from
-     the station's tokens on `root`. */
+     `ready` comes once a held moment has been drawn, or the scene is given up.
+     When a picture cannot be uploaded or the scene cannot be drawn it gives the
+     scene up and calls `options.onFail`, once. Colours are read from the
+     station's tokens on `root`. */
   var stormScene = (function () {
     var DUR = 11, T_DIVE = 2.6, T_LAND = 9.0;
     var START = [25.4, -95.4], END = [27.95, -82.75];
@@ -1530,10 +1532,31 @@
       /* A still has no frames to wait for: it draws its moment once the pictures have come, or failed to */
       function loaded() {
         pending -= 1;
-        if (hold !== null && pending <= 0 && running) {
-          draw(hold);
+        if (hold !== null && pending <= 0 && running && drawSafely(hold)) {
           drawn = true;
           settle();
+        }
+      }
+      /* A picture WebKit refuses to upload (it does, with "The operation is insecure", where the page may not read
+         other files), or any other failure to draw: the scene is given up, once, and the caller told, so the labels
+         and list can fall back to the plain form. Nothing is tried again, and nothing throws every frame. */
+      function broke() {
+        if (!running) { return; }
+        dispose();
+        Object.keys(labels).forEach(function (key) {
+          labels[key].classList.remove('pn-wx-on');
+          labels[key].style.transform = '';
+        });
+        root.classList.remove('pn-wx-st3-tracking', 'pn-wx-st3-held');
+        if (options.onFail) { options.onFail(); }
+      }
+      function drawSafely(t) {
+        try {
+          draw(t);
+          return true;
+        } catch (e) {
+          broke();
+          return false;
         }
       }
       function tex(url, srgb) {
@@ -1780,7 +1803,7 @@
         // the page may reset the canvas's size attributes when it redraws its markup
         if (canvas.width !== W * 2 || canvas.height !== H * 2) { renderer.setSize(W, H, false); }
         // one run from mount, then the last picture stays
-        draw(Math.min(DUR, (performance.now() - start) / 1000));
+        if (!drawSafely(Math.min(DUR, (performance.now() - start) / 1000))) { return; }
         requestAnimationFrame(frame);
       }
       /* Gives back everything the scene holds on the graphics card: the pictures
@@ -1801,6 +1824,8 @@
         [earthMap, cloudMap, topoMap, waterMap, spiralTex].forEach(free);
         renderer.dispose();
         renderer.forceContextLoss();
+        // a still waiting for this scene's picture waits no longer
+        settle();
       }
       if (hold === null) { requestAnimationFrame(frame); }
       // `ready` comes once a held moment has been drawn, so a still can wait for it
@@ -1837,7 +1862,12 @@
     useEffect(function () {
       var root = ref.current;
       if (!root || !hasWebGL()) { return undefined; }
-      var scene = stormScene(root, { textures: props.textures, marks: marks, hold: hold });
+      var scene = null;
+      try {
+        scene = stormScene(root, { textures: props.textures, marks: marks, hold: hold, onFail: function () { failed[1](true); } });
+      } catch (e) {
+        scene = null;
+      }
       if (!scene) { failed[1](true); return undefined; }
       if (hold !== null) { holdUntilDrawn(scene.ready); }
       return function () { scene.dispose(); };

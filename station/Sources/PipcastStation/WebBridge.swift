@@ -67,6 +67,10 @@ final class PageBridge: NSObject, WKScriptMessageHandler {
 /// A web view that never takes focus or shows a menu: a view above it takes
 /// every event.
 final class StationWebView: WKWebView {
+    /// Whether the page may read the files beside it, which WebKit requires before WebGL draws a picture from one: set
+    /// by `makeStationWebView`, false on a macOS without the private switch.
+    fileprivate(set) var canReadFiles = false
+
     override var acceptsFirstResponder: Bool { false }
 
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
@@ -76,16 +80,25 @@ final class StationWebView: WKWebView {
     }
 }
 
+/// Lets the page read other files. STORMTRACKER's globe draws on the pictures of the Earth beside the page, and WebKit
+/// refuses a WebGL texture drawn from a file URL ("The operation is insecure") unless the page may read other files.
+/// Tested off screen: without this `texImage2D` throws a SecurityError, with it the picture uploads. A private
+/// preference, looked up at run time; false when this macOS lacks it, and the page then draws STORMTRACKER with no globe.
+private func allowFileAccessFromFileURLs(_ preferences: WKPreferences) -> Bool {
+    let selectors = ["_setAllowFileAccessFromFileURLs:", "setAllowFileAccessFromFileURLs:"]
+    guard selectors.contains(where: { preferences.responds(to: NSSelectorFromString($0)) }) else { return false }
+    preferences.setValue(true, forKey: "allowFileAccessFromFileURLs")
+    return true
+}
+
 /// Builds the web view with its `pipcast` message handler.
 func makeStationWebView(bridge: PageBridge) -> StationWebView {
     let configuration = WKWebViewConfiguration()
     configuration.userContentController.add(bridge, name: "pipcast")
     configuration.preferences.isTextInteractionEnabled = false
-    // STORMTRACKER's globe draws on the pictures of the Earth beside the page, and WebKit refuses a WebGL texture drawn
-    // from a file URL ("The operation is insecure") unless the page may read other files. Tested off screen: without
-    // this `texImage2D` throws a SecurityError, with it the picture uploads.
-    configuration.preferences.setValue(true, forKey: "allowFileAccessFromFileURLs")
+    let canReadFiles = allowFileAccessFromFileURLs(configuration.preferences)
     let web = StationWebView(frame: .zero, configuration: configuration)
+    web.canReadFiles = canReadFiles
     web.autoresizingMask = [.width, .height]
     // Nothing flashes white before the page paints.
     web.underPageBackgroundColor = .black

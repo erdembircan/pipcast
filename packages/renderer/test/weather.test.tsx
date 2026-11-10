@@ -60,6 +60,8 @@ describe('KLWD WEATHER', () => {
     container.remove()
     Reflect.deleteProperty(window, 'THREE')
     Reflect.deleteProperty(window, 'WebGLRenderingContext')
+    vi.restoreAllMocks()
+    vi.unstubAllGlobals()
   })
 
   function draw(element: React.ReactElement): void {
@@ -180,6 +182,80 @@ describe('KLWD WEATHER', () => {
       expect(made).toHaveBeenCalledTimes(1)
       expect(container.querySelector('.pn-wx-st3')?.classList.contains('pn-wx-st3-plain')).toBe(true)
       expect(container.querySelector('.pn-wx-st3-toa')).not.toBeNull()
+    })
+
+    // A THREE whose every constructor and method answers with another stand-in, but for a renderer that cannot draw: it
+    // throws as WebKit does when the page may not read the files its pictures come from
+    function brokenThree() {
+      const standIn: object = new Proxy(function () {}, {
+        get: (_target, key) => (key === Symbol.toPrimitive ? () => 0 : standIn),
+        apply: () => standIn,
+        construct: () => standIn,
+        set: () => true,
+      })
+      const render = vi.fn(() => {
+        throw new Error('The operation is insecure.')
+      })
+      const dispose = vi.fn()
+      const forceContextLoss = vi.fn()
+      class Renderer {
+        setPixelRatio() {}
+        setSize() {}
+        render = render
+        dispose = dispose
+        forceContextLoss = forceContextLoss
+      }
+      class Loader {
+        setCrossOrigin() {}
+        // The pictures come a moment later, as they do
+        load(_url: string, onLoad: () => void) {
+          window.setTimeout(onLoad, 0)
+          return {}
+        }
+      }
+      const three = new Proxy({}, { get: (_target, key) => (key === 'WebGLRenderer' ? Renderer : key === 'TextureLoader' ? Loader : standIn) })
+      ;(window as unknown as { THREE: unknown }).THREE = three
+      ;(window as unknown as { WebGLRenderingContext: unknown }).WebGLRenderingContext = class {}
+      vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation((() => standIn) as never)
+      return { render, dispose, forceContextLoss }
+    }
+
+    it('gives the globe up when a picture is refused as it draws, once, and shows the list and the tag', async () => {
+      const three = brokenThree()
+      const frames: (() => void)[] = []
+      vi.stubGlobal('requestAnimationFrame', (frame: () => void) => frames.push(frame))
+      draw(<news.Stormtracker weather={weatherOf('stormtracker')} animate />)
+      expect(frames).toHaveLength(1)
+      expect(container.querySelector('.pn-wx-st3')?.classList.contains('pn-wx-st3-plain')).toBe(false)
+      act(() => frames[0]?.())
+      expect(three.render).toHaveBeenCalledTimes(1)
+      expect(three.dispose).toHaveBeenCalledTimes(1)
+      expect(three.forceContextLoss).toHaveBeenCalledTimes(1)
+      // Never tried again, so it never throws every frame
+      expect(frames).toHaveLength(1)
+      const globe = container.querySelector('.pn-wx-st3')
+      expect(globe?.classList.contains('pn-wx-st3-plain')).toBe(true)
+      expect(globe?.classList.contains('pn-wx-st3-tracking')).toBe(false)
+      expect(container.querySelector('.pn-wx-st3-toa')).not.toBeNull()
+      expect(container.querySelector('.pn-wx-st3-out')?.textContent).toBe('OUT · SUN 05:00')
+      for (const label of container.querySelectorAll<HTMLElement>('.pn-wx-st3-label')) {
+        expect(label.classList.contains('pn-wx-on')).toBe(false)
+        expect(label.style.transform).toBe('')
+      }
+    })
+
+    it('gives a held picture up too, and a still stops waiting for it', async () => {
+      const three = brokenThree()
+      draw(<news.Stormtracker weather={weatherOf('stormtracker')} />)
+      expect((window as unknown as { THREE: unknown }).THREE).toBeDefined()
+      const waiting = drawn()
+      await act(async () => {
+        await new Promise((done) => window.setTimeout(done, 30))
+      })
+      await expect(waiting).resolves.toBeDefined()
+      expect(three.render).toHaveBeenCalledTimes(1)
+      expect(three.dispose).toHaveBeenCalledTimes(1)
+      expect(container.querySelector('.pn-wx-st3')?.classList.contains('pn-wx-st3-plain')).toBe(true)
     })
 
     it('has nothing to wait for in a still with no globe', async () => {
