@@ -3708,7 +3708,7 @@
           { className: "pn-wx-alert-dial" },
           h("div", { className: "pn-dial" }, h("div", { className: "pn-dial-face" }, h(WeatherIcon, { sky: "storm", bolt: "pn-wx-alert-bolt" })))
         ),
-        h("div", { className: "pn-ident-words" }, WEATHER2.alert.map(line)),
+        h("div", { className: "pn-ident-words pn-wx-alert-words" }, WEATHER2.alert.map(line)),
         outro ? null : h("i", { className: "pn-wx-flash", "aria-hidden": "true" })
       );
     }

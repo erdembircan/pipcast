@@ -1736,7 +1736,11 @@ body {
   width: 360px;
   height: 360px;
   margin: -180px 0 0 -180px;
-  transform: translate(250px, 268px) scale(0.8);
+  transform: translate(222px, 268px) scale(0.46);
+}
+.pn-wx-alert-words {
+  left: 340px;
+  right: 126px;
 }
 .pn-wx-alert-dial .pn-dial {
   position: absolute;
@@ -1768,11 +1772,11 @@ body {
 @keyframes pn-wx-dial-in {
   from {
     opacity: 0;
-    transform: translate(250px, 268px) scale(1.15);
+    transform: translate(222px, 268px) scale(0.662);
   }
   to {
     opacity: 1;
-    transform: translate(250px, 268px) scale(0.8);
+    transform: translate(222px, 268px) scale(0.46);
   }
 }
 .pn-anim .pn-wx-alert-bolt {
@@ -1867,11 +1871,11 @@ body {
 @keyframes pn-wx-dial-out {
   0%, 28% {
     opacity: 1;
-    transform: translate(250px, 268px) scale(0.8);
+    transform: translate(222px, 268px) scale(0.46);
   }
   52%, 100% {
     opacity: 0;
-    transform: translate(250px, 268px) scale(0.56);
+    transform: translate(222px, 268px) scale(0.322);
   }
 }
 .pn-anim .pn-wx-alert-out .pn-wx-alert-bolt {
