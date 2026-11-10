@@ -265,13 +265,15 @@ export function forecastWeek(history: WeekHistory, usedNow: number, now: number)
   const used = clamp(usedNow, 0, 100)
   const base = { computedAt: now, resetsAt: reset, used }
 
+  // A week already used up has run out, in its first day as in any other: a
+  // storm that has hit is no warning
+  if (used >= 100) {
+    return { ...base, outlook: 'out', startsAt: null, end: used, chance: 1, runsOutAt: null, days: [] }
+  }
+
   // 0. The week's first day is too early to say
   if (now - start < MIN_ELAPSED_MS) {
     return { ...base, outlook: 'early', startsAt: start + MIN_ELAPSED_MS, end: used, chance: 0, runsOutAt: null, days: [] }
-  }
-  // A week already used up has run out: a storm that has hit is no warning
-  if (used >= 100) {
-    return { ...base, outlook: 'out', startsAt: null, end: used, chance: 1, runsOutAt: null, days: [] }
   }
   const closes = closesBetween(now, reset)
 

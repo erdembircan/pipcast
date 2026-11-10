@@ -768,11 +768,11 @@
     }
     const used = clamp(usedNow, 0, 100);
     const base = { computedAt: now, resetsAt: reset, used };
-    if (now - start < MIN_ELAPSED_MS) {
-      return { ...base, outlook: "early", startsAt: start + MIN_ELAPSED_MS, end: used, chance: 0, runsOutAt: null, days: [] };
-    }
     if (used >= 100) {
       return { ...base, outlook: "out", startsAt: null, end: used, chance: 1, runsOutAt: null, days: [] };
+    }
+    if (now - start < MIN_ELAPSED_MS) {
+      return { ...base, outlook: "early", startsAt: start + MIN_ELAPSED_MS, end: used, chance: 0, runsOutAt: null, days: [] };
     }
     const closes = closesBetween(now, reset);
     const points = history.points.filter(([when]) => when >= start && when <= now);

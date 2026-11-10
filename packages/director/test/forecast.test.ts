@@ -183,6 +183,24 @@ describe('the week’s edges', () => {
     expect(forecast?.runsOutAt).toBeNull()
   })
 
+  it('is out when the week is used up even in its first day, not early', () => {
+    const now = START + 20 * HOUR_MS
+    const forecast = forecastWeek({ resetsAt: RESET, points: [[now - 1000, 100]] }, 100, now)
+    expect(forecast).toEqual({
+      computedAt: now,
+      resetsAt: RESET,
+      outlook: 'out',
+      startsAt: null,
+      used: 100,
+      end: 100,
+      chance: 1,
+      runsOutAt: null,
+      days: [],
+    })
+    // A week that has not run out is still early in its first day
+    expect(forecastWeek({ resetsAt: RESET, points: [[now - 1000, 99]] }, 99, now)?.outlook).toBe('early')
+  })
+
   it('has no forecast once the week has reset', () => {
     expect(forecastWeek(steady(0.9), 40, RESET)).toBeNull()
     expect(forecastWeek(steady(0.9), 40, RESET + HOUR_MS)).toBeNull()
