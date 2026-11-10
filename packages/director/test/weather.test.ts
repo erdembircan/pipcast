@@ -212,6 +212,22 @@ describe('the crawl while the week is forecast', () => {
     expect(items.length).toBeLessThanOrEqual(6)
   })
 
+  it('makes its lines once for a forecast: the same ones are on the crawl at every tick', () => {
+    const now = local(13, 15, 12)
+    for (const [rate, key] of [
+      [0.9, 'forecast'],
+      [1.6, 'warning'],
+    ] as const) {
+      const { h } = onAStorm(now, { rate, warnedAt: now - MIN })
+      const line = () => (h.history[h.history.length - 1]?.program.scene.ticker ?? []).find((item) => typeof item !== 'string' && item.key === key)
+      h.until(now + 250)
+      const first = line()
+      expect(first).toBeDefined()
+      h.until(now + 5_000)
+      expect(line()).toBe(first)
+    }
+  })
+
   it('says clear skies under a sun', () => {
     const scene = board(0.6, local(13, 15, 12))
     const forecast = (scene.ticker ?? []).find((item) => typeof item !== 'string' && item.key === 'forecast')

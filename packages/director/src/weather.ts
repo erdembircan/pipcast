@@ -74,6 +74,10 @@ export function createWeatherDesk(options: WeatherDeskOptions = {}): WeatherDesk
   // The newest reading the desk has taken, and the forecast it holds
   let reading: WeekReading | null = null
   let cached: Forecast | null = null
+  // Whether the history or STORM WARNING's time has changed since `memory` last
+  // compared them with what the station holds: it looks no further than this flag
+  // on a tick that changed neither
+  let changed = false
 
   function stand(): Posted {
     const last = history === null ? undefined : history.points[history.points.length - 1]
@@ -143,7 +147,11 @@ export function createWeatherDesk(options: WeatherDeskOptions = {}): WeatherDesk
       return
     }
     reading = found
+    const before = history
     history = recordReading(history, found)
+    if (history !== before) {
+      changed = true
+    }
     if (history === null) {
       cached = null
       return
@@ -199,9 +207,14 @@ export function createWeatherDesk(options: WeatherDeskOptions = {}): WeatherDesk
     },
     markDue(now) {
       warnedAt = now
+      changed = true
     },
     memory() {
-      if (!loaded || !behind()) {
+      if (!loaded || !changed) {
+        return null
+      }
+      changed = false
+      if (!behind()) {
         return null
       }
       posted = stand()

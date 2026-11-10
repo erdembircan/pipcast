@@ -950,6 +950,7 @@
     let scanned = null;
     let reading = null;
     let cached = null;
+    let changed = false;
     function stand() {
       const last = history === null ? void 0 : history.points[history.points.length - 1];
       return {
@@ -1003,7 +1004,11 @@
         return;
       }
       reading = found;
+      const before = history;
       history = recordReading(history, found);
+      if (history !== before) {
+        changed = true;
+      }
       if (history === null) {
         cached = null;
         return;
@@ -1051,9 +1056,14 @@
       },
       markDue(now) {
         warnedAt = now;
+        changed = true;
       },
       memory() {
-        if (!loaded || !behind()) {
+        if (!loaded || !changed) {
+          return null;
+        }
+        changed = false;
+        if (!behind()) {
           return null;
         }
         posted = stand();
@@ -1177,6 +1187,18 @@
       sky: skyFor(forecast.end)
     };
   }
+  var linesOf = /* @__PURE__ */ new WeakMap();
+  function forecastLines(forecast) {
+    let lines = linesOf.get(forecast);
+    if (lines === void 0) {
+      lines = {
+        forecast: forecastItem(forecast),
+        warning: forecast.outlook === "storm" && forecast.runsOutAt !== null ? { lead: LEAD.stormWarning, text: warningLine(aroundTime(forecast.runsOutAt), dayTime(forecast.resetsAt)), key: "warning" } : void 0
+      };
+      linesOf.set(forecast, lines);
+    }
+    return lines;
+  }
   function boardTicker(now, snapshot, state, extra = {}) {
     const leads = extra.lead === void 0 ? [] : [extra.lead];
     let comingUp = 0;
@@ -1259,14 +1281,10 @@
     }
     const onAir = snapshot.sessions.length;
     const working = snapshot.sessions.filter((session) => session.state === "working");
-    const { forecast } = state;
-    const outlook = forecast === null ? void 0 : forecastItem(forecast);
-    if (forecast !== null && forecast.outlook === "storm" && forecast.runsOutAt !== null) {
-      leads.unshift({
-        lead: LEAD.stormWarning,
-        text: warningLine(aroundTime(forecast.runsOutAt), dayTime(forecast.resetsAt)),
-        key: "warning"
-      });
+    const lines = state.forecast === null ? void 0 : forecastLines(state.forecast);
+    const outlook = lines?.forecast;
+    if (lines?.warning !== void 0) {
+      leads.unshift(lines.warning);
     }
     const items = leads.slice(0, MAX_TICKER - (outlook === void 0 ? 1 : 2));
     items.push({ lead: LEAD.onTheDesk, text: deskLine(working.length, onAir), key: "desk" });
@@ -5654,7 +5672,7 @@
         session.checkedInAt = now;
       }
       records += 1;
-      receive({ type: "snapshot", now, visible: true, sessions, lastReportAt: null, records });
+      receive({ type: "snapshot", now, visible: true, sessions, lastReportAt: null, records, weather: null });
     }
     step();
     const timer = window.setInterval(step, 1e3);
@@ -5684,7 +5702,7 @@
       throw new Error("a still needs a scene or a snapshot");
     }
     const until = input.at ?? snapshot.now;
-    const director = createDirector();
+    const director = createDirector({ weather: null });
     let now = snapshot.now;
     let program = director.tick({ now, snapshot });
     while (now < until) {

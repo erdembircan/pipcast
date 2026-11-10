@@ -71,6 +71,20 @@ describe('stillScene', () => {
     })
   })
 
+  it('draws the forecast from the week limit in the snapshot, though the snapshot has no weather memory', () => {
+    const limit = { kind: 'week' as const, percentUsed: 5, resetsAt: NOW + 6.5 * 24 * 3_600_000, at: NOW - 1_000 }
+    const snapshot = {
+      now: NOW,
+      visible: true,
+      lastReportAt: null,
+      sessions: [
+        { v: 1 as const, id: 'a', title: 'Fix it', project: 'shop', state: 'working' as const, stateAt: NOW, tunedInAt: 0, checkedInAt: NOW, stories: [], activity: [], hours: [], limits: [limit] },
+      ],
+    }
+    const items = stillScene({ snapshot }).ticker ?? []
+    expect(items.some((item) => typeof item !== 'string' && item.key === 'forecast')).toBe(true)
+  })
+
   it('needs a scene or a snapshot', () => {
     expect(() => stillScene({})).toThrow()
   })

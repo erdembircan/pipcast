@@ -89,6 +89,30 @@ function forecastItem(forecast: Forecast): TickerItem | undefined {
   }
 }
 
+// The crawl's two lines for a forecast, made once for each forecast the desk
+// works out, not again on every tick that draws the board
+interface ForecastLines {
+  forecast: TickerItem | undefined
+  warning: TickerItem | undefined
+}
+
+const linesOf = new WeakMap<Forecast, ForecastLines>()
+
+function forecastLines(forecast: Forecast): ForecastLines {
+  let lines = linesOf.get(forecast)
+  if (lines === undefined) {
+    lines = {
+      forecast: forecastItem(forecast),
+      warning:
+        forecast.outlook === 'storm' && forecast.runsOutAt !== null
+          ? { lead: LEAD.stormWarning, text: warningLine(aroundTime(forecast.runsOutAt), dayTime(forecast.resetsAt)), key: 'warning' }
+          : undefined,
+    }
+    linesOf.set(forecast, lines)
+  }
+  return lines
+}
+
 export function boardTicker(now: number, snapshot: Snapshot, state: BoardState, extra: TickerExtra = {}): TickerItem[] {
   const leads: TickerItem[] = extra.lead === undefined ? [] : [extra.lead]
 
@@ -187,14 +211,10 @@ export function boardTicker(now: number, snapshot: Snapshot, state: BoardState, 
   // line follows the desk, and makes room for itself as well.
   const onAir = snapshot.sessions.length
   const working = snapshot.sessions.filter((session) => session.state === 'working')
-  const { forecast } = state
-  const outlook = forecast === null ? undefined : forecastItem(forecast)
-  if (forecast !== null && forecast.outlook === 'storm' && forecast.runsOutAt !== null) {
-    leads.unshift({
-      lead: LEAD.stormWarning,
-      text: warningLine(aroundTime(forecast.runsOutAt), dayTime(forecast.resetsAt)),
-      key: 'warning',
-    })
+  const lines = state.forecast === null ? undefined : forecastLines(state.forecast)
+  const outlook = lines?.forecast
+  if (lines?.warning !== undefined) {
+    leads.unshift(lines.warning)
   }
   const items: TickerItem[] = leads.slice(0, MAX_TICKER - (outlook === undefined ? 1 : 2))
   items.push({ lead: LEAD.onTheDesk, text: deskLine(working.length, onAir), key: 'desk' })

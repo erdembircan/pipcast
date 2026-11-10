@@ -142,7 +142,8 @@ export function startDemo(): () => void {
       session.checkedInAt = now
     }
     records += 1
-    receive({ type: 'snapshot', now, visible: true, sessions, lastReportAt: null, records })
+    // The demo has no weather.json: the station would send its null until the page has it
+    receive({ type: 'snapshot', now, visible: true, sessions, lastReportAt: null, records, weather: null })
   }
 
   step()

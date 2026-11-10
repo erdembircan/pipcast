@@ -34,7 +34,8 @@ export function stillScene(input: StillInput): Scene {
     throw new Error('a still needs a scene or a snapshot')
   }
   const until = input.at ?? snapshot.now
-  const director = createDirector()
+  // A still has no weather memory: its snapshot is all the director has of the week
+  const director = createDirector({ weather: null })
   let now = snapshot.now
   let program = director.tick({ now, snapshot })
   while (now < until) {
