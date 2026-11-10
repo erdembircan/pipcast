@@ -14,7 +14,7 @@ import {
 } from '../../contract/src/index.ts'
 import type { Snapshot } from '../../contract/src/types.ts'
 import { createDirector } from '../../director/src/director.ts'
-import { DESK_MS, GAP_MS, IDENT_MS, REVIEW_MS, STINGER_MS } from '../../director/src/timing.ts'
+import { ALERT_MS, ALERT_OUTRO_MS, DESK_MS, GAP_MS, IDENT_MS, REVIEW_MS, STINGER_MS, STORMTRACKER_MS } from '../../director/src/timing.ts'
 
 import { CUE_WAIT_MS, createDevDirector } from '../src/director.ts'
 import { DEFAULTS, T0, at, cue, devHarness, jingles, keys, session, story } from './helpers.ts'
@@ -253,6 +253,153 @@ describe('an hour cue', () => {
   })
 })
 
+// What a made-up week is read from, as a session's limit
+const realWeek = (percentUsed: number, readAt: number) => ({
+  kind: 'week' as const,
+  percentUsed,
+  resetsAt: at(14, 30) + 3 * 24 * 3_600_000,
+  at: readAt,
+})
+
+describe('a warning cue', () => {
+  it('airs WEATHER ALERT, STORMTRACKER and the outro on a week made up to run out, and keeps nothing', () => {
+    const h = devHarness(T0, [session('a')])
+    h.until(T0 + 3000)
+    h.dev.cue(cue({ id: 'w1', segment: 'warning' }))
+    const open = h.step()
+    expect(open.program.key).toBe(`warning:${open.now}:0`)
+    expect(open.program.scene).toMatchObject({ mode: 'alert', progress: 1 })
+    expect(jingles(open.program)).toEqual(['weather-alert'])
+    const tracker = h.until(open.now + ALERT_MS + 250)
+    expect(tracker.program.key).toBe(`warning:${open.now}:1`)
+    expect(tracker.program.scene.mode).toBe('stormtracker')
+    expect(tracker.program.scene.tickerLabel).toBe('WARNING')
+    expect(tracker.program.scene.weather).toMatchObject({ outlook: 'storm', used: '72%', sky: 'storm' })
+    expect(tracker.program.scene.weather?.track?.marks.length).toBeGreaterThan(0)
+    expect(tracker.program.sounds).toEqual([{ type: 'bed', bed: 'beat-minor' }])
+    const outro = h.until(open.now + ALERT_MS + STORMTRACKER_MS + 250)
+    expect(outro.program.scene).toMatchObject({ mode: 'outro', open: 'alert' })
+    expect(jingles(outro.program)).toEqual(['breaking-out'])
+    const after = h.until(open.now + ALERT_MS + STORMTRACKER_MS + ALERT_OUTRO_MS + 1_000)
+    expect(after.program.key).toBe('board')
+    expect(h.lines).toEqual(['dev: w1 waits for the window to show and the air to clear', 'dev: w1 on air', 'dev: w1 off air'])
+    expect(h.history.every((sample) => sample.program.reported === null && sample.program.weather === null)).toBe(true)
+  })
+
+  it('takes the share used from the cue', () => {
+    const h = devHarness(T0, [session('a')])
+    h.until(T0 + 3000)
+    h.dev.cue(cue({ id: 'w2', segment: 'warning', used: 45 }))
+    const open = h.step()
+    const tracker = h.until(open.now + ALERT_MS + 250)
+    expect(tracker.program.scene.weather?.used).toBe('45%')
+  })
+
+  it('airs on a made-up week in place of the real one, and the sessions keep their other limits', () => {
+    const own = { kind: 'session' as const, percentUsed: 12, resetsAt: T0 + 3_600_000, at: T0 }
+    const h = devHarness(T0, [session('a', { limits: [own, realWeek(5, T0)] })])
+    h.until(T0 + 3000)
+    h.dev.cue(cue({ id: 'w3', segment: 'warning' }))
+    const open = h.step()
+    expect(open.program.key).toMatch(/^warning:/)
+    const tracker = h.until(open.now + ALERT_MS + 250)
+    expect(tracker.program.scene.weather?.used).toBe('72%')
+    const board = h.until(open.now + ALERT_MS + STORMTRACKER_MS + ALERT_OUTRO_MS + 1_000)
+    // The board's meters are the real limits again, the made-up week gone
+    expect(board.program.scene.limits).toEqual([
+      { kind: 'session', percent: 12 },
+      { kind: 'week', percent: 5 },
+    ])
+  })
+
+  it('waits while the window is hidden, and airs once it shows, never skipped', () => {
+    const h = devHarness(T0, [session('a')])
+    h.world.visible = false
+    h.until(T0 + 3000)
+    h.dev.cue(cue({ id: 'w4', segment: 'warning' }))
+    h.until(T0 + 60_000)
+    expect(keys(h.history).some((key) => key.startsWith('warning:'))).toBe(false)
+    h.world.visible = true
+    expect(h.step().program.key).toMatch(/^warning:/)
+  })
+
+  it('is cut when the window hides, and never airs again', () => {
+    const h = devHarness(T0, [session('a')])
+    h.until(T0 + 3000)
+    h.dev.cue(cue({ id: 'w5', segment: 'warning' }))
+    const open = h.step()
+    h.until(open.now + 3_000)
+    h.world.visible = false
+    h.until(open.now + 4_000)
+    h.world.visible = true
+    h.until(open.now + 60_000)
+    expect(keys(h.history).filter((key) => key.startsWith('warning:'))).toEqual([`warning:${open.now}:0`, `warning:${open.now}:1`])
+  })
+
+  it('leaves the real weather as it was: the station’s own readings still go to the station', () => {
+    const h = devHarness(T0, [session('a', { limits: [realWeek(30, T0 - 60_000)] })])
+    h.until(T0 + 3000)
+    h.dev.cue(cue({ id: 'w6', segment: 'warning' }))
+    const open = h.step()
+    h.world.sessions = [session('a', { limits: [realWeek(31, open.now + 1_000)] })]
+    h.until(open.now + 20_000)
+    const posted = h.history.flatMap((sample) => (sample.program.weather === null ? [] : [sample.program.weather]))
+    expect(posted.length).toBeGreaterThan(0)
+    // Only the real week's points, never the made-up one's
+    expect(posted.every((memory) => memory.points.every(([, percent]) => percent <= 31))).toBe(true)
+    expect(posted.every((memory) => memory.warnedAt === null)).toBe(true)
+  })
+})
+
+describe('an hour cue with weather', () => {
+  const modes = (h: ReturnType<typeof devHarness>, prefix: string) => {
+    const seen = new Map<string, string>()
+    for (const sample of h.history) {
+      if (sample.program.key.startsWith(prefix) && !seen.has(sample.program.key)) {
+        seen.set(sample.program.key, sample.program.scene.mode)
+      }
+    }
+    return [...seen.values()]
+  }
+
+  it.each([
+    ['clear', ['ident', 'desk', 'weather-now', 'weather-days', 'outro']],
+    ['clouds', ['ident', 'desk', 'weather-now', 'weather-days', 'outro']],
+    ['storm', ['ident', 'desk', 'weather-now', 'weather-days', 'stormtracker', 'outro']],
+  ] as const)('adds KLWD WEATHER to the report for %s skies', (weather, steps) => {
+    const h = devHarness(T0, [session('a')])
+    h.until(T0 + 3000)
+    h.dev.cue(cue({ id: 'h1', segment: 'hour', weather }))
+    h.step()
+    h.until(T0 + 3000 + 70_000)
+    expect(modes(h, `hour:${at(15)}`)).toEqual(steps)
+    const page = h.history.find((sample) => sample.program.scene.mode === 'weather-now')?.program.scene
+    expect(page?.weather?.outlook).toBe(weather)
+    expect(page?.weather?.used).toBe({ clear: '36%', clouds: '48%', storm: '72%' }[weather])
+    // The report is the whole of it: no STORM WARNING follows, and nothing is kept
+    expect(keys(h.history).some((key) => key.startsWith('warning:'))).toBe(false)
+    expect(h.history.every((sample) => sample.program.reported === null && sample.program.weather === null)).toBe(true)
+  })
+
+  it('takes the share used from the cue', () => {
+    const h = devHarness(T0, [session('a')])
+    h.until(T0 + 3000)
+    h.dev.cue(cue({ id: 'h2', segment: 'hour', weather: 'clouds', used: 60 }))
+    h.step()
+    h.until(T0 + 3000 + 40_000)
+    expect(h.history.find((sample) => sample.program.scene.mode === 'weather-now')?.program.scene.weather?.used).toBe('60%')
+  })
+
+  it('has no weather in a report that asks for none', () => {
+    const h = devHarness(T0, [session('a')])
+    h.until(T0 + 3000)
+    h.dev.cue(cue({ id: 'h3', segment: 'hour' }))
+    h.step()
+    h.until(T0 + 3000 + 40_000)
+    expect(modes(h, `hour:${at(15)}`)).toEqual(['ident', 'desk', 'outro'])
+  })
+})
+
 describe('the dev director', () => {
   it('with no cue, airs what the director does, tick for tick', () => {
     const plain = createDirector()
@@ -276,7 +423,7 @@ describe('the dev director', () => {
     h.dev.cue(cue({ id: 'c2', segment: 'story', stories: [{ kind: 'ready' }] }))
     expect(h.lines).toEqual([
       'dev: a cue was dropped: not JSON',
-      'dev: a cue was dropped: segment must be story or hour',
+      'dev: a cue was dropped: segment must be story, hour or warning',
       'dev: c2 waits for the window to show and the air to clear',
       'dev: c2 came twice; the second was dropped',
     ])

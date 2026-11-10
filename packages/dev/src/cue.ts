@@ -1,7 +1,8 @@
 // The cue: what scripts/live.sh drops into the store's dev folder for the
 // development build of the station, which hands it to its page. A cue airs one
-// segment now: BREAKING NEWS for each of its stories, one after another, or the
-// report on the next hour. The station and the page that ship take no cue.
+// segment now: BREAKING NEWS for each of its stories, one after another, the
+// report on the next hour, or STORM WARNING. The station and the page that ship
+// take no cue.
 //
 // scripts/cue.mjs runs this file with Node itself, so it imports with relative
 // paths only, and holds nothing Node can't strip of its types: no enum,
@@ -64,9 +65,22 @@ export interface DevHourCue {
   samples?: number
   // With samples: every one working, and no story this hour
   quiet?: boolean
+  // KLWD WEATHER in the report, on a week made up to give this outlook
+  weather?: WeatherOutlook
+  // With weather: the share of the week used now, 1 to 99; by default 36 for clear skies, 48 for clouds and 72 for a storm
+  used?: number
 }
 
-export type DevCue = DevStoryCue | DevHourCue
+export interface DevWarningCue {
+  id: string
+  segment: 'warning'
+  // The week used now, 1 to 99; 72 by default
+  used?: number
+}
+
+export type DevCue = DevStoryCue | DevHourCue | DevWarningCue
+
+export type WeatherOutlook = 'clear' | 'clouds' | 'storm'
 
 export type Checked = { cue: DevCue } | { problem: string }
 
@@ -79,10 +93,12 @@ const MAX_MINUTES = 9_999
 
 const KINDS: readonly StoryKind[] = ['needs-input', 'ready', 'complete', 'error']
 const STATES: readonly SessionState[] = ['working', 'needs-input', 'ready', 'error']
+const OUTLOOKS: readonly WeatherOutlook[] = ['clear', 'clouds', 'storm']
 const ID = /^[A-Za-z0-9_-]{1,64}$/
 
 const STORY_CUE_FIELDS = ['id', 'segment', 'stories']
-const HOUR_CUE_FIELDS = ['id', 'segment', 'sessions', 'samples', 'quiet']
+const HOUR_CUE_FIELDS = ['id', 'segment', 'sessions', 'samples', 'quiet', 'weather', 'used']
+const WARNING_CUE_FIELDS = ['id', 'segment', 'used']
 const STORY_FIELDS = ['kind', 'session', 'title', 'project', 'command', 'quote', 'added', 'removed', 'files', 'minutes']
 const SESSION_FIELDS = ['title', 'project', 'state', 'story', 'added', 'removed', 'files', 'minutes']
 
@@ -145,6 +161,17 @@ function whole(value: unknown, max: number, path: string): number | undefined {
   }
   if (typeof value !== 'number' || !Number.isInteger(value) || value < 0 || value > max) {
     fail(`${path} must be a whole number from 0 to ${max}`)
+  }
+  return value
+}
+
+// The share of the week used, 1 to 99
+function used(value: unknown): number | undefined {
+  if (value === undefined) {
+    return undefined
+  }
+  if (typeof value !== 'number' || !Number.isInteger(value) || value < 1 || value > 99) {
+    fail('used must be a whole number from 1 to 99')
   }
   return value
 }
@@ -267,9 +294,27 @@ function cue(value: unknown): DevCue {
       }
       out.quiet = value.quiet
     }
+    if (value.weather !== undefined) {
+      const weather = OUTLOOKS.find((one) => one === value.weather)
+      if (weather === undefined) {
+        fail(`weather must be ${either(OUTLOOKS, 'or')}`)
+      }
+      out.weather = weather
+    }
+    const share = used(value.used)
+    if (share !== undefined) {
+      if (out.weather === undefined) {
+        fail('used goes with weather')
+      }
+      out.used = share
+    }
     return out
   }
-  fail('segment must be story or hour')
+  if (value.segment === 'warning') {
+    onlyFields(value, WARNING_CUE_FIELDS, '')
+    return { id, segment: 'warning', ...defined('used', used(value.used)) }
+  }
+  fail('segment must be story, hour or warning')
 }
 
 // A cue as an object: the cue, with only the fields it may hold, or the first

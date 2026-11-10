@@ -4,7 +4,7 @@
 # hold the files plugin/ holds, with a station that says +dev and a page with
 # the dev director, while plugin/ stays as built. Then scripts/cue.mjs runs
 # against a throwaway store: what it says with no station on air, or one that
-# takes no cues, and the cue that story, hour and cue each write into the
+# takes no cues, and the cue that story, hour, warning and cue each write into the
 # store's dev folder beside a stand-in for the development build and a session
 # on air, or why they write none. No station starts and no window shows. The
 # temporary folder is removed on exit.
@@ -173,6 +173,27 @@ on_air
 check "hour --quiet takes four sample sessions" field_is samples 4
 check "and makes a quiet hour of them" field_is quiet true
 check "hour --sessions past 7 is refused, with the reason the page would drop it" grep -qF "That cue would be dropped: samples must be a whole number from 1 to 7." <<<"$("${cue[@]}" hour --sessions 9 2>&1 || true)"
+on_air
+"${cue[@]}" hour --weather storm >/dev/null
+check "hour --weather adds KLWD WEATHER to the report" field_is weather '"storm"'
+check "with no share used of its own" lacks used
+on_air
+"${cue[@]}" hour --sessions 3 --weather clouds --used 60 >/dev/null
+check "hour --used sets the share of the made-up week used" field_is used 60
+check "hour --weather takes only clear, clouds or storm" grep -qF "That cue would be dropped: weather must be clear, clouds or storm." <<<"$("${cue[@]}" hour --weather sunny 2>&1 || true)"
+check "hour --used with no weather is refused, with the reason the page would drop it" grep -qF "That cue would be dropped: used goes with weather." <<<"$("${cue[@]}" hour --used 50 2>&1 || true)"
+check "hour --used past 99 is refused" grep -qF "That cue would be dropped: used must be a whole number from 1 to 99." <<<"$("${cue[@]}" hour --weather storm --used 100 2>&1 || true)"
+check "and a share that isn't a whole number" grep -qF -- "--used takes a whole number." <<<"$("${cue[@]}" hour --weather storm --used lots 2>&1 || true)"
+
+on_air
+"${cue[@]}" warning >/dev/null
+check "warning cues STORM WARNING" field_is segment '"warning"'
+check "on a week made up to run out, 72% used by default" lacks used
+on_air
+"${cue[@]}" warning --used 40 >/dev/null
+check "warning --used sets the share used" field_is used 40
+check "warning --used past 99 is refused, with the reason the page would drop it" grep -qF "That cue would be dropped: used must be a whole number from 1 to 99." <<<"$("${cue[@]}" warning --used 120 2>&1 || true)"
+check "warning takes no other option" grep -qF "Unknown option --weather." <<<"$("${cue[@]}" warning --weather storm 2>&1 || true)"
 
 on_air
 printf '{"segment":"story","stories":[{"kind":"error","quote":"Claude is overloaded right now."}]}' >"$tmp/error.json"

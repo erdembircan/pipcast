@@ -137,7 +137,7 @@ describe('KLWD WEATHER', () => {
 
   describe('STORMTRACKER with no WebGL', () => {
     it('draws no globe, and shows TIME OF ARRIVAL with every row and the OUT tag', () => {
-      expect(window.THREE).toBeUndefined()
+      expect((window as unknown as { THREE?: unknown }).THREE).toBeUndefined()
       expect(() => draw(<news.Stormtracker weather={weatherOf('stormtracker')} animate />)).not.toThrow()
       expect(container.querySelector('.pn-wx-head')?.textContent).toBe('STORMTRACKERTO MON 18:00')
       expect(container.querySelector('.pn-wx-wall')?.classList.contains('pn-k-breaking')).toBe(true)

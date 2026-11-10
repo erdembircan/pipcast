@@ -1,16 +1,17 @@
 // The development build's director: the station's own director, with cues in
 // front of it. A cue waits until the window shows and nothing is on air or
-// due, then airs on a director of its own, which starts BREAKING NEWS or the
-// report on the next hour at once. Meanwhile the station's own director sees
-// every snapshot with the window held to the side, so it starts nothing: a
-// story that lands meanwhile waits its turn and airs after the cue's segment,
-// and the hour comes due for it as ever. Nothing a cue airs is kept. It posts
-// no report, so prefs.json and the report on the next hour are as they were.
+// due, then airs on a director of its own, which starts BREAKING NEWS, the
+// report on the next hour or STORM WARNING at once. Meanwhile the station's own
+// director sees every snapshot with the window held to the side, so it starts
+// nothing: a story that lands meanwhile waits its turn and airs after the cue's
+// segment, and the hour comes due for it as ever. Nothing a cue airs is kept.
+// It posts no report and no weather, so prefs.json, weather.json and the
+// report on the next hour are as they were.
 // With no cue, every tick goes straight to the station's own director, so the
 // development build airs what the release does.
 
 import { hourStart } from '../../contract/src/format.ts'
-import type { SessionRecord, Snapshot } from '../../contract/src/types.ts'
+import type { SessionRecord, Snapshot, UsageLimit, WeatherMemory } from '../../contract/src/types.ts'
 import { createDirector } from '../../director/src/director.ts'
 import type { DirectorOptions, Program, Tick } from '../../director/src/director.ts'
 import { GAP_MS, HOUR_MS, IDENT_LEAD_MS } from '../../director/src/timing.ts'
@@ -18,7 +19,7 @@ import { GAP_MS, HOUR_MS, IDENT_LEAD_MS } from '../../director/src/timing.ts'
 import { parseCue } from './cue.ts'
 import type { DevCue, DevStory } from './cue.ts'
 import type { Defaults } from './defaults.ts'
-import { hourSessions, land, overlay } from './world.ts'
+import { hourSessions, land, overlay, syntheticWeek } from './world.ts'
 
 // A cue waits this long at most for the window to show and the air to clear,
 // from the tick that first sees it; then it is dropped, so one left behind
@@ -63,6 +64,9 @@ interface Run {
   landed: Landed[]
   // An hour cue's sessions, in place of the ones on air; null for the ones on air
   sessions: SessionRecord[] | null
+  // A week made up for the cue, which the real forecast runs on: its readings,
+  // and the limit every session reads now; null for the real week
+  week: { memory: WeatherMemory; reading: UsageLimit } | null
 }
 
 export function createDevDirector(options: DevDirectorOptions): DevDirector {
@@ -85,8 +89,10 @@ export function createDevDirector(options: DevDirectorOptions): DevDirector {
     return snapshot === null ? null : { ...snapshot, windowOut: false }
   }
 
-  // The snapshot as the cue's director sees it
-  function view(current: Run, snapshot: Snapshot, now: number): Snapshot {
+  // The snapshot as the cue's director sees it. `reading`: whether the made-up
+  // week's limit is on each session, which the forecast works from; the week's
+  // readings are always in the snapshot, as the station sends them
+  function view(current: Run, snapshot: Snapshot, now: number, reading = true): Snapshot {
     let sessions: SessionRecord[] =
       current.sessions ??
       snapshot.sessions.map((session) => ({
@@ -100,7 +106,16 @@ export function createDevDirector(options: DevDirectorOptions): DevDirector {
           ? [...sessions, { ...landed.session, checkedInAt: now }]
           : sessions.map((session) => (session.id === on ? overlay(session, landed.session) : session))
     }
-    return { ...snapshot, sessions }
+    const week = current.week
+    if (week === null) {
+      return { ...snapshot, sessions }
+    }
+    // Every session reads the made-up week's limit besides its own other limits
+    sessions = sessions.map((session) => ({
+      ...session,
+      limits: [...(session.limits ?? []).filter((limit) => limit.kind !== 'week'), ...(reading ? [week.reading] : [])],
+    }))
+    return { ...snapshot, sessions, weather: week.memory }
   }
 
   // One tick of the cue's director: the next story lands, then it ticks
@@ -125,6 +140,12 @@ export function createDevDirector(options: DevDirectorOptions): DevDirector {
   }
 
   function start(cue: DevCue, now: number, snapshot: Snapshot): Run {
+    const week =
+      cue.segment === 'warning'
+        ? syntheticWeek('storm', cue.used, now)
+        : cue.segment === 'hour' && cue.weather !== undefined
+          ? syntheticWeek(cue.weather, cue.used, now)
+          : null
     const current: Run = {
       cue,
       director: createDirector({ reducedMotion }),
@@ -132,10 +153,15 @@ export function createDevDirector(options: DevDirectorOptions): DevDirector {
       toLand: cue.segment === 'story' ? [...cue.stories] : [],
       landed: [],
       sessions: cue.segment === 'hour' ? hourSessions(cue, defaults, now) : null,
+      week,
     }
     // Its first tick, with the window hidden, sees every story there is and
-    // queues none
-    current.director.tick({ now, snapshot: { ...view(current, snapshot, now), visible: false } })
+    // queues none. A warning cue's week is not read yet: a storm that came due
+    // with the window hidden would be skipped, and the next tick, with the
+    // window shown, is the one that computes the forecast and queues the
+    // warning, which airs at once. An hour cue's week is read, so no warning
+    // follows its report
+    current.director.tick({ now, snapshot: { ...view(current, snapshot, now, cue.segment !== 'warning'), visible: false } })
     if (cue.segment === 'hour') {
       // The next hour comes due, as it does five seconds before it: its
       // report joins the queue and waits, the window held to the side. From
@@ -160,7 +186,7 @@ export function createDevDirector(options: DevDirectorOptions): DevDirector {
 
     const current = run
     if (current !== null) {
-      main.tick({ now, snapshot: held(snapshot) })
+      const own = main.tick({ now, snapshot: held(snapshot) })
       const program = runTick(current, now, snapshot)
       const over =
         snapshot === null ||
@@ -172,8 +198,10 @@ export function createDevDirector(options: DevDirectorOptions): DevDirector {
         idleSince = now
         heldUntil = now + GAP_MS
       }
-      // A cue's report is never the last report: the real hour is as it was
-      return { ...program, reported: null }
+      // A cue's report is never the last report, and its week is never the
+      // station's: the real hour is as it was. What the station's own director
+      // has to keep still goes to the station
+      return { ...program, reported: null, weather: own.weather }
     }
 
     const program = main.tick({ now, snapshot: now < heldUntil ? held(snapshot) : snapshot })
@@ -198,7 +226,7 @@ export function createDevDirector(options: DevDirectorOptions): DevDirector {
     run = begun
     log(`dev: ${next.cue.id} on air`)
     const first = runTick(begun, now, snapshot)
-    return { ...first, sounds: [...program.sounds, ...first.sounds], reported: program.reported }
+    return { ...first, sounds: [...program.sounds, ...first.sounds], reported: program.reported, weather: program.weather }
   }
 
   function cue(text: string): void {

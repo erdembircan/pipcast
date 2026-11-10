@@ -32,6 +32,7 @@
 #                                 its place
 #   scripts/live.sh story ...     cues BREAKING NEWS in the development build
 #   scripts/live.sh hour ...      cues the report on the next hour in it
+#   scripts/live.sh warning ...   cues STORM WARNING in it
 #   scripts/live.sh cue <file>    cues what a JSON file holds, or - its input
 #
 # .dev/ and node_modules/ stay out of git at any commit through the main
@@ -47,8 +48,9 @@
 # those back on. Sessions pick a change up on /reload-plugins, or when they
 # start.
 #
-# story, hour and cue run the live checkout's own scripts/cue.mjs. A branch
-# called story, hour, cue or restart needs its full name, refs/heads/<name>.
+# story, hour, warning and cue run the live checkout's own scripts/cue.mjs. A
+# branch called story, hour, warning, cue or restart needs its full name,
+# refs/heads/<name>.
 # PIPCAST_LIVE_BUILD=release puts a commit's plugin/ in as it is, without
 # building, for scripts/test.d/50-live.sh.
 #
@@ -551,7 +553,7 @@ case "${1:-}" in
       echo "Stopped the station: a session on air starts it again, from the plugin it runs, within 10 s."
     fi
     ;;
-  story | hour | cue)
+  story | hour | warning | cue)
     if [[ ! -e "$live/.git" ]]; then
       echo "There is no live checkout at $live: run scripts/live.sh setup first." >&2
       exit 1
