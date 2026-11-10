@@ -1509,6 +1509,9 @@
       } catch (e) {
         return null;
       }
+      // A held picture is drawn as it stands: its labels and list are not brought in by a transition,
+      // which a page with no frames to run it, such as the station's snapshot, never plays
+      if (hold !== null) { root.classList.add('pn-wx-st3-held'); }
       var K = tokens(root);
       renderer.setPixelRatio(2);
       renderer.setSize(W, H, false);

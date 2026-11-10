@@ -3247,6 +3247,9 @@
         } catch (e) {
           return null;
         }
+        if (hold !== null) {
+          root.classList.add("pn-wx-st3-held");
+        }
         var K = tokens(root);
         renderer.setPixelRatio(2);
         renderer.setSize(W, H, false);

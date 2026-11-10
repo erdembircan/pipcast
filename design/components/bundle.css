@@ -671,6 +671,9 @@
 .pn-wx-st3-flare::after { content: ""; position: absolute; left: -200px; right: -200px; top: 50%; height: 4px; margin-top: -2px; background: linear-gradient(90deg, rgba(255, 255, 255, 0), rgba(255, 255, 255, 0.85), rgba(255, 255, 255, 0)); }
 .pn-wx-st3:not(.pn-wx-st3-tracking) .pn-wx-st3-flare { animation: pn-wx-st3-flare 2.4s ease-out both; }
 @keyframes pn-wx-st3-flare { 0% { opacity: 0; transform: scale(0.6); } 20% { opacity: 1; transform: scale(1); } 100% { opacity: 0; transform: scale(1.3) translateX(-60px); } }
+/* A held picture (a still, or reduced motion) shows its labels and list as they stand: nothing is brought in, and nothing blinks or pops */
+.pn-wx-st3-held .pn-wx-st3-label, .pn-wx-st3-held .pn-wx-st3-toa { transition: none; }
+.pn-wx-st3-held .pn-wx-st3-out.pn-wx-on > span, .pn-wx-st3-held .pn-wx-st3-toa > span.pn-wx-st3-hit.pn-wx-on { animation: none; }
 /* Where the globe can't be drawn (no three.js, no graphics context) the scene stays dark, with the list at the top left, every row lit, and the OUT tag at the top right */
 .pn-wx-st3-plain .pn-wx-st3-toa { opacity: 1; }
 .pn-wx-st3-plain .pn-wx-st3-toa > span { opacity: 1; color: var(--on-air, #ffffff); }

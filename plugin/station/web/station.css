@@ -1699,6 +1699,14 @@ body {
     transform: scale(1.3) translateX(-60px);
   }
 }
+.pn-wx-st3-held .pn-wx-st3-label,
+.pn-wx-st3-held .pn-wx-st3-toa {
+  transition: none;
+}
+.pn-wx-st3-held .pn-wx-st3-out.pn-wx-on > span,
+.pn-wx-st3-held .pn-wx-st3-toa > span.pn-wx-st3-hit.pn-wx-on {
+  animation: none;
+}
 .pn-wx-st3-plain .pn-wx-st3-toa {
   opacity: 1;
 }
