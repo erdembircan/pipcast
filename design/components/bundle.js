@@ -1754,6 +1754,8 @@
       }
       function draw(t) {
         placeCamera(t);
+        // the labels are placed by this pose, before render brings the camera's matrices up to it
+        camera.updateMatrixWorld();
         clouds.rotation.y = t * 0.006;
         cloudShadow.rotation.y = t * 0.006 - 0.003;
         var s = placeStorm(t);

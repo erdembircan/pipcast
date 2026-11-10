@@ -31,6 +31,9 @@ try {
       [
         '--headless=new',
         '--disable-gpu',
+        // STORMTRACKER's globe is WebGL, drawn by SwiftShader's software renderer
+        '--use-angle=swiftshader',
+        '--enable-unsafe-swiftshader',
         '--no-first-run',
         '--hide-scrollbars',
         `--user-data-dir=${join(work, name)}`,

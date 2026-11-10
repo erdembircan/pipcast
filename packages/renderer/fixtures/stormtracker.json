@@ -1,0 +1,65 @@
+{
+  "scene": {
+    "mode": "stormtracker",
+    "clock": "15:12",
+    "tickerLabel": "WARNING",
+    "weather": {
+      "outlook": "storm",
+      "used": "72%",
+      "sky": "storm",
+      "word": "STORM WARNING",
+      "strap": "The week runs out Sun around 05:00",
+      "until": "TO MON 18:00",
+      "days": [
+        {
+          "name": "FRI",
+          "sky": "partly",
+          "high": "78%",
+          "low": "72%"
+        },
+        {
+          "name": "SAT",
+          "sky": "overcast",
+          "high": "97%",
+          "low": "78%"
+        },
+        {
+          "name": "SUN",
+          "sky": "storm",
+          "high": "OUT",
+          "low": "97%",
+          "out": true
+        },
+        {
+          "name": "MON",
+          "sky": "storm",
+          "high": "OUT",
+          "low": "—",
+          "out": true
+        }
+      ],
+      "track": {
+        "marks": [
+          {
+            "when": "SAT 00:00",
+            "share": "78%",
+            "at": 0.23
+          },
+          {
+            "when": "SUN 00:00",
+            "share": "96%",
+            "at": 0.86
+          }
+        ],
+        "out": "SUN 05:00"
+      }
+    },
+    "ticker": [
+      {
+        "lead": "STORM WARNING",
+        "text": "in effect until Mon 18:00: at this pace the week runs out Sun around 05:00"
+      },
+      "pipcast: editing packages/director/src/forecast.ts"
+    ]
+  }
+}
