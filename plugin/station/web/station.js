@@ -1033,10 +1033,10 @@
           load(parseWeather(snapshot.weather));
         }
         clock2(now);
-        if (snapshot.records !== void 0 && snapshot.records === scanned) {
+        if (snapshot.limits !== void 0 && snapshot.limits === scanned) {
           return;
         }
-        scanned = snapshot.records;
+        scanned = snapshot.limits;
         scan(readingFn(snapshot.sessions, now), now);
       },
       forecast: () => cached,
@@ -5655,7 +5655,7 @@
     let cycleStart = started;
     let sessions = newSessions(started);
     let pending = plan();
-    let records = 0;
+    let limits = 0;
     function step() {
       const now = Date.now();
       if (now - cycleStart >= CYCLE_MS) {
@@ -5663,6 +5663,7 @@
         cycleStart = now;
         sessions = newSessions(now);
         pending = plan();
+        limits += 1;
       }
       const elapsed = now - cycleStart;
       while (pending[0] !== void 0 && pending[0].at <= elapsed) {
@@ -5671,8 +5672,7 @@
       for (const session of sessions) {
         session.checkedInAt = now;
       }
-      records += 1;
-      receive({ type: "snapshot", now, visible: true, sessions, lastReportAt: null, records, weather: null });
+      receive({ type: "snapshot", now, visible: true, sessions, lastReportAt: null, limits, weather: null });
     }
     step();
     const timer = window.setInterval(step, 1e3);

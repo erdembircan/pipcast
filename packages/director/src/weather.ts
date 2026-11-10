@@ -26,7 +26,7 @@ export interface WeatherDeskOptions {
 
 export interface WeatherDesk {
   // Once a tick with a snapshot. The desk looks through the sessions for the
-  // week's newest reading only when the snapshot's `records` differ from the
+  // week's newest reading only when the snapshot's `limits` differ from the
   // last it looked at (a snapshot with none says nothing, so they are looked
   // through), and does nothing with a reading that is no newer than the last it
   // took. The forecast is worked out only when something has
@@ -69,7 +69,7 @@ export function createWeatherDesk(options: WeatherDeskOptions = {}): WeatherDesk
   let warnedAt: number | null = null
   let posted: Posted = { hour: null, resetsAt: null, last: null, warnedAt: null }
 
-  // The `records` of the last snapshot the sessions were looked through for; null before the first
+  // The `limits` of the last snapshot the sessions were looked through for; null before the first
   let scanned: number | undefined | null = null
   // The newest reading the desk has taken, and the forecast it holds
   let reading: WeekReading | null = null
@@ -184,10 +184,10 @@ export function createWeatherDesk(options: WeatherDeskOptions = {}): WeatherDesk
         load(parseWeather(snapshot.weather))
       }
       clock(now)
-      if (snapshot.records !== undefined && snapshot.records === scanned) {
+      if (snapshot.limits !== undefined && snapshot.limits === scanned) {
         return
       }
-      scanned = snapshot.records
+      scanned = snapshot.limits
       scan(readingFn(snapshot.sessions, now), now)
     },
     forecast: () => cached,

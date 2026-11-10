@@ -67,11 +67,11 @@ describe('the weather desk does nothing while nothing happens', () => {
     expect(posts(h.history)).toEqual([])
   })
 
-  it('looks through nothing for an hour of snapshots every second while the records counter is unchanged', () => {
+  it('looks through nothing for an hour of snapshots every second while the limits counter is unchanged', () => {
     const { h, scans, forecasts, limit } = onAQuietWeek()
-    h.world.records = 7
+    h.world.limits = 7
     for (let at = start; at < local(13, 13, 59, 50); at += 1_000) {
-      // The station sends the records as they are, each snapshot a new object,
+      // The station sends the sessions as they are, each snapshot a new object,
       // with the session checking in again
       h.world.sessions = [session('a', { limits: [limit], checkedInAt: at })]
       h.at(at)
@@ -82,26 +82,55 @@ describe('the weather desk does nothing while nothing happens', () => {
     expect(posts(h.history)).toEqual([])
   })
 
+  it('looks through nothing for ten heartbeats over unchanged limits, and looks when a session joins or leaves or a limit changes', () => {
+    const { h, scans, forecasts, limit } = onAQuietWeek()
+    h.until(start)
+    expect(scans).toHaveLength(1)
+    // A heartbeat rewrites the whole record with a new check-in
+    for (let beat = 1; beat <= 10; beat += 1) {
+      const at = start + beat * 10_000
+      h.until(at - 250)
+      h.world.sessions = [session('a', { limits: [limit], checkedInAt: at, stateAt: at })]
+      h.until(at)
+    }
+    expect(scans).toHaveLength(1)
+    expect(forecasts).toHaveLength(1)
+    expect(posts(h.history)).toEqual([])
+    // A session going on air
+    const joined = [session('a', { limits: [limit] }), session('b')]
+    h.world.sessions = joined
+    h.until(start + 110_000)
+    expect(scans).toHaveLength(2)
+    // and going off it
+    h.world.sessions = [joined[0] as SessionRecord]
+    h.until(start + 120_000)
+    expect(scans).toHaveLength(3)
+    // and a session's limits changing
+    h.world.sessions = [session('a', { limits: [weekLimit(limit.percentUsed + 0.2, start + 125_000)] })]
+    h.until(start + 130_000)
+    expect(scans).toHaveLength(4)
+  })
+
   it('looks through the sessions when the counter moves, and does nothing with a reading that is no newer or that moved the share by less than a point', () => {
     const { h, scans, forecasts, limit } = onAQuietWeek()
-    h.world.records = 1
+    h.world.limits = 1
     h.until(start + 1_000)
-    h.world.records = 2
+    h.world.limits = 2
     h.until(start + 2_000)
-    h.world.records = 3
+    h.world.limits = 3
     h.until(start + 3_000)
     expect(scans).toHaveLength(3)
     expect(forecasts).toHaveLength(1)
     expect(posts(h.history)).toEqual([])
     h.world.sessions = [session('a', { limits: [weekLimit(limit.percentUsed + 0.4, start + 4_000)] })]
-    h.world.records = 4
+    h.world.limits = 4
     h.until(start + 5_000)
     expect(scans).toHaveLength(4)
     expect(forecasts).toHaveLength(1)
     expect(posts(h.history)).toEqual([])
   })
 
-  it('looks through the sessions at every snapshot that carries no counter, as one says nothing of whether the records changed', () => {
+  it('looks through the sessions at every snapshot that carries no counter, as one says nothing of whether the limits changed', () => {
     const scans: number[] = []
     const desk = createWeatherDesk({
       memory: null,
@@ -116,13 +145,13 @@ describe('the weather desk does nothing while nothing happens', () => {
     }
     expect(scans).toHaveLength(5)
     // A counter, then the same one again, then none, then it moves: it is looked at when it differs, and when there is none
-    desk.tick({ ...snapshot, records: 4 }, start + 5_000)
-    desk.tick({ ...snapshot, records: 4 }, start + 6_000)
+    desk.tick({ ...snapshot, limits: 4 }, start + 5_000)
+    desk.tick({ ...snapshot, limits: 4 }, start + 6_000)
     expect(scans).toHaveLength(6)
     desk.tick(snapshot, start + 7_000)
-    desk.tick({ ...snapshot, records: 4 }, start + 8_000)
+    desk.tick({ ...snapshot, limits: 4 }, start + 8_000)
     expect(scans).toHaveLength(8)
-    desk.tick({ ...snapshot, records: 4 }, start + 9_000)
+    desk.tick({ ...snapshot, limits: 4 }, start + 9_000)
     expect(scans).toHaveLength(8)
   })
 

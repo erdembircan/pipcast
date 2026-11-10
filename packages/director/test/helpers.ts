@@ -37,10 +37,14 @@ export interface World {
   // The station's weather.json, sent with every snapshot: null is no memory,
   // undefined leaves it out of the snapshots, as the station does once the page has it
   weather?: WeatherMemory | null
-  // The station's counter of changes to the records, when a test sets it itself;
-  // otherwise it rises when the sessions are swapped for others
-  records?: number
+  // The station's counter of changes to the on-air sessions' limits, when a test
+  // sets it itself; otherwise it rises as the station's does, when who is on air
+  // or the limits any of them holds change, and not when a session only checks in
+  limits?: number
 }
+
+// What the station's counter follows: each on-air session's id and its limits
+export const limitsOf = (sessions: readonly SessionRecord[]): string => JSON.stringify(sessions.map((one) => [one.id, one.limits ?? null]))
 
 export interface Sample {
   now: number
@@ -58,19 +62,18 @@ export function harness(start: number, sessions: SessionRecord[] = [], options: 
   const world: World = { sessions, visible: true, lastReportAt: null, weather: null }
   let now = start - 250
   const history: Sample[] = []
-  // The station raises its counter when the records change; here that is when
-  // the sessions are swapped for others
-  let records = 0
-  let lastSessions = sessions
+  let limits = 0
+  let seen = limitsOf(sessions)
 
   function tick(): Sample {
-    if (world.sessions !== lastSessions) {
-      lastSessions = world.sessions
-      records += 1
+    const signature = limitsOf(world.sessions)
+    if (signature !== seen) {
+      seen = signature
+      limits += 1
     }
     const snapshot: Snapshot = {
       now,
-      records: world.records ?? records,
+      limits: world.limits ?? limits,
       visible: world.visible,
       ...(world.windowOut === undefined ? {} : { windowOut: world.windowOut }),
       sessions: world.sessions,

@@ -37,6 +37,9 @@ export const DEFAULTS: Defaults = {
   },
 }
 
+// What the station's counter follows: each on-air session's id and its limits
+const limitsOf = (sessions: readonly SessionRecord[]): string => JSON.stringify(sessions.map((one) => [one.id, one.limits ?? null]))
+
 export function story(id: string, kind: Story['kind'], when: number, rest: Partial<Story> = {}): Story {
   return { id, kind, at: when, ...rest }
 }
@@ -92,10 +95,10 @@ export function cue(value: unknown): string {
 export function devHarness(
   start: number,
   sessions: SessionRecord[] = [],
-  options: { reducedMotion?: boolean; weather?: WeatherMemory | null; records?: boolean } = {},
+  options: { reducedMotion?: boolean; weather?: WeatherMemory | null; limits?: boolean } = {},
 ) {
   const lines: string[] = []
-  const { records: counted = true, ...rest } = options
+  const { limits: counted = true, ...rest } = options
   const dev = createDevDirector({ weather: null, ...rest, defaults: DEFAULTS, log: (text) => lines.push(text) })
   const world: { sessions: SessionRecord[]; visible: boolean; windowOut?: boolean; lastReportAt: number | null } = {
     sessions,
@@ -104,21 +107,22 @@ export function devHarness(
   }
   let now = start - 250
   const history: Sample[] = []
-  // The station raises its counter when the records change; here that is when
-  // the sessions are swapped for others
-  let records = 0
-  let lastSessions = sessions
+  // The station raises its counter when who is on air, or the limits any of them
+  // holds, change
+  let limits = 0
+  let seen = limitsOf(sessions)
 
   function step(): Sample {
     now += 250
-    if (world.sessions !== lastSessions) {
-      lastSessions = world.sessions
-      records += 1
+    const signature = limitsOf(world.sessions)
+    if (signature !== seen) {
+      seen = signature
+      limits += 1
     }
     const snapshot: Snapshot = {
       now,
-      // `records: false` leaves the counter out of the snapshots
-      ...(counted ? { records } : {}),
+      // `limits: false` leaves the counter out of the snapshots
+      ...(counted ? { limits } : {}),
       visible: world.visible,
       ...(world.windowOut === undefined ? {} : { windowOut: world.windowOut }),
       sessions: world.sessions,

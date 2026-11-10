@@ -19,9 +19,9 @@ final class StationController: NSObject, InteractionDelegate, WKNavigationDelega
     /// Whether the page has said it has the weather memory since it last said `ready`: until then every snapshot
     /// carries it.
     private var weatherHandoff = WeatherHandoff()
-    /// How many times the on-air records have changed. Every snapshot carries it, so the page looks through the
-    /// records for the week's reading only when it moves.
-    private var recordsVersion = 0
+    /// How many times what the weather reads of the sessions on air has changed: who is on air, and their limits.
+    /// Every snapshot carries it, so the page looks through the sessions for the week's reading only when it moves.
+    private var limitsCounter = LimitsCounter()
     private let startedAt = Date()
     private let startedAtMs = nowMilliseconds()
 
@@ -208,7 +208,7 @@ final class StationController: NSObject, InteractionDelegate, WKNavigationDelega
         let before = onAirRecords.map { $0.json as NSDictionary } as NSArray
         let after = air.map { $0.json as NSDictionary } as NSArray
         let changed = !before.isEqual(after)
-        if changed { recordsVersion += 1 }
+        limitsCounter.update(air)
         onAirRecords = air
         if air.isEmpty {
             if everOnAir && emptySince == nil { emptySince = Date() }
@@ -339,7 +339,7 @@ final class StationController: NSObject, InteractionDelegate, WKNavigationDelega
             "windowOut": windowOut,
             "sessions": onAirRecords.map { $0.json },
             "lastReportAt": prefs.lastReportAt.map { $0 as Any } ?? NSNull(),
-            "records": recordsVersion,
+            "limits": limitsCounter.count,
         ]
         // Null is no memory; left out, the page has it
         message.merge(weatherHandoff.snapshotEntries(weather)) { _, entry in entry }

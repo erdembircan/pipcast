@@ -136,11 +136,13 @@ export interface Snapshot {
   windowOut?: boolean
   sessions: SessionRecord[]
   lastReportAt: number | null
-  // How many times the on-air records have changed, in who is on air or in what
-  // their records say: the page looks through them for the week's reading only
-  // when it differs from the last time. A snapshot without one says nothing, so
-  // the page looks through them every time: every producer of snapshots sets it
-  records?: number
+  // How many times what the weather reads of the on-air sessions has changed:
+  // who is on air, and the `limits` each holds. A heartbeat's check-in, or any
+  // other change to a record, does not raise it. The page looks through the
+  // sessions for the week's reading only when it differs from the last time. A
+  // snapshot without one says nothing, so the page looks through them every
+  // time: every producer of snapshots sets it
+  limits?: number
   // The station's weather.json, sent in the snapshots after each `ready` until
   // the page says it has it (`weather-taken`). Absent: not sent. Null: there is
   // no memory. The page keeps it, and hands it to each director it makes

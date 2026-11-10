@@ -39,12 +39,12 @@ describe('the live page', () => {
     vi.useRealTimers()
   })
 
-  // The station's counter of changes to the records rises with each snapshot here, as each one differs
-  let records = 0
+  // The station's counter of changes to the sessions' limits rises with each snapshot here, as each one differs
+  let limits = 0
 
   function snapshot(sessions: unknown[], extra: Record<string, unknown> = {}) {
-    records += 1
-    return { type: 'snapshot', now: Date.now(), visible: true, sessions, lastReportAt: null, records, ...extra }
+    limits += 1
+    return { type: 'snapshot', now: Date.now(), visible: true, sessions, lastReportAt: null, limits, ...extra }
   }
 
   function record(extra: Record<string, unknown>) {

@@ -122,9 +122,9 @@ export function startDemo(): () => void {
   let cycleStart = started
   let sessions = newSessions(started)
   let pending = plan()
-  // The station's counter of changes to the records: the sessions check in anew
-  // at every step
-  let records = 0
+  // The station's counter of changes to the sessions' limits: they change with
+  // each cycle's new sessions, not as the sessions check in at every step
+  let limits = 0
 
   function step(): void {
     const now = Date.now()
@@ -133,6 +133,7 @@ export function startDemo(): () => void {
       cycleStart = now
       sessions = newSessions(now)
       pending = plan()
+      limits += 1
     }
     const elapsed = now - cycleStart
     while (pending[0] !== undefined && pending[0].at <= elapsed) {
@@ -141,9 +142,8 @@ export function startDemo(): () => void {
     for (const session of sessions) {
       session.checkedInAt = now
     }
-    records += 1
     // The demo has no weather.json: the station would send its null until the page has it
-    receive({ type: 'snapshot', now, visible: true, sessions, lastReportAt: null, records, weather: null })
+    receive({ type: 'snapshot', now, visible: true, sessions, lastReportAt: null, limits, weather: null })
   }
 
   step()

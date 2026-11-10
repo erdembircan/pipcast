@@ -350,8 +350,8 @@ describe('a warning cue', () => {
     expect(posted.every((memory) => memory.warnedAt === null)).toBe(true)
   })
 
-  it('does the same when the snapshots carry no counter of the records', () => {
-    const h = devHarness(T0, [session('a', { limits: [realWeek(30, T0 - 60_000)] })], { records: false })
+  it('does the same when the snapshots carry no counter of the limits', () => {
+    const h = devHarness(T0, [session('a', { limits: [realWeek(30, T0 - 60_000)] })], { limits: false })
     h.until(T0 + 3000)
     h.dev.cue(cue({ id: 'w7', segment: 'warning' }))
     const open = h.step()

@@ -68,10 +68,11 @@ interface Run {
   // A week made up for the cue, which the real forecast runs on: its readings,
   // and the limit every session reads now; null for the real week
   week: { memory: WeatherMemory; reading: UsageLimit } | null
-  // What the cue's director sees of the records, counted: it raises when the
-  // station's does, when a story lands, and when the made-up week's limit comes
-  // on the sessions, so the desk looks through them then and not on every tick
-  records: number
+  // What the cue's director sees of the snapshot's `limits`, counted: it raises
+  // when the station's does, when a story lands (a session joins), and when the
+  // made-up week's limit comes on the sessions, so the desk looks through them
+  // then and not on every tick
+  limits: number
   seen: number | undefined
 }
 
@@ -112,10 +113,10 @@ export function createDevDirector(options: DevDirectorOptions): DevDirector {
   // week's limit is on each session, which the forecast works from; the week's
   // readings are always in the snapshot, as the station sends them
   function view(current: Run, snapshot: Snapshot, now: number, reading = true): Snapshot {
-    // A snapshot with no counter says nothing of whether the records changed
-    if (snapshot.records === undefined || snapshot.records !== current.seen) {
-      current.seen = snapshot.records
-      current.records += 1
+    // A snapshot with no counter says nothing of whether the limits changed
+    if (snapshot.limits === undefined || snapshot.limits !== current.seen) {
+      current.seen = snapshot.limits
+      current.limits += 1
     }
     let sessions: SessionRecord[] =
       current.sessions ??
@@ -132,14 +133,14 @@ export function createDevDirector(options: DevDirectorOptions): DevDirector {
     }
     const week = current.week
     if (week === null) {
-      return { ...snapshot, sessions, records: current.records }
+      return { ...snapshot, sessions, limits: current.limits }
     }
     // Every session reads the made-up week's limit besides its own other limits
     sessions = sessions.map((session) => ({
       ...session,
       limits: [...(session.limits ?? []).filter((limit) => limit.kind !== 'week'), ...(reading ? [week.reading] : [])],
     }))
-    return { ...snapshot, sessions, records: current.records }
+    return { ...snapshot, sessions, limits: current.limits }
   }
 
   // One tick of the cue's director: the next story lands, then it ticks
@@ -159,7 +160,7 @@ export function createDevDirector(options: DevDirectorOptions): DevDirector {
         }
       }
       current.landed.push({ on, session: land(current.cue.id, index, next, defaults, now) })
-      current.records += 1
+      current.limits += 1
     }
     return current.director.tick({ now, snapshot: view(current, snapshot, now) })
   }
@@ -180,8 +181,8 @@ export function createDevDirector(options: DevDirectorOptions): DevDirector {
       landed: [],
       sessions: cue.segment === 'hour' ? hourSessions(cue, defaults, now) : null,
       week,
-      records: 0,
-      seen: snapshot.records,
+      limits: 0,
+      seen: snapshot.limits,
     }
     // Its first tick, with the window hidden, sees every story there is and
     // queues none. A warning cue's week is not read yet: a storm that came due
@@ -191,7 +192,7 @@ export function createDevDirector(options: DevDirectorOptions): DevDirector {
     // follows its report
     current.director.tick({ now, snapshot: { ...view(current, snapshot, now, cue.segment !== 'warning'), visible: false } })
     // The week's limit comes on the sessions now, for a warning cue
-    current.records += 1
+    current.limits += 1
     if (cue.segment === 'hour') {
       // The next hour comes due, as it does five seconds before it: its
       // report joins the queue and waits, the window held to the side. From
