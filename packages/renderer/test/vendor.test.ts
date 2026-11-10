@@ -1,5 +1,5 @@
 /// <reference types="node" />
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { JSDOM } from 'jsdom'
 import { describe, expect, it } from 'vitest'
 
@@ -30,29 +30,22 @@ describe('the React files the page ships', () => {
   })
 })
 
-describe('the three.js file the page ships', () => {
+describe('the page and the files beside it', () => {
   const web = (name: string) => readFileSync(new URL(`../../../plugin/station/web/${name}`, import.meta.url))
 
-  it('is version 0.149.0, readable, and sets the THREE the globe is drawn with', () => {
-    const source = shipped('three.js')
-    expect(source.split('\n').length).toBeGreaterThan(10_000)
-    const dom = new JSDOM('<!doctype html>', { runScripts: 'outside-only' })
-    dom.window.eval(source)
-    expect(dom.window.eval('THREE.REVISION')).toBe('149')
-    expect(dom.window.eval('typeof THREE.WebGLRenderer')).toBe('function')
-    expect(dom.window.eval('new THREE.Color("#ff0000").r')).toBe(1)
-    dom.window.close()
-  })
-
-  it('comes with its license', () => {
-    expect(shipped('LICENSE-three.txt')).toContain('Copyright © 2010-2023 three.js authors')
-  })
-
-  it('loads after React and before the page', () => {
+  it('loads React and then the page, and no other library', () => {
     const html = web('index.html').toString('utf8')
-    const order = ['vendor/react.production.min.js', 'vendor/react-dom.production.min.js', 'vendor/three.js', 'station.js'].map((name) => html.indexOf(name))
-    expect(order.every((at) => at >= 0)).toBe(true)
-    expect(order).toEqual([...order].sort((a, b) => a - b))
+    expect([...html.matchAll(/<script src="([^"]+)">/g)].map((match) => match[1])).toEqual([
+      'vendor/react.production.min.js',
+      'vendor/react-dom.production.min.js',
+      'station.js',
+    ])
+  })
+
+  it('ships no three.js: its file and license are not in the page, and nothing in the page reads a THREE', () => {
+    expect(existsSync(new URL('../../../plugin/station/web/vendor/three.js', import.meta.url))).toBe(false)
+    expect(existsSync(new URL('../../../plugin/station/web/vendor/LICENSE-three.txt', import.meta.url))).toBe(false)
+    expect(web('station.js').toString('utf8')).not.toMatch(/\bTHREE\b/)
   })
 
   it('has the four pictures of the Earth beside the page, and where they come from', () => {

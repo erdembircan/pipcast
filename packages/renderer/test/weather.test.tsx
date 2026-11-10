@@ -12,6 +12,7 @@ import { OUTLOOK_WORDS, outTag, WEATHER } from '@pipcast/contract'
 import type { Scene, WeatherScene } from '@pipcast/design'
 
 import { Broadcast, drawn, samples, Stage } from '../src/design.ts'
+import { fakeGL, stubWebGL } from './fakegl.ts'
 
 const flag = globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }
 flag.IS_REACT_ACT_ENVIRONMENT = true
@@ -58,8 +59,7 @@ describe('KLWD WEATHER', () => {
   afterEach(() => {
     act(() => root.unmount())
     container.remove()
-    Reflect.deleteProperty(window, 'THREE')
-    Reflect.deleteProperty(window, 'WebGLRenderingContext')
+    Reflect.deleteProperty(window, 'WebGL2RenderingContext')
     vi.restoreAllMocks()
     vi.unstubAllGlobals()
   })
@@ -139,7 +139,7 @@ describe('KLWD WEATHER', () => {
 
   describe('STORMTRACKER with no WebGL', () => {
     it('draws no globe, and shows TIME OF ARRIVAL with every row and the OUT tag', () => {
-      expect((window as unknown as { THREE?: unknown }).THREE).toBeUndefined()
+      expect((window as unknown as { WebGL2RenderingContext?: unknown }).WebGL2RenderingContext).toBeUndefined()
       expect(() => draw(<news.Stormtracker weather={weatherOf('stormtracker')} animate />)).not.toThrow()
       expect(container.querySelector('.pn-wx-head')?.textContent).toBe('STORMTRACKERTO MON 18:00')
       expect(container.querySelector('.pn-wx-wall')?.classList.contains('pn-k-breaking')).toBe(true)
@@ -172,74 +172,150 @@ describe('KLWD WEATHER', () => {
       expect(container.querySelectorAll('.pn-wx-st3-toa > span')).toHaveLength(1)
     })
 
-    it('stays dark when three.js is there and the graphics context cannot be made', () => {
-      const made = vi.fn(() => {
-        throw new Error('no context')
-      })
-      ;(window as unknown as { THREE: unknown }).THREE = { WebGLRenderer: made }
-      ;(window as unknown as { WebGLRenderingContext: unknown }).WebGLRenderingContext = class {}
+    it('stays dark when WebGL 2 is there and the graphics context cannot be made', () => {
+      const get = stubWebGL(null)
       expect(() => draw(<news.Stormtracker weather={weatherOf('stormtracker')} animate />)).not.toThrow()
-      expect(made).toHaveBeenCalledTimes(1)
+      expect(get).toHaveBeenCalledWith('webgl2', expect.objectContaining({ antialias: true }))
       expect(container.querySelector('.pn-wx-st3')?.classList.contains('pn-wx-st3-plain')).toBe(true)
       expect(container.querySelector('.pn-wx-st3-toa')).not.toBeNull()
     })
 
-    // A THREE whose every constructor and method answers with another stand-in, but for a renderer that cannot draw: it
-    // throws as WebKit does when the page may not read the files its pictures come from
-    // With `draws`, the renderer draws: then every z the scene is given is kept, which includes the storm's turn
-    function brokenThree(draws = false) {
-      const zs: number[] = []
-      const standIn: object = new Proxy(function () {}, {
-        get: (_target, key) => (key === Symbol.toPrimitive ? () => 0 : standIn),
-        apply: () => standIn,
-        construct: () => standIn,
-        set: (_target, key, value) => {
-          if (key === 'z' && typeof value === 'number') {
-            zs.push(value)
-          }
-          return true
-        },
+    it('stays dark when its shaders do not compile, and gives back what it made', () => {
+      const fake = fakeGL({ badShader: true })
+      stubWebGL(fake)
+      expect(() => draw(<news.Stormtracker weather={weatherOf('stormtracker')} animate />)).not.toThrow()
+      expect(container.querySelector('.pn-wx-st3')?.classList.contains('pn-wx-st3-plain')).toBe(true)
+      expect(fake.live()).toEqual({})
+      expect(fake.count('loseContext')).toBe(1)
+      expect(fake.count('drawElements')).toBe(0)
+    })
+
+    it('asks for no context where there is no WebGL 2', () => {
+      const get = vi.spyOn(HTMLCanvasElement.prototype, 'getContext')
+      draw(<news.Stormtracker weather={weatherOf('stormtracker')} animate />)
+      expect(get).not.toHaveBeenCalled()
+      expect(container.querySelector('.pn-wx-st3')?.classList.contains('pn-wx-st3-plain')).toBe(true)
+    })
+
+    // The four pictures come a moment later, as they do
+    const picturesCome = async () => {
+      await act(async () => {
+        await new Promise((done) => window.setTimeout(done, 30))
       })
-      const render = vi.fn(() => {
-        if (!draws) {
-          throw new Error('The operation is insecure.')
-        }
-      })
-      const dispose = vi.fn()
-      const forceContextLoss = vi.fn()
-      class Renderer {
-        setPixelRatio() {}
-        setSize() {}
-        render = render
-        dispose = dispose
-        forceContextLoss = forceContextLoss
-      }
-      class Loader {
-        setCrossOrigin() {}
-        // The pictures come a moment later, as they do
-        load(_url: string, onLoad: () => void) {
-          window.setTimeout(onLoad, 0)
-          return {}
-        }
-      }
-      const three = new Proxy({}, { get: (_target, key) => (key === 'WebGLRenderer' ? Renderer : key === 'TextureLoader' ? Loader : standIn) })
-      ;(window as unknown as { THREE: unknown }).THREE = three
-      ;(window as unknown as { WebGLRenderingContext: unknown }).WebGLRenderingContext = class {}
-      vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation((() => standIn) as never)
-      return { render, dispose, forceContextLoss, zs }
     }
 
-    it('gives the globe up when a picture is refused as it draws, once, and shows the list and the tag', async () => {
-      const three = brokenThree()
+    it('draws a held moment once, when its pictures have come, and then a still stops waiting', async () => {
+      const fake = fakeGL()
+      const get = stubWebGL(fake)
+      draw(<news.Stormtracker weather={weatherOf('stormtracker')} />)
+      // The buffer is kept for the picture the station takes of it
+      expect(get).toHaveBeenCalledWith('webgl2', expect.objectContaining({ preserveDrawingBuffer: true }))
+      expect(fake.count('clear')).toBe(0)
+      const waiting = drawn()
+      await picturesCome()
+      await expect(waiting).resolves.toBeDefined()
+      expect(fake.count('clear')).toBe(1)
+      // The stars, the earth, the clouds and their shadow, the air, the track, the dots and the target, the storm and its shadow
+      expect(fake.count('drawElements') + fake.count('drawArrays')).toBeGreaterThanOrEqual(12)
+      // Four pictures of the Earth and the three canvases' (the spiral, the dot and the ring) go up
+      expect(fake.count('texSubImage2D')).toBe(7)
+      expect(fake.count('generateMipmap')).toBe(7)
+      expect(container.querySelector('.pn-wx-st3')?.classList.contains('pn-wx-st3-plain')).toBe(false)
+      expect(container.querySelector('.pn-wx-st3')?.classList.contains('pn-wx-st3-held')).toBe(true)
+      // Nothing more is drawn while it holds
+      await picturesCome()
+      expect(fake.count('clear')).toBe(1)
+    })
+
+    it('stores the colour picture as sRGB and the others as plain bytes, flipped and not premultiplied', async () => {
+      const fake = fakeGL()
+      stubWebGL(fake)
+      draw(<news.Stormtracker weather={weatherOf('stormtracker')} />)
+      await picturesCome()
+      const storage = fake.calls.filter((call) => call.name === 'texStorage2D')
+      expect(storage).toHaveLength(7)
+      // One picture, the earth's, is stored one way, and the other six the other
+      const formats = storage.map((call) => call.args[2])
+      expect(formats.filter((format) => format === formats[0])).toHaveLength(1)
+      expect(new Set(formats).size).toBe(2)
+      const stores = fake.calls.filter((call) => call.name === 'pixelStorei')
+      expect(stores).toHaveLength(28)
+      // UNPACK_FLIP_Y true for every picture and UNPACK_PREMULTIPLY_ALPHA false for every one
+      expect(stores.filter((call) => call.args[1] === true)).toHaveLength(7)
+      expect(stores.filter((call) => call.args[1] === false)).toHaveLength(7)
+    })
+
+    // Draws the run from mount, one frame at each of the seconds, and gives what each frame did
+    function runOf(seconds: number[], after: (second: number) => void = () => undefined) {
+      const fake = fakeGL()
+      stubWebGL(fake)
+      const frames: (() => void)[] = []
+      vi.stubGlobal('requestAnimationFrame', (frame: () => void) => frames.push(frame))
+      let clock = 5_000
+      vi.spyOn(performance, 'now').mockImplementation(() => clock)
+      draw(<news.Stormtracker weather={weatherOf('stormtracker')} animate />)
+      expect(frames).toHaveLength(1)
+      return seconds.map((second) => {
+        clock = 5_000 + second * 1000
+        fake.since()
+        act(() => frames.shift()?.())
+        // Another frame is asked for each time
+        expect(frames).toHaveLength(1)
+        after(second)
+        return fake.since()
+      })
+    }
+    const uniforms = (frame: { name: string; args: unknown[] }[]) => JSON.stringify(frame.filter((call) => call.name.startsWith('uniform')))
+
+    it('keeps drawing through its 13 s, the storm turning on over the coast, and holds the last picture after', () => {
+      const [a, b, c, over, after] = runOf([9.5, 11.5, 12.9, 14, 20])
+      // The storm turns on, a different picture each time, to the end of the 13 s
+      expect(new Set([uniforms(a ?? []), uniforms(b ?? []), uniforms(c ?? [])]).size).toBe(3)
+      // Then the last picture holds: the timeline stops at 13 s, and the loop goes on drawing it
+      expect(uniforms(over ?? [])).toBe(uniforms(after ?? []))
+      expect(uniforms(over ?? [])).not.toBe(uniforms(c ?? []))
+      expect((over ?? []).filter((call) => call.name === 'clear')).toHaveLength(1)
+      expect(container.querySelector('.pn-wx-st3')?.classList.contains('pn-wx-st3-plain')).toBe(false)
+    })
+
+    it('draws the solid things first and the storm’s sheet last', () => {
+      const [frame] = runOf([5])
+      const draws = (frame ?? []).filter((call) => call.name === 'drawElements' || call.name === 'drawArrays')
+      // The stars are points, the first thing drawn
+      expect(draws[0]?.name).toBe('drawArrays')
+      expect(draws.length).toBeGreaterThanOrEqual(14)
+      // The storm's sheet, 220 x 220 quads of two triangles, is the last (it is drawn after everything else that is see-through)
+      const last = draws[draws.length - 1]
+      expect(last?.name).toBe('drawElements')
+      expect(last?.args[1]).toBe(220 * 220 * 6)
+    })
+
+    it('puts the labels where the camera sees their places, and lights the rows as the storm passes them', () => {
+      const lit: number[] = []
+      runOf([1, 9.5], (second) => {
+        const now = container.querySelector<HTMLElement>('.pn-wx-st3-now')
+        expect(now?.style.transform).toMatch(/^translate\(-?[\d.]+px,-?[\d.]+px\)$/)
+        // The dive is still on at 1 s, the storm is past two of the marks at 9.5 s
+        expect(now?.classList.contains('pn-wx-on')).toBe(second > 3)
+        lit.push(container.querySelectorAll('.pn-wx-st3-toa [data-row].pn-wx-on').length)
+      })
+      expect(lit[0]).toBe(0)
+      expect(lit[1]).toBeGreaterThanOrEqual(2)
+    })
+
+    it('gives the globe up when a picture is refused as it uploads, once, giving back all it made, and shows the list and the tag', () => {
+      const fake = fakeGL({ insecure: true })
+      stubWebGL(fake)
       const frames: (() => void)[] = []
       vi.stubGlobal('requestAnimationFrame', (frame: () => void) => frames.push(frame))
       draw(<news.Stormtracker weather={weatherOf('stormtracker')} animate />)
       expect(frames).toHaveLength(1)
       expect(container.querySelector('.pn-wx-st3')?.classList.contains('pn-wx-st3-plain')).toBe(false)
+      // The first frame cannot put the pictures on the card
       act(() => frames[0]?.())
-      expect(three.render).toHaveBeenCalledTimes(1)
-      expect(three.dispose).toHaveBeenCalledTimes(1)
-      expect(three.forceContextLoss).toHaveBeenCalledTimes(1)
+      expect(fake.count('texSubImage2D')).toBe(1)
+      expect(fake.count('loseContext')).toBe(1)
+      expect(fake.live()).toEqual({})
       // Never tried again, so it never throws every frame
       expect(frames).toHaveLength(1)
       const globe = container.querySelector('.pn-wx-st3')
@@ -253,45 +329,50 @@ describe('KLWD WEATHER', () => {
       }
     })
 
-    it('keeps drawing through its 13 s, the storm turning on over the coast, and holds the last picture after', () => {
-      const three = brokenThree(true)
-      const frames: (() => void)[] = []
-      vi.stubGlobal('requestAnimationFrame', (frame: () => void) => frames.push(frame))
-      let clock = 5_000
-      vi.spyOn(performance, 'now').mockImplementation(() => clock)
-      draw(<news.Stormtracker weather={weatherOf('stormtracker')} animate />)
-      expect(frames).toHaveLength(1)
-      const turn = (seconds: number) => {
-        three.zs.length = 0
-        clock = 5_000 + seconds * 1000
-        act(() => frames.shift()?.())
-        expect(frames).toHaveLength(1)
-        // The storm's spin, half a turn a second of the timeline
-        return three.zs.includes(seconds * 0.5)
-      }
-      // Past the 11 s the storm used to freeze at, to the end of the 13
-      expect(turn(9.5)).toBe(true)
-      expect(turn(11.5)).toBe(true)
-      expect(turn(12.9)).toBe(true)
-      // Then the last picture holds: the timeline stops at 13 s, and the loop goes on drawing it
-      expect(turn(14)).toBe(false)
-      expect(three.zs).toContain(13 * 0.5)
-      expect(three.render).toHaveBeenCalledTimes(4)
-      expect(container.querySelector('.pn-wx-st3')?.classList.contains('pn-wx-st3-plain')).toBe(false)
+    it('gives a held picture up too, and a still stops waiting for it', async () => {
+      const fake = fakeGL({ insecure: true })
+      stubWebGL(fake)
+      draw(<news.Stormtracker weather={weatherOf('stormtracker')} />)
+      const waiting = drawn()
+      await picturesCome()
+      await expect(waiting).resolves.toBeDefined()
+      expect(fake.count('texSubImage2D')).toBe(1)
+      expect(fake.count('loseContext')).toBe(1)
+      expect(fake.live()).toEqual({})
+      expect(container.querySelector('.pn-wx-st3')?.classList.contains('pn-wx-st3-plain')).toBe(true)
     })
 
-    it('gives a held picture up too, and a still stops waiting for it', async () => {
-      const three = brokenThree()
+    it('gives back every buffer, picture, program and array it made, and loses the context, when it is taken away', async () => {
+      const fake = fakeGL()
+      stubWebGL(fake)
       draw(<news.Stormtracker weather={weatherOf('stormtracker')} />)
-      expect((window as unknown as { THREE: unknown }).THREE).toBeDefined()
-      const waiting = drawn()
-      await act(async () => {
-        await new Promise((done) => window.setTimeout(done, 30))
-      })
-      await expect(waiting).resolves.toBeDefined()
-      expect(three.render).toHaveBeenCalledTimes(1)
-      expect(three.dispose).toHaveBeenCalledTimes(1)
-      expect(container.querySelector('.pn-wx-st3')?.classList.contains('pn-wx-st3-plain')).toBe(true)
+      await picturesCome()
+      const made = fake.live()
+      expect(made.Program).toBe(10)
+      expect(made.Texture).toBe(7)
+      expect(made.VertexArray).toBeGreaterThanOrEqual(10)
+      expect(made.Buffer).toBeGreaterThan(20)
+      expect(fake.count('loseContext')).toBe(0)
+      act(() => root.unmount())
+      root = createRoot(container)
+      expect(fake.live()).toEqual({})
+      expect(fake.count('loseContext')).toBe(1)
+    })
+
+    it('stops when the page takes its canvas away, and draws nothing more', () => {
+      const fake = fakeGL()
+      stubWebGL(fake)
+      const frames: (() => void)[] = []
+      vi.stubGlobal('requestAnimationFrame', (frame: () => void) => frames.push(frame))
+      draw(<news.Stormtracker weather={weatherOf('stormtracker')} animate />)
+      act(() => frames.shift()?.())
+      const before = fake.count('clear')
+      container.remove()
+      act(() => frames.shift()?.())
+      expect(fake.count('clear')).toBe(before)
+      expect(fake.live()).toEqual({})
+      expect(frames).toHaveLength(0)
+      document.body.append(container)
     })
 
     it('has nothing to wait for in a still with no globe', async () => {

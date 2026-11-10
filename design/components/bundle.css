@@ -640,7 +640,7 @@
 
 /* ---------- STORMTRACKER: the storm on its track ---------- */
 /* A 90s station's storm tracker, drawn in WebGL by stormScene (bundle.js,
-   three.js) on NASA's Blue Marble earth and clouds: the dive from orbit, then
+   straight onto the canvas) on NASA's Blue Marble earth and clouds: the dive from orbit, then
    the storm (the week's usage) crossing the Gulf from left to right, growing,
    to its landfall on Florida's coast where the week runs out. The labels
    pinned to the track and the TIME OF ARRIVAL list are HTML over the scene,
@@ -674,7 +674,7 @@
 /* A held picture (a still, or reduced motion) shows its labels and list as they stand: nothing is brought in, and nothing blinks or pops */
 .pn-wx-st3-held .pn-wx-st3-label, .pn-wx-st3-held .pn-wx-st3-toa { transition: none; }
 .pn-wx-st3-held .pn-wx-st3-out.pn-wx-on > span, .pn-wx-st3-held .pn-wx-st3-toa > span.pn-wx-st3-hit.pn-wx-on { animation: none; }
-/* Where the globe can't be drawn (no three.js, no graphics context) the scene stays dark, with the list at the top left, every row lit, and the OUT tag at the top right */
+/* Where the globe can't be drawn (no WebGL 2) the scene stays dark, with the list at the top left, every row lit, and the OUT tag at the top right */
 .pn-wx-st3-plain .pn-wx-st3-toa { opacity: 1; }
 .pn-wx-st3-plain .pn-wx-st3-toa > span { opacity: 1; color: var(--on-air, #ffffff); }
 .pn-wx-st3-plain .pn-wx-st3-toa > span.pn-wx-st3-hit { color: var(--breaking-text, #ff8a80); animation: none; }

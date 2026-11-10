@@ -3168,9 +3168,11 @@
         )
       ]);
     }
-    var stormScene = /* @__PURE__ */ (function() {
+    var stormScene = (function() {
       var DUR = 13, T_DIVE = 2.6, T_LAND = 9;
       var START = [25.4, -95.4], END = [27.95, -82.75];
+      var NEAR = 1e-3, FAR = 200, FOV = 38, RATIO = 2;
+      var CLEAR = [1 / 255, 3 / 255, 10 / 255];
       function rad(d) {
         return d * Math.PI / 180;
       }
@@ -3181,27 +3183,192 @@
         x = clamp2(x, 0, 1);
         return x * x * (3 - 2 * x);
       }
-      function geo(lat, lon, r, out) {
+      function vAdd(a, b) {
+        return [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
+      }
+      function vSub(a, b) {
+        return [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+      }
+      function vMul(a, k) {
+        return [a[0] * k, a[1] * k, a[2] * k];
+      }
+      function vDot(a, b) {
+        return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+      }
+      function vCross(a, b) {
+        return [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+      }
+      function vLen(a) {
+        return Math.sqrt(vDot(a, a));
+      }
+      function vUnit(a) {
+        return vMul(a, 1 / (vLen(a) || 1));
+      }
+      function vLerp(a, b, f) {
+        return [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f, a[2] + (b[2] - a[2]) * f];
+      }
+      function vAcross(a, n) {
+        var d = vDot(n, n);
+        return d === 0 ? [0, 0, 0] : vSub(a, vMul(n, vDot(n, a) / d));
+      }
+      function qAboutY(angle) {
+        return [0, Math.sin(angle / 2), 0, Math.cos(angle / 2)];
+      }
+      function qAboutZ(angle) {
+        return [0, 0, Math.sin(angle / 2), Math.cos(angle / 2)];
+      }
+      function qConjugate(q) {
+        return [-q[0], -q[1], -q[2], q[3]];
+      }
+      function qBetween(a, b) {
+        var across = vCross(a, b), cosPlusOne = vDot(a, b) + 1, q;
+        if (cosPlusOne < 1e-8) {
+          var axis = vUnit(vCross(a, Math.abs(a[0]) < 0.9 ? [1, 0, 0] : [0, 1, 0]));
+          q = [axis[0], axis[1], axis[2], 0];
+        } else {
+          q = [across[0], across[1], across[2], cosPlusOne];
+        }
+        var l = Math.sqrt(q[0] * q[0] + q[1] * q[1] + q[2] * q[2] + q[3] * q[3]) || 1;
+        return [q[0] / l, q[1] / l, q[2] / l, q[3] / l];
+      }
+      function qRotate(q, v) {
+        var u = [q[0], q[1], q[2]];
+        var t = vMul(vCross(u, v), 2);
+        return vAdd(vAdd(v, vMul(t, q[3])), vCross(u, t));
+      }
+      function mFrom(p, q, s) {
+        var x = q[0], y = q[1], z = q[2], w = q[3];
+        var xx = x * x, yy = y * y, zz = z * z, xy = x * y, xz = x * z, yz = y * z, wx = w * x, wy = w * y, wz = w * z;
+        return [
+          (1 - 2 * (yy + zz)) * s[0],
+          2 * (xy + wz) * s[0],
+          2 * (xz - wy) * s[0],
+          0,
+          2 * (xy - wz) * s[1],
+          (1 - 2 * (xx + zz)) * s[1],
+          2 * (yz + wx) * s[1],
+          0,
+          2 * (xz + wy) * s[2],
+          2 * (yz - wx) * s[2],
+          (1 - 2 * (xx + yy)) * s[2],
+          0,
+          p[0],
+          p[1],
+          p[2],
+          1
+        ];
+      }
+      function mMul(a, b) {
+        var out = new Array(16), c, r, k, sum;
+        for (c = 0; c < 4; c++) {
+          for (r = 0; r < 4; r++) {
+            sum = 0;
+            for (k = 0; k < 4; k++) {
+              sum += a[k * 4 + r] * b[c * 4 + k];
+            }
+            out[c * 4 + r] = sum;
+          }
+        }
+        return out;
+      }
+      function mInverseRigid(m) {
+        var t = [m[12], m[13], m[14]];
+        return [
+          m[0],
+          m[4],
+          m[8],
+          0,
+          m[1],
+          m[5],
+          m[9],
+          0,
+          m[2],
+          m[6],
+          m[10],
+          0,
+          -(m[0] * t[0] + m[1] * t[1] + m[2] * t[2]),
+          -(m[4] * t[0] + m[5] * t[1] + m[6] * t[2]),
+          -(m[8] * t[0] + m[9] * t[1] + m[10] * t[2]),
+          1
+        ];
+      }
+      function mLookFrom(eye, target, up) {
+        var back = vSub(eye, target);
+        back = vDot(back, back) === 0 ? [0, 0, 1] : vUnit(back);
+        var side = vCross(up, back);
+        if (vDot(side, side) === 0) {
+          side = vCross(Math.abs(back[1]) < 0.9 ? [0, 1, 0] : [1, 0, 0], back);
+        }
+        side = vUnit(side);
+        var over = vCross(back, side);
+        return [side[0], side[1], side[2], 0, over[0], over[1], over[2], 0, back[0], back[1], back[2], 0, eye[0], eye[1], eye[2], 1];
+      }
+      function mPerspective(fov, aspect, near, far) {
+        var top = near * Math.tan(rad(fov) * 0.5), height = 2 * top, width = aspect * height, left = -0.5 * width;
+        var scaleX = 2 * near / width, scaleY = 2 * near / height;
+        var shiftX = (2 * left + width) / width, shiftY = (top + (top - height)) / height;
+        var depthScale = -(far + near) / (far - near), depthShift = -2 * far * near / (far - near);
+        return [scaleX, 0, 0, 0, 0, scaleY, 0, 0, shiftX, shiftY, depthScale, -1, 0, 0, depthShift, 0];
+      }
+      function mPoint(m, v) {
+        var x = v[0], y = v[1], z = v[2];
+        var hx = m[0] * x + m[4] * y + m[8] * z + m[12];
+        var hy = m[1] * x + m[5] * y + m[9] * z + m[13];
+        var hz = m[2] * x + m[6] * y + m[10] * z + m[14];
+        var hw = m[3] * x + m[7] * y + m[11] * z + m[15];
+        return [hx / hw, hy / hw, hz / hw];
+      }
+      function mDirection(m, v) {
+        return vUnit([m[0] * v[0] + m[4] * v[1] + m[8] * v[2], m[1] * v[0] + m[5] * v[1] + m[9] * v[2], m[2] * v[0] + m[6] * v[1] + m[10] * v[2]]);
+      }
+      function mNormal(m) {
+        var a = m[0], b = m[4], c = m[8], d = m[1], e = m[5], f = m[9], g = m[2], h2 = m[6], i = m[10];
+        var c00 = e * i - f * h2, c01 = f * g - d * i, c02 = d * h2 - e * g;
+        var c10 = c * h2 - b * i, c11 = a * i - c * g, c12 = b * g - a * h2;
+        var c20 = b * f - c * e, c21 = c * d - a * f, c22 = a * e - b * d;
+        var det = a * c00 + b * c01 + c * c02;
+        var k = det === 0 ? 0 : 1 / det;
+        return [c00 * k, c10 * k, c20 * k, c01 * k, c11 * k, c21 * k, c02 * k, c12 * k, c22 * k];
+      }
+      function geo(lat, lon, r) {
         var p = rad(lon + 180), t = rad(90 - lat);
-        out = out || new THREE.Vector3();
-        return out.set(-r * Math.sin(t) * Math.cos(p), r * Math.cos(t), r * Math.sin(t) * Math.sin(p));
+        return [-r * Math.sin(t) * Math.cos(p), r * Math.cos(t), r * Math.sin(t) * Math.sin(p)];
       }
       function trackLatLon(s) {
         return [START[0] + (END[0] - START[0]) * s + Math.sin(s * Math.PI) * 1.4, START[1] + (END[1] - START[1]) * s];
       }
-      function trackAt(s, r, out) {
+      function trackAt(s, r) {
         var ll = trackLatLon(s);
-        return geo(ll[0], ll[1], r, out);
+        return geo(ll[0], ll[1], r);
       }
       function progress(t) {
         var u = clamp2((t - T_DIVE) / (T_LAND - T_DIVE), 0, 1);
         return Math.pow(u, 1.6);
       }
+      function parseColor(value) {
+        var text = String(value || "").trim(), m;
+        m = /^#([0-9a-f]{6})$/i.exec(text);
+        if (m) {
+          var n = parseInt(m[1], 16);
+          return [(n >> 16 & 255) / 255, (n >> 8 & 255) / 255, (n & 255) / 255];
+        }
+        m = /^#([0-9a-f])([0-9a-f])([0-9a-f])$/i.exec(text);
+        if (m) {
+          return [parseInt(m[1] + m[1], 16) / 255, parseInt(m[2] + m[2], 16) / 255, parseInt(m[3] + m[3], 16) / 255];
+        }
+        m = /^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/i.exec(text);
+        if (m) {
+          return [Math.min(255, +m[1]) / 255, Math.min(255, +m[2]) / 255, Math.min(255, +m[3]) / 255];
+        }
+        return null;
+      }
+      function colorOf(value, fallback) {
+        return parseColor(value) || parseColor(fallback) || [1, 0, 1];
+      }
       function tokens(el) {
         var cs = getComputedStyle(el);
         function c(n, f) {
-          var v = cs.getPropertyValue("--" + n).trim();
-          return new THREE.Color(v || f);
+          return colorOf(cs.getPropertyValue("--" + n), f);
         }
         return {
           breaking: c("breaking", "#c4170e"),
@@ -3214,6 +3381,61 @@
           edge: c("bar-edge", "#8fb0ff"),
           deep: c("studio-deep", "#061233"),
           white: c("chrome-hi", "#ffffff")
+        };
+      }
+      function trackPose(s) {
+        var ll = trackLatLon(s);
+        var lookLat = ll[0] + (END[0] - ll[0]) * 0.45 + 1, lookLon = ll[1] + (END[1] - ll[1]) * 0.45;
+        return { eye: geo(lookLat - 8 + 1.6 * s, lookLon - 0.3, 1.125 - 0.012 * s), look: geo(lookLat, lookLon, 1) };
+      }
+      var ORBIT = geo(24, -89, 3.25);
+      var SETTLED = trackPose(0);
+      var UP0 = [0, 1, 0];
+      function cameraPose(t) {
+        var pose = trackPose(progress(t)), eye = pose.eye, look = pose.look, up;
+        if (t < T_DIVE) {
+          var f = smooth(t / T_DIVE);
+          var dir = vUnit(vLerp(vUnit(ORBIT), vUnit(SETTLED.eye), f));
+          var r = 3.25 + (vLen(SETTLED.eye) - 3.25) * (1 - Math.pow(1 - f, 2.6));
+          eye = vMul(dir, r);
+          look = vLerp([0, 0, 0], SETTLED.look, smooth(t / (T_DIVE * 0.7)));
+          up = vUnit(vLerp(UP0, vUnit(SETTLED.eye), f));
+        } else {
+          up = vUnit(eye);
+        }
+        return { eye, look, up };
+      }
+      function viewOf(pose, aspect) {
+        var world = mLookFrom(pose.eye, pose.look, pose.up);
+        return { eye: pose.eye, world, inverse: mInverseRigid(world), projection: mPerspective(FOV, aspect, NEAR, FAR) };
+      }
+      function screenPoint(v, view, W, H) {
+        var p = mPoint(view.projection, mPoint(view.inverse, v));
+        var facing = vDot(vUnit(v), vUnit(vSub(view.eye, v))) > 0;
+        return { x: (p[0] + 1) / 2 * W, y: (1 - p[1]) / 2 * H, on: p[2] < 1 && facing };
+      }
+      var SUN = vUnit(vAdd(vUnit(geo(14, -70, 1)), [0, 0.25, 0]));
+      function stormPose(t) {
+        var s = progress(t);
+        var k = 0.026 + 0.042 * Math.pow(s, 0.85);
+        var n = vUnit(trackAt(s, 1));
+        var turn = qBetween([0, 0, 1], n);
+        var formed = smooth((t - T_DIVE + 0.5) / 1);
+        var away = vMul(vUnit(vAcross(SUN, n)), -0.42);
+        var shadow = qRotate(qConjugate(turn), away);
+        shadow[2] = 5e-4;
+        var lt = t - T_LAND;
+        var flash = lt > 0 ? Math.max(0, Math.sin(lt * 23) * Math.sin(lt * 7.3)) * (lt < 1.8 ? 1 : 0) : 0;
+        return {
+          s,
+          scale: k,
+          position: vMul(n, 1.0008),
+          turn,
+          spin: t * 0.5,
+          formed,
+          shadow,
+          flash,
+          landfall: lt
         };
       }
       function spiralCanvas(size) {
@@ -3281,6 +3503,341 @@
         }
         return c;
       }
+      function sphereShape(radius, across, down) {
+        var pos = [], nor = [], uvs = [], idx = [], stride = across + 1, ix, iy;
+        for (iy = 0; iy <= down; iy++) {
+          var v = iy / down;
+          var shift = iy === 0 ? 0.5 / across : iy === down ? -0.5 / across : 0;
+          for (ix = 0; ix <= across; ix++) {
+            var u = ix / across;
+            var x = -radius * Math.cos(u * Math.PI * 2) * Math.sin(v * Math.PI);
+            var y = radius * Math.cos(v * Math.PI);
+            var z = radius * Math.sin(u * Math.PI * 2) * Math.sin(v * Math.PI);
+            var l = 1 / (Math.sqrt(x * x + y * y + z * z) || 1);
+            pos.push(x, y, z);
+            nor.push(x * l, y * l, z * l);
+            uvs.push(u + shift, 1 - v);
+          }
+        }
+        for (iy = 0; iy < down; iy++) {
+          for (ix = 0; ix < across; ix++) {
+            var nw = iy * stride + ix, ne = nw + 1, sw = nw + stride, se = sw + 1;
+            if (iy !== 0) {
+              idx.push(ne, nw, se);
+            }
+            if (iy !== down - 1) {
+              idx.push(nw, sw, se);
+            }
+          }
+        }
+        return { position: pos, normal: nor, uv: uvs, index: idx };
+      }
+      function sheetShape(w, h2, across, down) {
+        var pos = [], nor = [], uvs = [], idx = [], stride = across + 1, ix, iy;
+        for (iy = 0; iy <= down; iy++) {
+          for (ix = 0; ix <= across; ix++) {
+            pos.push(ix * (w / across) - w / 2, h2 / 2 - iy * (h2 / down), 0);
+            nor.push(0, 0, 1);
+            uvs.push(ix / across, 1 - iy / down);
+          }
+        }
+        for (iy = 0; iy < down; iy++) {
+          for (ix = 0; ix < across; ix++) {
+            var nw = ix + stride * iy, sw = nw + stride, ne = nw + 1, se = sw + 1;
+            idx.push(nw, sw, ne, sw, se, ne);
+          }
+        }
+        return { position: pos, normal: nor, uv: uvs, index: idx };
+      }
+      var HEAD = "#version 300 es\nprecision highp float;\nprecision highp int;\nprecision highp sampler2D;\n";
+      var TO_SCREEN = [
+        "vec3 toScreen(vec3 c) {",
+        "  vec3 curve = pow(c, vec3(0.41666)) * 1.055 - vec3(0.055);",
+        "  return mix(curve, c * 12.92, vec3(lessThanEqual(c, vec3(0.0031308))));",
+        "}"
+      ].join("\n");
+      var LIGHTS = [
+        "uniform vec3 ambientColor;",
+        "uniform vec3 sunDirection;",
+        "uniform vec3 sunColor;",
+        "uniform vec3 boltPosition;",
+        "uniform vec3 boltColor;",
+        "uniform float boltReach;",
+        "uniform float boltFade;",
+        "const float INV_PI = 0.3183098861837907;",
+        "// Blinn-Phong highlight, with Schlick's Fresnel in the form Epic gave at SIGGRAPH 2013",
+        "vec3 gloss(vec3 toLight, vec3 toEye, vec3 n, vec3 f0, float shininess) {",
+        "  vec3 half_ = normalize(toLight + toEye);",
+        "  float nh = clamp(dot(n, half_), 0.0, 1.0);",
+        "  float vh = clamp(dot(toEye, half_), 0.0, 1.0);",
+        "  float fresnel = exp2((-5.55473 * vh - 6.98316) * vh);",
+        "  vec3 F = f0 * (1.0 - fresnel) + vec3(fresnel);",
+        "  float lobe = INV_PI * (shininess * 0.5 + 1.0) * pow(nh, shininess);",
+        "  return F * (0.25 * lobe);",
+        "}",
+        "// The light on a surface at `pos` (in the view) facing `n`: what the sun and the bolt give it, then the ambient.",
+        "vec3 lit(vec3 albedo, vec3 n, vec3 pos, float shininess, vec3 specular, float glossy) {",
+        "  vec3 toEye = normalize(-pos);",
+        "  vec3 diffuse = vec3(0.0);",
+        "  vec3 shine = vec3(0.0);",
+        "  vec3 toBolt = boltPosition - pos;",
+        "  vec3 l = normalize(toBolt);",
+        "  float reach = (boltReach > 0.0 && boltFade > 0.0) ? pow(clamp(-length(toBolt) / boltReach + 1.0, 0.0, 1.0), boltFade) : 1.0;",
+        "  vec3 incoming = clamp(dot(n, l), 0.0, 1.0) * (boltColor * reach);",
+        "  diffuse += incoming * (INV_PI * albedo);",
+        "  if (glossy > 0.0) { shine += incoming * gloss(l, toEye, n, specular, shininess) * glossy; }",
+        "  incoming = clamp(dot(n, sunDirection), 0.0, 1.0) * sunColor;",
+        "  diffuse += incoming * (INV_PI * albedo);",
+        "  if (glossy > 0.0) { shine += incoming * gloss(sunDirection, toEye, n, specular, shininess) * glossy; }",
+        "  vec3 ambient = ambientColor * (INV_PI * albedo);",
+        "  return diffuse + ambient + shine;",
+        "}"
+      ].join("\n");
+      var LIT_VERTEX = HEAD + [
+        "layout(location = 0) in vec3 position;",
+        "layout(location = 1) in vec3 normal;",
+        "layout(location = 2) in vec2 uv;",
+        "uniform mat4 modelViewMatrix;",
+        "uniform mat4 projectionMatrix;",
+        "uniform mat3 normalMatrix;",
+        "out vec2 vUv;",
+        "out vec3 vNormal;",
+        "out vec3 vViewPosition;",
+        "void main() {",
+        "  vUv = uv;",
+        "  vNormal = normalize(normalMatrix * normal);",
+        "  vec4 inView = modelViewMatrix * vec4(position, 1.0);",
+        "  vViewPosition = -inView.xyz;",
+        "  gl_Position = projectionMatrix * inView;",
+        "}"
+      ].join("\n");
+      var EARTH_FRAGMENT = HEAD + [
+        "uniform sampler2D map;",
+        "uniform sampler2D bumpMap;",
+        "uniform sampler2D specularMap;",
+        "uniform float bumpScale;",
+        "uniform vec3 specularColor;",
+        "uniform float shininess;",
+        LIGHTS,
+        TO_SCREEN,
+        "in vec2 vUv;",
+        "in vec3 vNormal;",
+        "in vec3 vViewPosition;",
+        "out vec4 outColor;",
+        `// Bump mapping from the screen's derivatives, after Morten Mikkelsen, "Bump Mapping Unparametrized Surfaces on the GPU" (2010):`,
+        "// the height map is read one pixel over each way, and the normal is leant against the way it rises.",
+        "float relief(vec2 at) { return bumpScale * texture(bumpMap, at).x; }",
+        "vec3 bumped(vec3 pos, vec3 n, float facing) {",
+        "  float here = relief(vUv);",
+        "  float riseX = relief(vUv + dFdx(vUv)) - here;",
+        "  float riseY = relief(vUv + dFdy(vUv)) - here;",
+        "  vec3 stepX = dFdx(pos);",
+        "  vec3 stepY = dFdy(pos);",
+        "  vec3 acrossY = cross(stepY, n);",
+        "  vec3 acrossX = cross(n, stepX);",
+        "  float area = dot(stepX, acrossY) * facing;",
+        "  vec3 lean = sign(area) * (riseX * acrossY + riseY * acrossX);",
+        "  return normalize(abs(area) * n - lean);",
+        "}",
+        "void main() {",
+        "  vec4 surface = texture(map, vUv);",
+        "  float glossy = texture(specularMap, vUv).r;",
+        "  vec3 n = bumped(-vViewPosition, normalize(vNormal), gl_FrontFacing ? 1.0 : -1.0);",
+        "  vec3 colour = lit(surface.rgb, n, -vViewPosition, shininess, specularColor, glossy);",
+        "  outColor = vec4(toScreen(colour), 1.0);",
+        "}"
+      ].join("\n");
+      var CLOUD_FRAGMENT = HEAD + [
+        "uniform sampler2D alphaMap;",
+        "uniform float opacity;",
+        LIGHTS,
+        TO_SCREEN,
+        "in vec2 vUv;",
+        "in vec3 vNormal;",
+        "in vec3 vViewPosition;",
+        "out vec4 outColor;",
+        "void main() {",
+        "  float alpha = opacity * texture(alphaMap, vUv).g;",
+        "  vec3 colour = lit(vec3(1.0), normalize(vNormal), -vViewPosition, 1.0, vec3(0.0), 0.0);",
+        "  outColor = vec4(toScreen(colour), alpha);",
+        "}"
+      ].join("\n");
+      function flatVertex(withColor) {
+        return HEAD + [
+          "layout(location = 0) in vec3 position;",
+          "layout(location = 2) in vec2 uv;",
+          withColor ? "layout(location = 3) in vec3 color;" : "",
+          "uniform mat4 modelViewMatrix;",
+          "uniform mat4 projectionMatrix;",
+          "out vec2 vUv;",
+          withColor ? "out vec3 vColor;" : "",
+          "void main() {",
+          "  vUv = uv;",
+          withColor ? "  vColor = color;" : "",
+          "  gl_Position = projectionMatrix * (modelViewMatrix * vec4(position, 1.0));",
+          "}"
+        ].join("\n");
+      }
+      function flatFragment(withPicture, withColor) {
+        return HEAD + [
+          "uniform vec3 diffuse;",
+          "uniform float opacity;",
+          withPicture ? "uniform sampler2D alphaMap;" : "",
+          TO_SCREEN,
+          "in vec2 vUv;",
+          withColor ? "in vec3 vColor;" : "",
+          "out vec4 outColor;",
+          "void main() {",
+          "  vec3 colour = diffuse;",
+          withColor ? "  colour *= vColor;" : "",
+          "  float alpha = opacity;",
+          withPicture ? "  alpha *= texture(alphaMap, vUv).g;" : "",
+          "  outColor = vec4(toScreen(colour), alpha);",
+          "}"
+        ].join("\n");
+      }
+      var ATMOS_VERTEX = HEAD + [
+        "layout(location = 0) in vec3 position;",
+        "layout(location = 1) in vec3 normal;",
+        "uniform mat4 modelViewMatrix;",
+        "uniform mat4 projectionMatrix;",
+        "uniform mat3 normalMatrix;",
+        "out vec3 vN;",
+        "out vec3 vV;",
+        "void main(){",
+        "  vec4 mv = modelViewMatrix * vec4(position,1.0);",
+        "  vN = normalize(normalMatrix * normal);",
+        "  vV = normalize(-mv.xyz);",
+        "  gl_Position = projectionMatrix * mv;",
+        "}"
+      ].join("\n");
+      var ATMOS_FRAGMENT = HEAD + [
+        "uniform vec3 glow;",
+        "uniform vec3 edge;",
+        "in vec3 vN;",
+        "in vec3 vV;",
+        "out vec4 outColor;",
+        "void main(){",
+        "  float f = pow(1.0 - abs(dot(vN, vV)), 3.0);",
+        "  outColor = vec4(mix(glow, edge, f) * f * 1.6, f);",
+        "}"
+      ].join("\n");
+      var DISC_VERTEX = HEAD + [
+        "layout(location = 0) in vec3 position;",
+        "layout(location = 2) in vec2 uv;",
+        "uniform mat4 modelMatrix;",
+        "uniform mat4 modelViewMatrix;",
+        "uniform mat4 projectionMatrix;",
+        "uniform sampler2D map;",
+        "uniform sampler2D detail;",
+        "uniform float uH;",
+        "out vec2 vUv;",
+        "out float vD;",
+        "out vec3 vPos;",
+        "void main(){",
+        "  vUv = uv;",
+        "  float d = clamp(texture(map, uv).a * 1.25, 0.0, 1.0);",
+        "  float det = texture(detail, uv * 1.6 + vec2(0.31, 0.17)).r;",
+        "  float h = (pow(d, 0.9) * 0.85 + det * 0.25 * d) * uH;",
+        "  vD = d;",
+        "  vec3 p = position + vec3(0.0, 0.0, h);",
+        "  vPos = (modelMatrix * vec4(p, 1.0)).xyz;",
+        "  gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);",
+        "}"
+      ].join("\n");
+      var DISC_FRAGMENT = HEAD + [
+        "uniform vec3 uSun;",
+        "uniform float uFlash;",
+        "uniform float uAlpha;",
+        "uniform vec3 cLit;",
+        "uniform vec3 cShade;",
+        "in vec2 vUv;",
+        "in float vD;",
+        "in vec3 vPos;",
+        "out vec4 outColor;",
+        "void main(){",
+        "  vec3 n = normalize(cross(dFdx(vPos), dFdy(vPos)));",
+        "  if (dot(n, normalize(vPos)) < 0.0) { n = -n; }",
+        "  float lam = clamp(dot(n, normalize(uSun)), 0.0, 1.0);",
+        "  vec3 col = mix(cShade, cLit, 0.25 + 0.75 * lam);",
+        "  col = mix(col, vec3(1.0), uFlash * vD);",
+        "  outColor = vec4(col, smoothstep(0.05, 0.4, vD) * uAlpha);",
+        "}"
+      ].join("\n");
+      var STAR_VERTEX = HEAD + [
+        "layout(location = 0) in vec3 position;",
+        "uniform mat4 modelViewMatrix;",
+        "uniform mat4 projectionMatrix;",
+        "uniform float size;",
+        "void main() {",
+        "  gl_Position = projectionMatrix * (modelViewMatrix * vec4(position, 1.0));",
+        "  gl_PointSize = size;",
+        "}"
+      ].join("\n");
+      var PLAIN_FRAGMENT = HEAD + [
+        "uniform vec3 diffuse;",
+        "uniform float opacity;",
+        TO_SCREEN,
+        "out vec4 outColor;",
+        "void main() {",
+        "  outColor = vec4(toScreen(diffuse), opacity);",
+        "}"
+      ].join("\n");
+      function lineVertex(dashed) {
+        return HEAD + [
+          "layout(location = 0) in vec3 position;",
+          dashed ? "layout(location = 4) in float lineDistance;" : "",
+          "uniform mat4 modelViewMatrix;",
+          "uniform mat4 projectionMatrix;",
+          dashed ? "out float vAlong;" : "",
+          "void main() {",
+          dashed ? "  vAlong = lineDistance;" : "",
+          "  gl_Position = projectionMatrix * (modelViewMatrix * vec4(position, 1.0));",
+          "}"
+        ].join("\n");
+      }
+      function lineFragment(dashed) {
+        return HEAD + [
+          "uniform vec3 diffuse;",
+          "uniform float opacity;",
+          dashed ? "uniform float dashSize;" : "",
+          dashed ? "uniform float cycle;" : "",
+          dashed ? "in float vAlong;" : "",
+          TO_SCREEN,
+          "out vec4 outColor;",
+          "void main() {",
+          dashed ? "  if (mod(vAlong, cycle) > dashSize) { discard; }" : "",
+          "  outColor = vec4(toScreen(diffuse), opacity);",
+          "}"
+        ].join("\n");
+      }
+      var SPRITE_VERTEX = HEAD + [
+        "layout(location = 0) in vec3 position;",
+        "layout(location = 2) in vec2 uv;",
+        "uniform mat4 modelMatrix;",
+        "uniform mat4 modelViewMatrix;",
+        "uniform mat4 projectionMatrix;",
+        "out vec2 vUv;",
+        "void main() {",
+        "  vUv = uv;",
+        "  vec4 centre = modelViewMatrix * vec4(0.0, 0.0, 0.0, 1.0);",
+        "  vec2 size = vec2(length(modelMatrix[0].xyz), length(modelMatrix[1].xyz));",
+        "  centre.xy += position.xy * size;",
+        "  gl_Position = projectionMatrix * centre;",
+        "}"
+      ].join("\n");
+      var SPRITE_FRAGMENT = HEAD + [
+        "uniform vec3 diffuse;",
+        "uniform float opacity;",
+        "uniform sampler2D map;",
+        TO_SCREEN,
+        "in vec2 vUv;",
+        "out vec4 outColor;",
+        "void main() {",
+        "  vec4 picture = texture(map, vUv);",
+        "  outColor = vec4(toScreen(diffuse * picture.rgb), opacity * picture.a);",
+        "}"
+      ].join("\n");
       function stormScene2(root, options) {
         var canvas = root.querySelector("canvas");
         if (!canvas) {
@@ -3290,31 +3847,33 @@
         var hold = typeof options.hold === "number" ? options.hold : null;
         var marks = options.marks || [];
         var base = options.textures || "textures/";
-        var renderer;
+        var gl;
         try {
-          renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false, preserveDrawingBuffer: hold !== null });
+          gl = canvas.getContext("webgl2", { antialias: true, alpha: false, depth: true, stencil: true, premultipliedAlpha: true, preserveDrawingBuffer: hold !== null });
         } catch (e) {
+          return null;
+        }
+        if (!gl || gl.isContextLost && gl.isContextLost()) {
           return null;
         }
         if (hold !== null) {
           root.classList.add("pn-wx-st3-held");
         }
         var K = tokens(root);
-        renderer.setPixelRatio(2);
-        renderer.setSize(W, H, false);
-        renderer.outputEncoding = THREE.sRGBEncoding;
-        var scene = new THREE.Scene();
-        scene.background = new THREE.Color(66314);
-        var camera = new THREE.PerspectiveCamera(38, W / H, 1e-3, 200);
-        var loader = new THREE.TextureLoader();
-        loader.setCrossOrigin("anonymous");
-        var pending = 4;
+        var cw = Math.floor(W * RATIO), ch = Math.floor(H * RATIO);
+        function sizeCanvas() {
+          canvas.width = cw;
+          canvas.height = ch;
+        }
+        sizeCanvas();
         var running = true;
         var drawn3 = false;
         var settle = null;
         var finished = new Promise(function(resolve) {
           settle = resolve;
         });
+        var made = { buffers: [], arrays: [], textures: [], programs: [] };
+        var pending = 4;
         function loaded() {
           pending -= 1;
           if (hold !== null && pending <= 0 && running && drawSafely(hold)) {
@@ -3345,250 +3904,532 @@
             return false;
           }
         }
-        function tex(url, srgb) {
-          var t = loader.load(url, loaded, void 0, loaded);
-          if (srgb) {
-            t.encoding = THREE.sRGBEncoding;
+        function shader(type, source) {
+          var s = gl.createShader(type);
+          gl.shaderSource(s, source);
+          gl.compileShader(s);
+          if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) {
+            var log = gl.getShaderInfoLog(s);
+            gl.deleteShader(s);
+            throw new Error("shader: " + log);
           }
-          t.anisotropy = 8;
-          return t;
-        }
-        var earthMap = tex(base + "earth.jpg", true);
-        var cloudMap = tex(base + "clouds.jpg", false);
-        var topoMap = tex(base + "topo.jpg", false);
-        var waterMap = tex(base + "water.jpg", false);
-        var sunDir = geo(14, -70, 1).normalize().add(new THREE.Vector3(0, 0.25, 0)).normalize();
-        var sun = new THREE.DirectionalLight(16777215, 1.35);
-        sun.position.copy(sunDir).multiplyScalar(10);
-        scene.add(sun);
-        scene.add(new THREE.AmbientLight(3818598, 0.6));
-        var starGeo = new THREE.BufferGeometry(), sp = [], rs = seeded(9);
-        for (var i = 0; i < 1800; i++) {
-          var v = new THREE.Vector3(rs() * 2 - 1, rs() * 2 - 1, rs() * 2 - 1).normalize().multiplyScalar(80);
-          sp.push(v.x, v.y, v.z);
-        }
-        starGeo.setAttribute("position", new THREE.Float32BufferAttribute(sp, 3));
-        scene.add(new THREE.Points(starGeo, new THREE.PointsMaterial({ color: 13226979, size: 1.3, sizeAttenuation: false })));
-        var earth = new THREE.Mesh(new THREE.SphereGeometry(1, 160, 120), new THREE.MeshPhongMaterial({
-          map: earthMap,
-          bumpMap: topoMap,
-          bumpScale: 0.012,
-          specularMap: waterMap,
-          specular: new THREE.Color(1581102),
-          shininess: 40
-        }));
-        scene.add(earth);
-        var cloudShadow = new THREE.Mesh(new THREE.SphereGeometry(1.0015, 160, 120), new THREE.MeshBasicMaterial({
-          color: K.deep,
-          alphaMap: cloudMap,
-          transparent: true,
-          opacity: 0.42,
-          depthWrite: false
-        }));
-        scene.add(cloudShadow);
-        var clouds = new THREE.Mesh(new THREE.SphereGeometry(1.007, 160, 120), new THREE.MeshLambertMaterial({
-          color: 16777215,
-          alphaMap: cloudMap,
-          transparent: true,
-          opacity: 0.92,
-          depthWrite: false
-        }));
-        scene.add(clouds);
-        var atmos = new THREE.Mesh(new THREE.SphereGeometry(1.045, 96, 72), new THREE.ShaderMaterial({
-          uniforms: { glow: { value: K.glow }, edge: { value: K.edge } },
-          vertexShader: "varying vec3 vN; varying vec3 vV; void main(){ vec4 mv = modelViewMatrix * vec4(position,1.0); vN = normalize(normalMatrix * normal); vV = normalize(-mv.xyz); gl_Position = projectionMatrix * mv; }",
-          fragmentShader: "uniform vec3 glow; uniform vec3 edge; varying vec3 vN; varying vec3 vV; void main(){ float f = pow(1.0 - abs(dot(vN, vV)), 3.0); gl_FragColor = vec4(mix(glow, edge, f) * f * 1.6, f); }",
-          side: THREE.BackSide,
-          blending: THREE.AdditiveBlending,
-          transparent: true,
-          depthWrite: false
-        }));
-        scene.add(atmos);
-        var N = 160, tp = [];
-        for (i = 0; i <= N; i++) {
-          var p = trackAt(i / N, 1.0022);
-          tp.push(p.x, p.y, p.z);
-        }
-        var trackGeo = new THREE.BufferGeometry();
-        trackGeo.setAttribute("position", new THREE.Float32BufferAttribute(tp, 3));
-        var ahead = new THREE.Line(trackGeo, new THREE.LineDashedMaterial({ color: 16777215, dashSize: 6e-3, gapSize: 4e-3, transparent: true, opacity: 0.9 }));
-        ahead.computeLineDistances();
-        scene.add(ahead);
-        var behind = new THREE.Line(trackGeo.clone(), new THREE.LineBasicMaterial({ color: K.goldHi }));
-        scene.add(behind);
-        function sprite(canvasEl, size) {
-          var s = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(canvasEl), depthWrite: false, sizeAttenuation: true }));
-          s.scale.set(size, size, 1);
-          scene.add(s);
           return s;
         }
-        var dotC = dotCanvas(64, false);
+        function program(vertex, fragment) {
+          var v2 = shader(gl.VERTEX_SHADER, vertex), f;
+          try {
+            f = shader(gl.FRAGMENT_SHADER, fragment);
+          } catch (e) {
+            gl.deleteShader(v2);
+            throw e;
+          }
+          var p2 = gl.createProgram();
+          made.programs.push(p2);
+          gl.attachShader(p2, v2);
+          gl.attachShader(p2, f);
+          gl.linkProgram(p2);
+          gl.deleteShader(v2);
+          gl.deleteShader(f);
+          if (!gl.getProgramParameter(p2, gl.LINK_STATUS)) {
+            throw new Error("program: " + gl.getProgramInfoLog(p2));
+          }
+          var found = { handle: p2, spots: {} };
+          found.at = function(name) {
+            if (!(name in found.spots)) {
+              found.spots[name] = gl.getUniformLocation(p2, name);
+            }
+            return found.spots[name];
+          };
+          return found;
+        }
+        function buffer(target2, data) {
+          var b2 = gl.createBuffer();
+          made.buffers.push(b2);
+          gl.bindBuffer(target2, b2);
+          gl.bufferData(target2, data, gl.STATIC_DRAW);
+          return b2;
+        }
+        function shape(parts) {
+          var vao = gl.createVertexArray();
+          made.arrays.push(vao);
+          gl.bindVertexArray(vao);
+          [["position", 0, 3], ["normal", 1, 3], ["uv", 2, 2], ["color", 3, 3], ["distance", 4, 1]].forEach(function(kind) {
+            var data = parts[kind[0]];
+            if (!data) {
+              return;
+            }
+            buffer(gl.ARRAY_BUFFER, new Float32Array(data));
+            gl.enableVertexAttribArray(kind[1]);
+            gl.vertexAttribPointer(kind[1], kind[2], gl.FLOAT, false, 0, 0);
+          });
+          var out = { vao, count: 0, type: 0, mode: parts.mode === void 0 ? gl.TRIANGLES : parts.mode };
+          if (parts.index) {
+            var big = parts.position.length / 3 > 65535;
+            buffer(gl.ELEMENT_ARRAY_BUFFER, big ? new Uint32Array(parts.index) : new Uint16Array(parts.index));
+            out.type = big ? gl.UNSIGNED_INT : gl.UNSIGNED_SHORT;
+            out.count = parts.index.length;
+          } else {
+            out.count = parts.position.length / 3;
+          }
+          out.all = out.count;
+          return out;
+        }
+        var earthProgram, cloudProgram, atmosProgram, discProgram, starProgram, spriteProgram, rainProgram, flatProgram, dashProgram, lineProgram;
+        try {
+          earthProgram = program(LIT_VERTEX, EARTH_FRAGMENT);
+          cloudProgram = program(LIT_VERTEX, CLOUD_FRAGMENT);
+          flatProgram = program(flatVertex(false), flatFragment(true, false));
+          rainProgram = program(flatVertex(true), flatFragment(false, true));
+          atmosProgram = program(ATMOS_VERTEX, ATMOS_FRAGMENT);
+          discProgram = program(DISC_VERTEX, DISC_FRAGMENT);
+          starProgram = program(STAR_VERTEX, PLAIN_FRAGMENT);
+          spriteProgram = program(SPRITE_VERTEX, SPRITE_FRAGMENT);
+          dashProgram = program(lineVertex(true), lineFragment(true));
+          lineProgram = program(lineVertex(false), lineFragment(false));
+        } catch (e) {
+          running = false;
+          free();
+          settle();
+          return null;
+        }
+        var anisotropy = gl.getExtension("EXT_texture_filter_anisotropic");
+        var maxAnisotropy = anisotropy ? gl.getParameter(anisotropy.MAX_TEXTURE_MAX_ANISOTROPY_EXT) : 1;
+        function texture(image, options2) {
+          var tex = { image, handle: null, srgb: !!options2.srgb, repeat: !!options2.repeat, aniso: options2.aniso || 1 };
+          tex.bind = function(unit) {
+            gl.activeTexture(gl.TEXTURE0 + unit);
+            if (tex.handle === null && tex.image) {
+              upload(tex);
+            }
+            gl.bindTexture(gl.TEXTURE_2D, tex.handle);
+          };
+          return tex;
+        }
+        function upload(tex) {
+          var image = tex.image, handle = gl.createTexture();
+          made.textures.push(handle);
+          gl.bindTexture(gl.TEXTURE_2D, handle);
+          gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+          gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+          gl.pixelStorei(gl.UNPACK_ALIGNMENT, 4);
+          gl.pixelStorei(gl.UNPACK_COLORSPACE_CONVERSION_WEBGL, gl.NONE);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, tex.repeat ? gl.REPEAT : gl.CLAMP_TO_EDGE);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, tex.repeat ? gl.REPEAT : gl.CLAMP_TO_EDGE);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+          if (anisotropy && tex.aniso > 1) {
+            gl.texParameterf(gl.TEXTURE_2D, anisotropy.TEXTURE_MAX_ANISOTROPY_EXT, Math.min(tex.aniso, maxAnisotropy));
+          }
+          var levels = Math.floor(Math.log(Math.max(image.width, image.height)) / Math.LN2) + 1;
+          gl.texStorage2D(gl.TEXTURE_2D, levels, tex.srgb ? gl.SRGB8_ALPHA8 : gl.RGBA8, image.width, image.height);
+          gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, gl.RGBA, gl.UNSIGNED_BYTE, image);
+          gl.generateMipmap(gl.TEXTURE_2D);
+          tex.handle = handle;
+        }
+        function picture(url, srgb, repeat) {
+          var img = new Image();
+          img.crossOrigin = "anonymous";
+          var tex = texture(null, { srgb, repeat, aniso: 8 });
+          img.onload = function() {
+            tex.image = img;
+            loaded();
+          };
+          img.onerror = loaded;
+          img.src = url;
+          return tex;
+        }
+        var earthMap = picture(base + "earth.jpg", true, false);
+        var cloudMap = picture(base + "clouds.jpg", false, true);
+        var topoMap = picture(base + "topo.jpg", false, false);
+        var waterMap = picture(base + "water.jpg", false, false);
+        var spiralTex = texture(spiralCanvas(512), {});
+        var dotTex = texture(dotCanvas(64, false), {});
+        var ringTex = texture(dotCanvas(64, true), {});
+        var nextId2 = 0, nodes = [];
+        function place(parent) {
+          var node = { id: ++nextId2, parent: parent || null, p: [0, 0, 0], q: [0, 0, 0, 1], s: [1, 1, 1], world: mFrom([0, 0, 0], [0, 0, 0, 1], [1, 1, 1]) };
+          nodes.push(node);
+          return node;
+        }
+        function settleWorld(node) {
+          var local = mFrom(node.p, node.q, node.s);
+          node.world = node.parent === null ? local : mMul(node.parent.world, local);
+        }
+        var things = [];
+        function thing(node, how) {
+          how.node = node;
+          how.id = node.id;
+          how.material = ++nextId2;
+          how.order = how.order || 0;
+          things.push(how);
+          return how;
+        }
+        var starAt = [], rs = seeded(9), i;
+        for (i = 0; i < 1800; i++) {
+          var v = vMul(vUnit([rs() * 2 - 1, rs() * 2 - 1, rs() * 2 - 1]), 80);
+          starAt.push(v[0], v[1], v[2]);
+        }
+        var starShape = shape({ position: starAt, mode: gl.POINTS });
+        var starNode = place();
+        thing(starNode, {
+          shape: starShape,
+          transparent: false,
+          blend: "none",
+          depthWrite: true,
+          side: "front",
+          show: function(frame2) {
+            gl.useProgram(starProgram.handle);
+            matrices(starProgram, this.node, frame2, false);
+            gl.uniform3f(starProgram.at("diffuse"), 201 / 255, 211 / 255, 227 / 255);
+            gl.uniform1f(starProgram.at("opacity"), 1);
+            gl.uniform1f(starProgram.at("size"), 1.3 * RATIO);
+          }
+        });
+        var earthShape = shape(sphereShape(1, 160, 120));
+        thing(place(), {
+          shape: earthShape,
+          transparent: false,
+          blend: "none",
+          depthWrite: true,
+          side: "front",
+          show: function(frame2) {
+            gl.useProgram(earthProgram.handle);
+            matrices(earthProgram, this.node, frame2, true);
+            lights(earthProgram, frame2);
+            earthMap.bind(0);
+            gl.uniform1i(earthProgram.at("map"), 0);
+            topoMap.bind(1);
+            gl.uniform1i(earthProgram.at("bumpMap"), 1);
+            waterMap.bind(2);
+            gl.uniform1i(earthProgram.at("specularMap"), 2);
+            gl.uniform1f(earthProgram.at("bumpScale"), 0.012);
+            gl.uniform3f(earthProgram.at("specularColor"), 24 / 255, 32 / 255, 46 / 255);
+            gl.uniform1f(earthProgram.at("shininess"), 40);
+          }
+        });
+        var cloudShadowNode = place();
+        thing(cloudShadowNode, {
+          shape: shape(sphereShape(1.0015, 160, 120)),
+          transparent: true,
+          blend: "normal",
+          depthWrite: false,
+          side: "front",
+          show: function(frame2) {
+            gl.useProgram(flatProgram.handle);
+            matrices(flatProgram, this.node, frame2, false);
+            gl.uniform3fv(flatProgram.at("diffuse"), K.deep);
+            gl.uniform1f(flatProgram.at("opacity"), 0.42);
+            cloudMap.bind(0);
+            gl.uniform1i(flatProgram.at("alphaMap"), 0);
+          }
+        });
+        var cloudsNode = place();
+        thing(cloudsNode, {
+          shape: shape(sphereShape(1.007, 160, 120)),
+          transparent: true,
+          blend: "normal",
+          depthWrite: false,
+          side: "front",
+          show: function(frame2) {
+            gl.useProgram(cloudProgram.handle);
+            matrices(cloudProgram, this.node, frame2, true);
+            lights(cloudProgram, frame2);
+            gl.uniform1f(cloudProgram.at("opacity"), 0.92);
+            cloudMap.bind(0);
+            gl.uniform1i(cloudProgram.at("alphaMap"), 0);
+          }
+        });
+        thing(place(), {
+          shape: shape(sphereShape(1.045, 96, 72)),
+          transparent: true,
+          blend: "additive",
+          depthWrite: false,
+          side: "back",
+          show: function(frame2) {
+            gl.useProgram(atmosProgram.handle);
+            matrices(atmosProgram, this.node, frame2, true);
+            gl.uniform3fv(atmosProgram.at("glow"), K.glow);
+            gl.uniform3fv(atmosProgram.at("edge"), K.edge);
+          }
+        });
+        var N = 160, trackAtPoints = [], along = [], last = null, run = 0;
+        for (i = 0; i <= N; i++) {
+          var p = trackAt(i / N, 1.0022);
+          p = [Math.fround(p[0]), Math.fround(p[1]), Math.fround(p[2])];
+          if (last !== null) {
+            run += vLen(vSub(p, last));
+          }
+          along.push(run);
+          trackAtPoints.push(p[0], p[1], p[2]);
+          last = p;
+        }
+        thing(place(), {
+          shape: shape({ position: trackAtPoints, distance: along, mode: gl.LINE_STRIP }),
+          transparent: true,
+          blend: "normal",
+          depthWrite: true,
+          side: "front",
+          show: function(frame2) {
+            gl.useProgram(dashProgram.handle);
+            matrices(dashProgram, this.node, frame2, false);
+            gl.uniform3f(dashProgram.at("diffuse"), 1, 1, 1);
+            gl.uniform1f(dashProgram.at("opacity"), 0.9);
+            gl.uniform1f(dashProgram.at("dashSize"), 6e-3);
+            gl.uniform1f(dashProgram.at("cycle"), 6e-3 + 4e-3);
+          }
+        });
+        var behind = thing(place(), {
+          shape: shape({ position: trackAtPoints, mode: gl.LINE_STRIP }),
+          transparent: false,
+          blend: "none",
+          depthWrite: true,
+          side: "front",
+          show: function(frame2) {
+            gl.useProgram(lineProgram.handle);
+            matrices(lineProgram, this.node, frame2, false);
+            gl.uniform3fv(lineProgram.at("diffuse"), K.goldHi);
+            gl.uniform1f(lineProgram.at("opacity"), 1);
+          }
+        });
+        var quad = shape({
+          position: [-0.5, -0.5, 0, 0.5, -0.5, 0, 0.5, 0.5, 0, -0.5, 0.5, 0],
+          uv: [0, 0, 1, 0, 1, 1, 0, 1],
+          index: [0, 1, 2, 0, 2, 3]
+        });
+        function sprite(tex, size, at3, tint, order) {
+          var node = place();
+          node.p = at3;
+          node.s = [size, size, 1];
+          var one = thing(node, {
+            shape: quad,
+            transparent: true,
+            blend: "normal",
+            depthWrite: false,
+            side: "front",
+            order: order || 0,
+            show: function(frame2) {
+              gl.useProgram(spriteProgram.handle);
+              matrices(spriteProgram, this.node, frame2, false);
+              gl.uniform3fv(spriteProgram.at("diffuse"), tint);
+              gl.uniform1f(spriteProgram.at("opacity"), 1);
+              tex.bind(0);
+              gl.uniform1i(spriteProgram.at("map"), 0);
+            }
+          });
+          return one;
+        }
         [0].concat(marks.map(function(m) {
           return m.at;
         })).forEach(function(m) {
-          sprite(dotC, 0.016).position.copy(trackAt(m, 1.003));
+          sprite(dotTex, 0.016, trackAt(m, 1.003), [1, 1, 1]);
         });
-        var target = sprite(dotCanvas(64, true), 0.03);
-        target.material.color = K.breakingHi;
-        target.position.copy(trackAt(1, 1.003));
-        target.renderOrder = -1;
+        var target = sprite(ringTex, 0.03, trackAt(1, 1.003), K.breakingHi, -1);
         var SW = 120, swPos = [], swCol = [], swIdx = [];
         for (i = 0; i <= SW; i++) {
           var s0 = i / SW, a = trackAt(Math.max(0, s0 - 4e-3), 1.0012), b = trackAt(Math.min(1, s0 + 4e-3), 1.0012);
-          var c0 = trackAt(s0, 1.0012), n0 = c0.clone().normalize();
-          var side = new THREE.Vector3().subVectors(b, a).cross(n0).normalize().multiplyScalar(0.012 + 0.05 * s0);
-          swPos.push(c0.x + side.x, c0.y + side.y, c0.z + side.z, c0.x - side.x, c0.y - side.y, c0.z - side.z);
-          var col = new THREE.Color().copy(K.ready).lerp(K.goldHi, s0 * 0.7);
-          swCol.push(col.r, col.g, col.b, col.r, col.g, col.b);
+          var c0 = trackAt(s0, 1.0012), n0 = vUnit(c0);
+          var side = vMul(vUnit(vCross(vSub(b, a), n0)), 0.012 + 0.05 * s0);
+          swPos.push(c0[0] + side[0], c0[1] + side[1], c0[2] + side[2], c0[0] - side[0], c0[1] - side[1], c0[2] - side[2]);
+          var col = vLerp(K.ready, K.goldHi, s0 * 0.7);
+          swCol.push(col[0], col[1], col[2], col[0], col[1], col[2]);
           if (i < SW) {
             var k = i * 2;
             swIdx.push(k, k + 1, k + 2, k + 1, k + 3, k + 2);
           }
         }
-        var swGeo = new THREE.BufferGeometry();
-        swGeo.setAttribute("position", new THREE.Float32BufferAttribute(swPos, 3));
-        swGeo.setAttribute("color", new THREE.Float32BufferAttribute(swCol, 3));
-        swGeo.setIndex(swIdx);
-        var swath = new THREE.Mesh(swGeo, new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.38, depthWrite: false, side: THREE.DoubleSide }));
-        scene.add(swath);
-        var spiralTex = new THREE.CanvasTexture(spiralCanvas(512));
-        cloudMap.wrapS = cloudMap.wrapT = THREE.RepeatWrapping;
-        var discMat = new THREE.ShaderMaterial({
-          uniforms: {
-            map: { value: spiralTex },
-            detail: { value: cloudMap },
-            uH: { value: 0.09 },
-            uFlash: { value: 0 },
-            uAlpha: { value: 1 },
-            uSun: { value: sunDir.clone() },
-            cLit: { value: K.white },
-            cShade: { value: new THREE.Color(9411510) }
-          },
-          vertexShader: [
-            "uniform sampler2D map; uniform sampler2D detail; uniform float uH;",
-            "varying vec2 vUv; varying float vD; varying vec3 vPos;",
-            "void main(){",
-            "  vUv = uv;",
-            "  float d = clamp(texture2D(map, uv).a * 1.25, 0.0, 1.0);",
-            "  float det = texture2D(detail, uv * 1.6 + vec2(0.31, 0.17)).r;",
-            "  float h = (pow(d, 0.9) * 0.85 + det * 0.25 * d) * uH;",
-            "  vD = d;",
-            "  vec3 p = position + vec3(0.0, 0.0, h);",
-            "  vPos = (modelMatrix * vec4(p, 1.0)).xyz;",
-            "  gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);",
-            "}"
-          ].join("\n"),
-          fragmentShader: [
-            "uniform vec3 uSun; uniform float uFlash; uniform float uAlpha; uniform vec3 cLit; uniform vec3 cShade;",
-            "varying vec2 vUv; varying float vD; varying vec3 vPos;",
-            "void main(){",
-            "  vec3 n = normalize(cross(dFdx(vPos), dFdy(vPos)));",
-            "  if (dot(n, normalize(vPos)) < 0.0) { n = -n; }",
-            "  float lam = clamp(dot(n, normalize(uSun)), 0.0, 1.0);",
-            "  vec3 col = mix(cShade, cLit, 0.25 + 0.75 * lam);",
-            "  col = mix(col, vec3(1.0), uFlash * vD);",
-            "  gl_FragColor = vec4(col, smoothstep(0.05, 0.4, vD) * uAlpha);",
-            "}"
-          ].join("\n"),
+        var swathLook = { opacity: 0.38 };
+        var swath = thing(place(), {
+          shape: shape({ position: swPos, color: swCol, index: swIdx }),
           transparent: true,
-          depthWrite: true,
-          extensions: { derivatives: true }
+          blend: "normal",
+          depthWrite: false,
+          side: "both",
+          show: function(frame2) {
+            gl.useProgram(rainProgram.handle);
+            matrices(rainProgram, this.node, frame2, false);
+            gl.uniform3f(rainProgram.at("diffuse"), 1, 1, 1);
+            gl.uniform1f(rainProgram.at("opacity"), swathLook.opacity);
+          }
         });
-        var storm = new THREE.Group();
-        scene.add(storm);
-        var spin = new THREE.Group();
-        storm.add(spin);
-        var disc = new THREE.Mesh(new THREE.PlaneGeometry(2, 2, 220, 220), discMat);
-        disc.renderOrder = 2;
-        disc.position.z = 4e-3;
-        spin.add(disc);
-        var shadowMat = new THREE.MeshBasicMaterial({ color: K.deep, map: null, alphaMap: spiralTex, transparent: true, opacity: 0.55, depthWrite: false });
-        var shadow = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), shadowMat);
-        storm.add(shadow);
-        var bolt = new THREE.PointLight(16777215, 0, 0.4);
-        storm.add(bolt);
-        bolt.position.set(0, 0, 0.08);
+        var stormNode = place();
+        var spinNode = place(stormNode);
+        var discNode = place(spinNode);
+        discNode.p = [0, 0, 4e-3];
+        var shadowNode = place(stormNode);
+        var boltNode = place(stormNode);
+        boltNode.p = [0, 0, 0.08];
+        var storm = { alpha: 1, flash: 0, shadowOpacity: 0.55, bolt: 0 };
+        thing(discNode, {
+          shape: shape(sheetShape(2, 2, 220, 220)),
+          transparent: true,
+          blend: "normal",
+          depthWrite: true,
+          side: "front",
+          order: 2,
+          show: function(frame2) {
+            gl.useProgram(discProgram.handle);
+            matrices(discProgram, this.node, frame2, false);
+            spiralTex.bind(0);
+            gl.uniform1i(discProgram.at("map"), 0);
+            cloudMap.bind(1);
+            gl.uniform1i(discProgram.at("detail"), 1);
+            gl.uniform1f(discProgram.at("uH"), 0.09);
+            gl.uniform1f(discProgram.at("uFlash"), storm.flash);
+            gl.uniform1f(discProgram.at("uAlpha"), storm.alpha);
+            gl.uniform3fv(discProgram.at("uSun"), SUN);
+            gl.uniform3fv(discProgram.at("cLit"), K.white);
+            gl.uniform3f(discProgram.at("cShade"), 143 / 255, 155 / 255, 182 / 255);
+          }
+        });
+        thing(shadowNode, {
+          shape: shape(sheetShape(2, 2, 1, 1)),
+          transparent: true,
+          blend: "normal",
+          depthWrite: false,
+          side: "front",
+          show: function(frame2) {
+            gl.useProgram(flatProgram.handle);
+            matrices(flatProgram, this.node, frame2, false);
+            gl.uniform3fv(flatProgram.at("diffuse"), K.deep);
+            gl.uniform1f(flatProgram.at("opacity"), storm.shadowOpacity);
+            spiralTex.bind(0);
+            gl.uniform1i(flatProgram.at("alphaMap"), 0);
+          }
+        });
         var labels = {};
         Array.prototype.forEach.call(root.querySelectorAll("[data-at]"), function(el) {
           labels[el.getAttribute("data-at")] = el;
         });
         var rows = root.querySelectorAll("[data-row]");
-        var Z = new THREE.Vector3(0, 0, 1);
-        var tmp = new THREE.Vector3(), tmp2 = new THREE.Vector3(), tmp3 = new THREE.Vector3();
-        function trackPose(s, outCam, outLook) {
-          var ll = trackLatLon(s);
-          var lookLat = ll[0] + (END[0] - ll[0]) * 0.45 + 1, lookLon = ll[1] + (END[1] - ll[1]) * 0.45;
-          geo(lookLat - 8 + 1.6 * s, lookLon - 0.3, 1.125 - 0.012 * s, outCam);
-          geo(lookLat, lookLon, 1, outLook);
-        }
-        var P0 = geo(24, -89, 3.25);
-        var P1 = new THREE.Vector3(), L1 = new THREE.Vector3();
-        trackPose(0, P1, L1);
-        var up0 = new THREE.Vector3(0, 1, 0);
-        var cam = new THREE.Vector3(), look = new THREE.Vector3();
-        function placeCamera(t) {
-          var s = progress(t);
-          trackPose(s, cam, look);
-          if (t < T_DIVE) {
-            var f = smooth(t / T_DIVE);
-            var dir = P0.clone().normalize().lerp(P1.clone().normalize(), f).normalize();
-            var r = 3.25 + (P1.length() - 3.25) * (1 - Math.pow(1 - f, 2.6));
-            cam.copy(dir).multiplyScalar(r);
-            look.set(0, 0, 0).lerp(L1, smooth(t / (T_DIVE * 0.7)));
-            camera.up.copy(up0).lerp(P1.clone().normalize(), f).normalize();
-          } else {
-            camera.up.copy(cam).normalize();
+        var END_LABEL = geo(END[0] + 2.2, END[1] + 4.6, 1.004);
+        var view = viewOf(cameraPose(0), W / H);
+        function matrices(prog, node, frame2, withNormal) {
+          var modelView = mMul(frame2.view.inverse, node.world);
+          gl.uniformMatrix4fv(prog.at("modelViewMatrix"), false, modelView);
+          gl.uniformMatrix4fv(prog.at("projectionMatrix"), false, frame2.view.projection);
+          if (withNormal) {
+            gl.uniformMatrix3fv(prog.at("normalMatrix"), false, mNormal(modelView));
           }
-          camera.position.copy(cam);
-          camera.lookAt(look);
+          if (prog.at("modelMatrix")) {
+            gl.uniformMatrix4fv(prog.at("modelMatrix"), false, node.world);
+          }
         }
-        function placeStorm(t) {
-          var s = progress(t);
-          var k2 = 0.026 + 0.042 * Math.pow(s, 0.85);
-          var pos = trackAt(s, 1, tmp);
-          var n = pos.clone().normalize();
-          storm.position.copy(n).multiplyScalar(1.0008);
-          storm.quaternion.setFromUnitVectors(Z, n);
-          storm.scale.set(k2, k2, k2);
-          spin.rotation.z = t * 0.5;
-          var formed = smooth((t - T_DIVE + 0.5) / 1);
-          discMat.uniforms.uAlpha.value = formed;
-          var away = sunDir.clone().projectOnPlane(n).normalize().multiplyScalar(-0.42);
-          shadow.position.copy(away.applyQuaternion(storm.quaternion.clone().invert()));
-          shadow.position.z = 5e-4;
-          shadow.rotation.z = t * 0.5;
-          shadowMat.opacity = 0.55 * formed;
-          var lt = t - T_LAND;
-          var flash = lt > 0 ? Math.max(0, Math.sin(lt * 23) * Math.sin(lt * 7.3)) * (lt < 1.8 ? 1 : 0) : 0;
-          discMat.uniforms.uFlash.value = flash * 0.8;
-          bolt.intensity = flash * 3;
-          var drawn4 = Math.floor(s * SW);
-          swath.geometry.setDrawRange(0, drawn4 * 6);
-          swath.material.opacity = 0.24 * formed;
-          behind.geometry.setDrawRange(0, Math.floor(s * N) + 1);
-          target.scale.setScalar(0.03 * (1 + (lt > 0 ? 0.25 * Math.abs(Math.sin(lt * 5)) : 0)));
-          return s;
+        function lights(prog, frame2) {
+          var pi = Math.PI;
+          gl.uniform3f(prog.at("ambientColor"), 58 / 255 * 0.6 * pi, 68 / 255 * 0.6 * pi, 102 / 255 * 0.6 * pi);
+          gl.uniform3fv(prog.at("sunDirection"), mDirection(frame2.view.inverse, vMul(SUN, 10)));
+          gl.uniform3f(prog.at("sunColor"), 1.35 * pi, 1.35 * pi, 1.35 * pi);
+          var at3 = [boltNode.world[12], boltNode.world[13], boltNode.world[14]];
+          gl.uniform3fv(prog.at("boltPosition"), mPoint(frame2.view.inverse, at3));
+          var power = storm.bolt * pi;
+          gl.uniform3f(prog.at("boltColor"), power, power, power);
+          gl.uniform1f(prog.at("boltReach"), 0.4);
+          gl.uniform1f(prog.at("boltFade"), 2);
         }
-        function screenOf(v2) {
-          tmp.copy(v2).project(camera);
-          var facing = v2.clone().normalize().dot(tmp2.copy(camera.position).sub(v2).normalize()) > 0;
-          return { x: (tmp.x + 1) / 2 * W, y: (1 - tmp.y) / 2 * H, on: tmp.z < 1 && facing };
+        function blending(kind) {
+          if (kind === "none") {
+            gl.disable(gl.BLEND);
+            return;
+          }
+          gl.enable(gl.BLEND);
+          gl.blendEquation(gl.FUNC_ADD);
+          if (kind === "additive") {
+            gl.blendFunc(gl.SRC_ALPHA, gl.ONE);
+          } else {
+            gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+          }
+        }
+        function paint(one, side2, frame2) {
+          if (side2 === "both") {
+            gl.disable(gl.CULL_FACE);
+          } else {
+            gl.enable(gl.CULL_FACE);
+            gl.cullFace(gl.BACK);
+            gl.frontFace(side2 === "back" ? gl.CW : gl.CCW);
+          }
+          blending(one.blend);
+          gl.depthMask(one.depthWrite);
+          one.show(frame2);
+          gl.bindVertexArray(one.shape.vao);
+          if (one.shape.type === 0) {
+            gl.drawArrays(one.shape.mode, 0, one.shape.count);
+          } else {
+            gl.drawElements(one.shape.mode, one.shape.count, one.shape.type, 0);
+          }
+        }
+        function ordered(frame2) {
+          var screen = mMul(frame2.view.projection, frame2.view.inverse), solid = [], clear = [];
+          things.forEach(function(one) {
+            var z = mPoint(screen, [one.node.world[12], one.node.world[13], one.node.world[14]])[2];
+            (one.transparent ? clear : solid).push({ one, z });
+          });
+          solid.sort(function(a2, b2) {
+            return a2.one.order - b2.one.order || a2.one.material - b2.one.material || a2.z - b2.z || a2.one.id - b2.one.id;
+          });
+          clear.sort(function(a2, b2) {
+            return a2.one.order - b2.one.order || b2.z - a2.z || a2.one.id - b2.one.id;
+          });
+          return solid.concat(clear).map(function(entry) {
+            return entry.one;
+          });
+        }
+        function render() {
+          var frame2 = { view };
+          nodes.forEach(settleWorld);
+          var list = ordered(frame2);
+          gl.viewport(0, 0, cw, ch);
+          gl.disable(gl.SCISSOR_TEST);
+          gl.enable(gl.DEPTH_TEST);
+          gl.depthFunc(gl.LEQUAL);
+          gl.colorMask(true, true, true, true);
+          gl.depthMask(true);
+          gl.clearColor(CLEAR[0], CLEAR[1], CLEAR[2], 1);
+          gl.clearDepth(1);
+          gl.clearStencil(0);
+          gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT | gl.STENCIL_BUFFER_BIT);
+          list.forEach(function(one) {
+            if (one.shape.count === 0) {
+              return;
+            }
+            if (one.transparent && one.side === "both") {
+              paint(one, "back", frame2);
+              paint(one, "front", frame2);
+            } else {
+              paint(one, one.side, frame2);
+            }
+          });
+          gl.depthMask(true);
         }
         function label(name, at3, show) {
           var el = labels[name];
           if (!el) {
             return;
           }
-          var sc = screenOf(at3);
+          var sc = screenPoint(at3, view, W, H);
           el.style.transform = "translate(" + sc.x.toFixed(1) + "px," + sc.y.toFixed(1) + "px)";
           el.classList.toggle("pn-wx-on", !!(show && sc.on));
         }
         function draw(t) {
-          placeCamera(t);
-          camera.updateMatrixWorld();
-          clouds.rotation.y = t * 6e-3;
-          cloudShadow.rotation.y = t * 6e-3 - 3e-3;
-          var s = placeStorm(t);
+          view = viewOf(cameraPose(t), W / H);
+          cloudsNode.q = qAboutY(t * 6e-3);
+          cloudShadowNode.q = qAboutY(t * 6e-3 - 3e-3);
+          var pose = stormPose(t);
+          stormNode.p = pose.position;
+          stormNode.q = pose.turn;
+          stormNode.s = [pose.scale, pose.scale, pose.scale];
+          spinNode.q = qAboutZ(pose.spin);
+          shadowNode.p = pose.shadow;
+          shadowNode.q = qAboutZ(pose.spin);
+          storm.alpha = pose.formed;
+          storm.shadowOpacity = 0.55 * pose.formed;
+          storm.flash = pose.flash * 0.8;
+          storm.bolt = pose.flash * 3;
+          var s = pose.s;
+          swath.shape.count = Math.floor(s * SW) * 6;
+          swathLook.opacity = 0.24 * pose.formed;
+          behind.shape.count = Math.floor(s * N) + 1;
+          var grow = 0.03 * (1 + (pose.landfall > 0 ? 0.25 * Math.abs(Math.sin(pose.landfall * 5)) : 0));
+          target.node.s = [grow, grow, grow];
           var ready = t > T_DIVE + 0.3;
           label("now", trackAt(0, 1.006), ready);
           marks.forEach(function(m, i2) {
@@ -3597,12 +4438,12 @@
               rows[i2].classList.toggle("pn-wx-on", s >= m.at);
             }
           });
-          label("end", geo(END[0] + 2.2, END[1] + 4.6, 1.004, tmp3), t >= T_LAND + 0.15);
+          label("end", END_LABEL, t >= T_LAND + 0.15);
           if (rows[marks.length]) {
             rows[marks.length].classList.toggle("pn-wx-on", t >= T_LAND);
           }
           root.classList.toggle("pn-wx-st3-tracking", ready);
-          renderer.render(scene, camera);
+          render();
         }
         var start = performance.now();
         function frame() {
@@ -3613,42 +4454,42 @@
             dispose();
             return;
           }
-          if (canvas.width !== W * 2 || canvas.height !== H * 2) {
-            renderer.setSize(W, H, false);
+          if (canvas.width !== cw || canvas.height !== ch) {
+            sizeCanvas();
           }
           if (!drawSafely(Math.min(DUR, (performance.now() - start) / 1e3))) {
             return;
           }
           requestAnimationFrame(frame);
         }
+        function free() {
+          made.programs.forEach(function(p2) {
+            gl.deleteProgram(p2);
+          });
+          made.textures.forEach(function(t) {
+            gl.deleteTexture(t);
+          });
+          made.arrays.forEach(function(a2) {
+            gl.deleteVertexArray(a2);
+          });
+          made.buffers.forEach(function(b2) {
+            gl.deleteBuffer(b2);
+          });
+          made.programs = [];
+          made.textures = [];
+          made.arrays = [];
+          made.buffers = [];
+          var lose = gl.getExtension("WEBGL_lose_context");
+          if (lose) {
+            lose.loseContext();
+          }
+        }
         function dispose() {
           if (!running) {
             return;
           }
           running = false;
-          function free(value) {
-            if (value && value.isTexture) {
-              value.dispose();
-            }
-          }
-          scene.traverse(function(item) {
-            if (item.geometry) {
-              item.geometry.dispose();
-            }
-            var materials = item.material ? [].concat(item.material) : [];
-            materials.forEach(function(m) {
-              Object.keys(m).forEach(function(key) {
-                free(m[key]);
-              });
-              Object.keys(m.uniforms || {}).forEach(function(key) {
-                free(m.uniforms[key].value);
-              });
-              m.dispose();
-            });
-          });
-          [earthMap, cloudMap, topoMap, waterMap, spiralTex].forEach(free);
-          renderer.dispose();
-          renderer.forceContextLoss();
+          free();
           settle();
         }
         if (hold === null) {
@@ -3658,6 +4499,11 @@
           return drawn3;
         } };
       }
+      stormScene2.cameraPose = cameraPose;
+      stormScene2.viewOf = viewOf;
+      stormScene2.screenPoint = screenPoint;
+      stormScene2.stormPose = stormPose;
+      stormScene2.trackAt = trackAt;
       return stormScene2;
     })();
     var HELD = [];
@@ -3671,7 +4517,7 @@
       return Promise.all(HELD.slice());
     }
     function hasWebGL() {
-      return !!(window.THREE && window.WebGLRenderingContext);
+      return !!window.WebGL2RenderingContext;
     }
     function Stormtracker(props) {
       var wx = props.weather || SAMPLES.stormtracker.weather;
@@ -5454,6 +6300,7 @@
       crawlSpeed: CRAWL_SPEED,
       weatherIconMarkup,
       drawn: drawn2,
+      stormScene,
       WEATHER: WEATHER2,
       OUTLOOKS,
       EVENTS,

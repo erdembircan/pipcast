@@ -28,7 +28,6 @@ const HELD = {
   'station/sounds/hour-out.m4a': "the hour's outro, rendered from the design system's score",
   'station/sounds/beat-minor.caf': "the beat under BREAKING NEWS, rendered from the design system's score",
   'station/sounds/beat-major.caf': "the beat under the hour, rendered from the design system's score",
-  'station/web/vendor/three.js': 'three.js r149, the graphics library STORMTRACKER draws its globe with, copied unchanged from its npm package',
   'station/sounds/weather-alert.m4a': "STORM WARNING's jingle, rendered from the design system's score",
 }
 
@@ -40,8 +39,6 @@ const VENDOR = {
   'station/web/vendor/react.production.min.js': 'node_modules/react/umd/react.production.min.js',
   'station/web/vendor/react-dom.production.min.js': 'node_modules/react-dom/umd/react-dom.production.min.js',
   'station/web/vendor/LICENSE-react.txt': 'node_modules/react/LICENSE',
-  'station/web/vendor/three.js': 'node_modules/three/build/three.js',
-  'station/web/vendor/LICENSE-three.txt': 'node_modules/three/LICENSE',
 }
 
 const PLUGIN = 'plugin'

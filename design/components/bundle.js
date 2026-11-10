@@ -1381,8 +1381,8 @@
     ]);
   }
 
-  /* STORMTRACKER's globe. A 90s station's storm tracker in WebGL (three.js
-     r149, the global THREE), the week's usage as the storm.
+  /* STORMTRACKER's globe. A 90s station's storm tracker in WebGL 2, drawn
+     straight onto the canvas with no library, the week's usage as the storm.
 
      What the period footage shows, and this follows: the earth from orbit,
      lit, with its atmosphere glowing at the limb and satellite clouds over
@@ -1411,32 +1411,242 @@
      `ready` comes once a held moment has been drawn, or the scene is given up.
      When a picture cannot be uploaded or the scene cannot be drawn it gives the
      scene up and calls `options.onFail`, once. Colours are read from the
-     station's tokens on `root`. */
+     station's tokens on `root`.
+
+     How the picture is made. The scene is a short list of things drawn in a
+     fixed order each frame, with a few lights, in linear colour that is
+     turned to the screen's sRGB on the way out (so a colour given as
+     #rrggbb is used as it stands, then encoded, which is what makes the
+     palette read as it does). The lighting, the texture settings, the way the
+     things are sorted and blended, and the numbers of the camera all follow
+     three.js r149, which drew this scene before this code did, so the
+     picture is the same. The shaders and the code are written here from that
+     arithmetic, not from that library's text: its equations are published
+     ones (Blinn-Phong with Schlick's Fresnel, bump mapping from derivatives,
+     the sRGB curve, the rotation and projection matrices) and the sources of
+     the less common are named where they are used. */
   var stormScene = (function () {
     var DUR = 13, T_DIVE = 2.6, T_LAND = 9.0;
     var START = [25.4, -95.4], END = [27.95, -82.75];
+    var NEAR = 0.001, FAR = 200, FOV = 38, RATIO = 2;
+    var CLEAR = [1 / 255, 3 / 255, 10 / 255];
 
     function rad(d) { return d * Math.PI / 180; }
     function clamp(x, a, b) { return Math.max(a, Math.min(b, x)); }
     function smooth(x) { x = clamp(x, 0, 1); return x * x * (3 - 2 * x); }
-    function geo(lat, lon, r, out) {
+
+    /* Vectors are [x, y, z], quaternions [x, y, z, w] and matrices sixteen
+       numbers, one column after another, as WebGL takes them. */
+    function vAdd(a, b) { return [a[0] + b[0], a[1] + b[1], a[2] + b[2]]; }
+    function vSub(a, b) { return [a[0] - b[0], a[1] - b[1], a[2] - b[2]]; }
+    function vMul(a, k) { return [a[0] * k, a[1] * k, a[2] * k]; }
+    function vDot(a, b) { return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]; }
+    function vCross(a, b) { return [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]]; }
+    function vLen(a) { return Math.sqrt(vDot(a, a)); }
+    function vUnit(a) { return vMul(a, 1 / (vLen(a) || 1)); }
+    function vLerp(a, b, f) { return [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f, a[2] + (b[2] - a[2]) * f]; }
+    /* the part of `a` that lies in the plane whose normal is `n` */
+    function vAcross(a, n) { var d = vDot(n, n); return d === 0 ? [0, 0, 0] : vSub(a, vMul(n, vDot(n, a) / d)); }
+
+    function qAboutY(angle) { return [0, Math.sin(angle / 2), 0, Math.cos(angle / 2)]; }
+    function qAboutZ(angle) { return [0, 0, Math.sin(angle / 2), Math.cos(angle / 2)]; }
+    function qConjugate(q) { return [-q[0], -q[1], -q[2], q[3]]; }
+    /* the turn that takes the unit vector `a` to the unit vector `b` */
+    function qBetween(a, b) {
+      var across = vCross(a, b), cosPlusOne = vDot(a, b) + 1, q;
+      if (cosPlusOne < 1e-8) {
+        // opposite: half a turn about any axis that lies across `a`
+        var axis = vUnit(vCross(a, Math.abs(a[0]) < 0.9 ? [1, 0, 0] : [0, 1, 0]));
+        q = [axis[0], axis[1], axis[2], 0];
+      } else {
+        q = [across[0], across[1], across[2], cosPlusOne];
+      }
+      var l = Math.sqrt(q[0] * q[0] + q[1] * q[1] + q[2] * q[2] + q[3] * q[3]) || 1;
+      return [q[0] / l, q[1] / l, q[2] / l, q[3] / l];
+    }
+    /* `v` turned by the unit quaternion `q`: v + w t + u x t, where u is the quaternion's axis part and t is twice u x v */
+    function qRotate(q, v) {
+      var u = [q[0], q[1], q[2]];
+      var t = vMul(vCross(u, v), 2);
+      return vAdd(vAdd(v, vMul(t, q[3])), vCross(u, t));
+    }
+
+    /* a place, a turn and a size, as a matrix: the turn's rotation matrix with each column made as long as its size */
+    function mFrom(p, q, s) {
+      var x = q[0], y = q[1], z = q[2], w = q[3];
+      var xx = x * x, yy = y * y, zz = z * z, xy = x * y, xz = x * z, yz = y * z, wx = w * x, wy = w * y, wz = w * z;
+      return [
+        (1 - 2 * (yy + zz)) * s[0], 2 * (xy + wz) * s[0], 2 * (xz - wy) * s[0], 0,
+        2 * (xy - wz) * s[1], (1 - 2 * (xx + zz)) * s[1], 2 * (yz + wx) * s[1], 0,
+        2 * (xz + wy) * s[2], 2 * (yz - wx) * s[2], (1 - 2 * (xx + yy)) * s[2], 0,
+        p[0], p[1], p[2], 1
+      ];
+    }
+    function mMul(a, b) {
+      var out = new Array(16), c, r, k, sum;
+      for (c = 0; c < 4; c++) {
+        for (r = 0; r < 4; r++) {
+          sum = 0;
+          for (k = 0; k < 4; k++) { sum += a[k * 4 + r] * b[c * 4 + k]; }
+          out[c * 4 + r] = sum;
+        }
+      }
+      return out;
+    }
+    /* the inverse of a matrix that is only a turn and a move, as the camera's */
+    function mInverseRigid(m) {
+      var t = [m[12], m[13], m[14]];
+      return [
+        m[0], m[4], m[8], 0,
+        m[1], m[5], m[9], 0,
+        m[2], m[6], m[10], 0,
+        -(m[0] * t[0] + m[1] * t[1] + m[2] * t[2]), -(m[4] * t[0] + m[5] * t[1] + m[6] * t[2]), -(m[8] * t[0] + m[9] * t[1] + m[10] * t[2]), 1
+      ];
+    }
+    /* the camera's place in the world, looking from `eye` at `target` with `up` as its up: its axes are
+       sideways, up and back (from the target to the eye), and it stands at `eye` */
+    function mLookFrom(eye, target, up) {
+      var back = vSub(eye, target);
+      back = vDot(back, back) === 0 ? [0, 0, 1] : vUnit(back);
+      var side = vCross(up, back);
+      if (vDot(side, side) === 0) {
+        // up lies along the way it looks: any sideways will do
+        side = vCross(Math.abs(back[1]) < 0.9 ? [0, 1, 0] : [1, 0, 0], back);
+      }
+      side = vUnit(side);
+      var over = vCross(back, side);
+      return [side[0], side[1], side[2], 0, over[0], over[1], over[2], 0, back[0], back[1], back[2], 0, eye[0], eye[1], eye[2], 1];
+    }
+    /* the lens: `fov` degrees from the top of the picture to the bottom, `aspect` wide for its height */
+    function mPerspective(fov, aspect, near, far) {
+      var top = near * Math.tan(rad(fov) * 0.5), height = 2 * top, width = aspect * height, left = -0.5 * width;
+      var scaleX = 2 * near / width, scaleY = 2 * near / height;
+      var shiftX = (2 * left + width) / width, shiftY = (top + (top - height)) / height;
+      var depthScale = -(far + near) / (far - near), depthShift = -2 * far * near / (far - near);
+      return [scaleX, 0, 0, 0, 0, scaleY, 0, 0, shiftX, shiftY, depthScale, -1, 0, 0, depthShift, 0];
+    }
+    /* the point `v` taken through a matrix, and divided by its w */
+    function mPoint(m, v) {
+      var x = v[0], y = v[1], z = v[2];
+      var hx = m[0] * x + m[4] * y + m[8] * z + m[12];
+      var hy = m[1] * x + m[5] * y + m[9] * z + m[13];
+      var hz = m[2] * x + m[6] * y + m[10] * z + m[14];
+      var hw = m[3] * x + m[7] * y + m[11] * z + m[15];
+      return [hx / hw, hy / hw, hz / hw];
+    }
+    /* a direction through the turn part of a matrix, made a unit again */
+    function mDirection(m, v) {
+      return vUnit([m[0] * v[0] + m[4] * v[1] + m[8] * v[2], m[1] * v[0] + m[5] * v[1] + m[9] * v[2], m[2] * v[0] + m[6] * v[1] + m[10] * v[2]]);
+    }
+    /* what turns a surface's normal into the view's: the inverse transpose of a matrix's upper 3 x 3, which is its
+       cofactors over its determinant, laid out column by column */
+    function mNormal(m) {
+      var a = m[0], b = m[4], c = m[8], d = m[1], e = m[5], f = m[9], g = m[2], h = m[6], i = m[10];
+      var c00 = e * i - f * h, c01 = f * g - d * i, c02 = d * h - e * g;
+      var c10 = c * h - b * i, c11 = a * i - c * g, c12 = b * g - a * h;
+      var c20 = b * f - c * e, c21 = c * d - a * f, c22 = a * e - b * d;
+      var det = a * c00 + b * c01 + c * c02;
+      var k = det === 0 ? 0 : 1 / det;
+      return [c00 * k, c10 * k, c20 * k, c01 * k, c11 * k, c21 * k, c02 * k, c12 * k, c22 * k];
+    }
+
+    function geo(lat, lon, r) {
       var p = rad(lon + 180), t = rad(90 - lat);
-      out = out || new THREE.Vector3();
-      return out.set(-r * Math.sin(t) * Math.cos(p), r * Math.cos(t), r * Math.sin(t) * Math.sin(p));
+      return [-r * Math.sin(t) * Math.cos(p), r * Math.cos(t), r * Math.sin(t) * Math.sin(p)];
     }
     function trackLatLon(s) {
       return [START[0] + (END[0] - START[0]) * s + Math.sin(s * Math.PI) * 1.4, START[1] + (END[1] - START[1]) * s];
     }
-    function trackAt(s, r, out) { var ll = trackLatLon(s); return geo(ll[0], ll[1], r, out); }
+    function trackAt(s, r) { var ll = trackLatLon(s); return geo(ll[0], ll[1], r); }
     // The storm's progress along its track at time t: faster as it goes
     function progress(t) { var u = clamp((t - T_DIVE) / (T_LAND - T_DIVE), 0, 1); return Math.pow(u, 1.6); }
+
+    /* A colour given as the station's tokens give them (#rgb or #rrggbb, or
+       rgb(r, g, b)), as [r, g, b] from 0 to 1; the fallback when it is
+       none of those. */
+    function parseColor(value) {
+      var text = String(value || '').trim(), m;
+      m = /^#([0-9a-f]{6})$/i.exec(text);
+      if (m) {
+        var n = parseInt(m[1], 16);
+        return [(n >> 16 & 255) / 255, (n >> 8 & 255) / 255, (n & 255) / 255];
+      }
+      m = /^#([0-9a-f])([0-9a-f])([0-9a-f])$/i.exec(text);
+      if (m) { return [parseInt(m[1] + m[1], 16) / 255, parseInt(m[2] + m[2], 16) / 255, parseInt(m[3] + m[3], 16) / 255]; }
+      m = /^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/i.exec(text);
+      if (m) { return [Math.min(255, +m[1]) / 255, Math.min(255, +m[2]) / 255, Math.min(255, +m[3]) / 255]; }
+      return null;
+    }
+    function colorOf(value, fallback) { return parseColor(value) || parseColor(fallback) || [1, 0, 1]; }
     function tokens(el) {
       var cs = getComputedStyle(el);
-      function c(n, f) { var v = cs.getPropertyValue('--' + n).trim(); return new THREE.Color(v || f); }
+      function c(n, f) { return colorOf(cs.getPropertyValue('--' + n), f); }
       return {
         breaking: c('breaking', '#c4170e'), breakingHi: c('breaking-hi', '#ff5a4f'), gold: c('gold', '#f2b630'),
         goldHi: c('gold-hi', '#ffe08a'), ready: c('ready', '#2fb44a'), readyHi: c('ready-hi', '#8af59b'),
         glow: c('row-hi', '#5b8be8'), edge: c('bar-edge', '#8fb0ff'), deep: c('studio-deep', '#061233'), white: c('chrome-hi', '#ffffff')
+      };
+    }
+
+    /* The camera: from orbit down to a low look north over the Gulf, then
+       tightening on the storm and its landfall as it comes in. A pure
+       function of the time: where it is, which way is up, and what it
+       looks at. */
+    function trackPose(s) {
+      var ll = trackLatLon(s);
+      var lookLat = ll[0] + (END[0] - ll[0]) * 0.45 + 1.0, lookLon = ll[1] + (END[1] - ll[1]) * 0.45;
+      return { eye: geo(lookLat - 8.0 + 1.6 * s, lookLon - 0.3, 1.125 - 0.012 * s), look: geo(lookLat, lookLon, 1.0) };
+    }
+    var ORBIT = geo(24, -89, 3.25);
+    var SETTLED = trackPose(0);
+    var UP0 = [0, 1, 0];
+    function cameraPose(t) {
+      var pose = trackPose(progress(t)), eye = pose.eye, look = pose.look, up;
+      if (t < T_DIVE) {
+        // the dive: straight down onto the Gulf, slowing as it nears
+        var f = smooth(t / T_DIVE);
+        var dir = vUnit(vLerp(vUnit(ORBIT), vUnit(SETTLED.eye), f));
+        var r = 3.25 + (vLen(SETTLED.eye) - 3.25) * (1 - Math.pow(1 - f, 2.6));
+        eye = vMul(dir, r);
+        look = vLerp([0, 0, 0], SETTLED.look, smooth(t / (T_DIVE * 0.7)));
+        up = vUnit(vLerp(UP0, vUnit(SETTLED.eye), f));
+      } else {
+        up = vUnit(eye);
+      }
+      return { eye: eye, look: look, up: up };
+    }
+    /* The camera as matrices for a canvas `aspect` wide for its height: where it stands, its inverse and its lens */
+    function viewOf(pose, aspect) {
+      var world = mLookFrom(pose.eye, pose.look, pose.up);
+      return { eye: pose.eye, world: world, inverse: mInverseRigid(world), projection: mPerspective(FOV, aspect, NEAR, FAR) };
+    }
+    /* Where a point of the world falls in a W x H canvas, in pixels from its top left, and whether the camera sees that side of the globe */
+    function screenPoint(v, view, W, H) {
+      var p = mPoint(view.projection, mPoint(view.inverse, v));
+      var facing = vDot(vUnit(v), vUnit(vSub(view.eye, v))) > 0;
+      return { x: (p[0] + 1) / 2 * W, y: (1 - p[1]) / 2 * H, on: p[2] < 1 && facing };
+    }
+
+    // Light from the south-east, the afternoon sun over the Atlantic
+    var SUN = vUnit(vAdd(vUnit(geo(14, -70, 1)), [0, 0.25, 0]));
+
+    /* Where the storm is and how it looks at time t: also pure. */
+    function stormPose(t) {
+      var s = progress(t);
+      var k = 0.026 + 0.042 * Math.pow(s, 0.85);
+      var n = vUnit(trackAt(s, 1.0));
+      var turn = qBetween([0, 0, 1], n);
+      var formed = smooth((t - T_DIVE + 0.5) / 1.0);
+      // the shadow falls away from the sun across the sea
+      var away = vMul(vUnit(vAcross(SUN, n)), -0.42);
+      var shadow = qRotate(qConjugate(turn), away);
+      shadow[2] = 0.0005;
+      // landfall: lightning
+      var lt = t - T_LAND;
+      var flash = lt > 0 ? Math.max(0, Math.sin(lt * 23) * Math.sin(lt * 7.3)) * (lt < 1.8 ? 1 : 0) : 0;
+      return {
+        s: s, scale: k, position: vMul(n, 1.0008), turn: turn, spin: t * 0.5, formed: formed,
+        shadow: shadow, flash: flash, landfall: lt
       };
     }
 
@@ -1499,6 +1709,375 @@
       return c;
     }
 
+    /* ---------------- The shapes ---------------- */
+
+    /* A globe of `radius`, in rings of quads from the north pole down: a point
+       is [x, y, z] with its normal and the picture's [u, v] (v up from the
+       south pole; each pole's points are shifted half a quad so the picture
+       does not pinch). The points are numbered ring by ring, and each quad is two triangles
+       wound the same way, the pole's quads one triangle. */
+    function sphereShape(radius, across, down) {
+      var pos = [], nor = [], uvs = [], idx = [], stride = across + 1, ix, iy;
+      for (iy = 0; iy <= down; iy++) {
+        var v = iy / down;
+        var shift = iy === 0 ? 0.5 / across : (iy === down ? -0.5 / across : 0);
+        for (ix = 0; ix <= across; ix++) {
+          var u = ix / across;
+          var x = -radius * Math.cos(u * Math.PI * 2) * Math.sin(v * Math.PI);
+          var y = radius * Math.cos(v * Math.PI);
+          var z = radius * Math.sin(u * Math.PI * 2) * Math.sin(v * Math.PI);
+          var l = 1 / (Math.sqrt(x * x + y * y + z * z) || 1);
+          pos.push(x, y, z);
+          nor.push(x * l, y * l, z * l);
+          uvs.push(u + shift, 1 - v);
+        }
+      }
+      for (iy = 0; iy < down; iy++) {
+        for (ix = 0; ix < across; ix++) {
+          var nw = iy * stride + ix, ne = nw + 1, sw = nw + stride, se = sw + 1;
+          if (iy !== 0) { idx.push(ne, nw, se); }
+          if (iy !== down - 1) { idx.push(nw, sw, se); }
+        }
+      }
+      return { position: pos, normal: nor, uv: uvs, index: idx };
+    }
+    /* A flat sheet `w` x `h` about the origin facing +z, in across x down quads, its picture's top at +y */
+    function sheetShape(w, h, across, down) {
+      var pos = [], nor = [], uvs = [], idx = [], stride = across + 1, ix, iy;
+      for (iy = 0; iy <= down; iy++) {
+        for (ix = 0; ix <= across; ix++) {
+          pos.push(ix * (w / across) - w / 2, h / 2 - iy * (h / down), 0);
+          nor.push(0, 0, 1);
+          uvs.push(ix / across, 1 - iy / down);
+        }
+      }
+      for (iy = 0; iy < down; iy++) {
+        for (ix = 0; ix < across; ix++) {
+          var nw = ix + stride * iy, sw = nw + stride, ne = nw + 1, se = sw + 1;
+          idx.push(nw, sw, ne, sw, se, ne);
+        }
+      }
+      return { position: pos, normal: nor, uv: uvs, index: idx };
+    }
+
+    /* ---------------- The shaders (GLSL ES 3.00) ---------------- */
+
+    var HEAD = '#version 300 es\nprecision highp float;\nprecision highp int;\nprecision highp sampler2D;\n';
+
+    /* The colour on its way to the screen: linear to sRGB, with the 0.41666
+       of the exponent the picture was made with. */
+    var TO_SCREEN = [
+      'vec3 toScreen(vec3 c) {',
+      '  vec3 curve = pow(c, vec3(0.41666)) * 1.055 - vec3(0.055);',
+      '  return mix(curve, c * 12.92, vec3(lessThanEqual(c, vec3(0.0031308))));',
+      '}'
+    ].join('\n');
+
+    /* Lit surfaces: the sun, the lightning's bolt (which reaches only so far
+       and fades to nothing at its edge) and the ambient light, all with their
+       colours already scaled by pi, which the 1/pi of a surface's diffuse
+       cancels. */
+    var LIGHTS = [
+      'uniform vec3 ambientColor;',
+      'uniform vec3 sunDirection;',
+      'uniform vec3 sunColor;',
+      'uniform vec3 boltPosition;',
+      'uniform vec3 boltColor;',
+      'uniform float boltReach;',
+      'uniform float boltFade;',
+      'const float INV_PI = 0.3183098861837907;',
+      '// Blinn-Phong highlight, with Schlick\'s Fresnel in the form Epic gave at SIGGRAPH 2013',
+      'vec3 gloss(vec3 toLight, vec3 toEye, vec3 n, vec3 f0, float shininess) {',
+      '  vec3 half_ = normalize(toLight + toEye);',
+      '  float nh = clamp(dot(n, half_), 0.0, 1.0);',
+      '  float vh = clamp(dot(toEye, half_), 0.0, 1.0);',
+      '  float fresnel = exp2((-5.55473 * vh - 6.98316) * vh);',
+      '  vec3 F = f0 * (1.0 - fresnel) + vec3(fresnel);',
+      '  float lobe = INV_PI * (shininess * 0.5 + 1.0) * pow(nh, shininess);',
+      '  return F * (0.25 * lobe);',
+      '}',
+      '// The light on a surface at `pos` (in the view) facing `n`: what the sun and the bolt give it, then the ambient.',
+      'vec3 lit(vec3 albedo, vec3 n, vec3 pos, float shininess, vec3 specular, float glossy) {',
+      '  vec3 toEye = normalize(-pos);',
+      '  vec3 diffuse = vec3(0.0);',
+      '  vec3 shine = vec3(0.0);',
+      '  vec3 toBolt = boltPosition - pos;',
+      '  vec3 l = normalize(toBolt);',
+      '  float reach = (boltReach > 0.0 && boltFade > 0.0) ? pow(clamp(-length(toBolt) / boltReach + 1.0, 0.0, 1.0), boltFade) : 1.0;',
+      '  vec3 incoming = clamp(dot(n, l), 0.0, 1.0) * (boltColor * reach);',
+      '  diffuse += incoming * (INV_PI * albedo);',
+      '  if (glossy > 0.0) { shine += incoming * gloss(l, toEye, n, specular, shininess) * glossy; }',
+      '  incoming = clamp(dot(n, sunDirection), 0.0, 1.0) * sunColor;',
+      '  diffuse += incoming * (INV_PI * albedo);',
+      '  if (glossy > 0.0) { shine += incoming * gloss(sunDirection, toEye, n, specular, shininess) * glossy; }',
+      '  vec3 ambient = ambientColor * (INV_PI * albedo);',
+      '  return diffuse + ambient + shine;',
+      '}'
+    ].join('\n');
+
+    /* The earth (glossy, with bumps) and the clouds (matte): one vertex shader, two fragment ones */
+    var LIT_VERTEX = HEAD + [
+      'layout(location = 0) in vec3 position;',
+      'layout(location = 1) in vec3 normal;',
+      'layout(location = 2) in vec2 uv;',
+      'uniform mat4 modelViewMatrix;',
+      'uniform mat4 projectionMatrix;',
+      'uniform mat3 normalMatrix;',
+      'out vec2 vUv;',
+      'out vec3 vNormal;',
+      'out vec3 vViewPosition;',
+      'void main() {',
+      '  vUv = uv;',
+      '  vNormal = normalize(normalMatrix * normal);',
+      '  vec4 inView = modelViewMatrix * vec4(position, 1.0);',
+      '  vViewPosition = -inView.xyz;',
+      '  gl_Position = projectionMatrix * inView;',
+      '}'
+    ].join('\n');
+
+    var EARTH_FRAGMENT = HEAD + [
+      'uniform sampler2D map;',
+      'uniform sampler2D bumpMap;',
+      'uniform sampler2D specularMap;',
+      'uniform float bumpScale;',
+      'uniform vec3 specularColor;',
+      'uniform float shininess;',
+      LIGHTS,
+      TO_SCREEN,
+      'in vec2 vUv;',
+      'in vec3 vNormal;',
+      'in vec3 vViewPosition;',
+      'out vec4 outColor;',
+      '// Bump mapping from the screen\'s derivatives, after Morten Mikkelsen, "Bump Mapping Unparametrized Surfaces on the GPU" (2010):',
+      '// the height map is read one pixel over each way, and the normal is leant against the way it rises.',
+      'float relief(vec2 at) { return bumpScale * texture(bumpMap, at).x; }',
+      'vec3 bumped(vec3 pos, vec3 n, float facing) {',
+      '  float here = relief(vUv);',
+      '  float riseX = relief(vUv + dFdx(vUv)) - here;',
+      '  float riseY = relief(vUv + dFdy(vUv)) - here;',
+      '  vec3 stepX = dFdx(pos);',
+      '  vec3 stepY = dFdy(pos);',
+      '  vec3 acrossY = cross(stepY, n);',
+      '  vec3 acrossX = cross(n, stepX);',
+      '  float area = dot(stepX, acrossY) * facing;',
+      '  vec3 lean = sign(area) * (riseX * acrossY + riseY * acrossX);',
+      '  return normalize(abs(area) * n - lean);',
+      '}',
+      'void main() {',
+      '  vec4 surface = texture(map, vUv);',
+      '  float glossy = texture(specularMap, vUv).r;',
+      '  vec3 n = bumped(-vViewPosition, normalize(vNormal), gl_FrontFacing ? 1.0 : -1.0);',
+      '  vec3 colour = lit(surface.rgb, n, -vViewPosition, shininess, specularColor, glossy);',
+      '  outColor = vec4(toScreen(colour), 1.0);',
+      '}'
+    ].join('\n');
+
+    var CLOUD_FRAGMENT = HEAD + [
+      'uniform sampler2D alphaMap;',
+      'uniform float opacity;',
+      LIGHTS,
+      TO_SCREEN,
+      'in vec2 vUv;',
+      'in vec3 vNormal;',
+      'in vec3 vViewPosition;',
+      'out vec4 outColor;',
+      'void main() {',
+      '  float alpha = opacity * texture(alphaMap, vUv).g;',
+      '  vec3 colour = lit(vec3(1.0), normalize(vNormal), -vViewPosition, 1.0, vec3(0.0), 0.0);',
+      '  outColor = vec4(toScreen(colour), alpha);',
+      '}'
+    ].join('\n');
+
+    /* A flat colour: with a picture's green channel for its opacity (the
+       clouds' shadow, the storm's shadow), or with a colour for each point of
+       a strip (the rain). */
+    function flatVertex(withColor) {
+      return HEAD + [
+        'layout(location = 0) in vec3 position;',
+        'layout(location = 2) in vec2 uv;',
+        withColor ? 'layout(location = 3) in vec3 color;' : '',
+        'uniform mat4 modelViewMatrix;',
+        'uniform mat4 projectionMatrix;',
+        'out vec2 vUv;',
+        withColor ? 'out vec3 vColor;' : '',
+        'void main() {',
+        '  vUv = uv;',
+        withColor ? '  vColor = color;' : '',
+        '  gl_Position = projectionMatrix * (modelViewMatrix * vec4(position, 1.0));',
+        '}'
+      ].join('\n');
+    }
+    function flatFragment(withPicture, withColor) {
+      return HEAD + [
+        'uniform vec3 diffuse;',
+        'uniform float opacity;',
+        withPicture ? 'uniform sampler2D alphaMap;' : '',
+        TO_SCREEN,
+        'in vec2 vUv;',
+        withColor ? 'in vec3 vColor;' : '',
+        'out vec4 outColor;',
+        'void main() {',
+        '  vec3 colour = diffuse;',
+        withColor ? '  colour *= vColor;' : '',
+        '  float alpha = opacity;',
+        withPicture ? '  alpha *= texture(alphaMap, vUv).g;' : '',
+        '  outColor = vec4(toScreen(colour), alpha);',
+        '}'
+      ].join('\n');
+    }
+
+    /* The air's glow: brightest where the surface turns away, seen from inside the shell */
+    var ATMOS_VERTEX = HEAD + [
+      'layout(location = 0) in vec3 position;',
+      'layout(location = 1) in vec3 normal;',
+      'uniform mat4 modelViewMatrix;',
+      'uniform mat4 projectionMatrix;',
+      'uniform mat3 normalMatrix;',
+      'out vec3 vN;',
+      'out vec3 vV;',
+      'void main(){',
+      '  vec4 mv = modelViewMatrix * vec4(position,1.0);',
+      '  vN = normalize(normalMatrix * normal);',
+      '  vV = normalize(-mv.xyz);',
+      '  gl_Position = projectionMatrix * mv;',
+      '}'
+    ].join('\n');
+    var ATMOS_FRAGMENT = HEAD + [
+      'uniform vec3 glow;',
+      'uniform vec3 edge;',
+      'in vec3 vN;',
+      'in vec3 vV;',
+      'out vec4 outColor;',
+      'void main(){',
+      '  float f = pow(1.0 - abs(dot(vN, vV)), 3.0);',
+      '  outColor = vec4(mix(glow, edge, f) * f * 1.6, f);',
+      '}'
+    ].join('\n');
+
+    /* The storm: a flat sheet whose points are lifted by the spiral's own opacity and a drifting detail of cloud, so the tops stand up; shaded by the slope of what it finds */
+    var DISC_VERTEX = HEAD + [
+      'layout(location = 0) in vec3 position;',
+      'layout(location = 2) in vec2 uv;',
+      'uniform mat4 modelMatrix;',
+      'uniform mat4 modelViewMatrix;',
+      'uniform mat4 projectionMatrix;',
+      'uniform sampler2D map;',
+      'uniform sampler2D detail;',
+      'uniform float uH;',
+      'out vec2 vUv;',
+      'out float vD;',
+      'out vec3 vPos;',
+      'void main(){',
+      '  vUv = uv;',
+      '  float d = clamp(texture(map, uv).a * 1.25, 0.0, 1.0);',
+      '  float det = texture(detail, uv * 1.6 + vec2(0.31, 0.17)).r;',
+      '  float h = (pow(d, 0.9) * 0.85 + det * 0.25 * d) * uH;',
+      '  vD = d;',
+      '  vec3 p = position + vec3(0.0, 0.0, h);',
+      '  vPos = (modelMatrix * vec4(p, 1.0)).xyz;',
+      '  gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);',
+      '}'
+    ].join('\n');
+    var DISC_FRAGMENT = HEAD + [
+      'uniform vec3 uSun;',
+      'uniform float uFlash;',
+      'uniform float uAlpha;',
+      'uniform vec3 cLit;',
+      'uniform vec3 cShade;',
+      'in vec2 vUv;',
+      'in float vD;',
+      'in vec3 vPos;',
+      'out vec4 outColor;',
+      'void main(){',
+      '  vec3 n = normalize(cross(dFdx(vPos), dFdy(vPos)));',
+      '  if (dot(n, normalize(vPos)) < 0.0) { n = -n; }',
+      '  float lam = clamp(dot(n, normalize(uSun)), 0.0, 1.0);',
+      '  vec3 col = mix(cShade, cLit, 0.25 + 0.75 * lam);',
+      '  col = mix(col, vec3(1.0), uFlash * vD);',
+      '  outColor = vec4(col, smoothstep(0.05, 0.4, vD) * uAlpha);',
+      '}'
+    ].join('\n');
+
+    /* The stars: square points of a fixed size in pixels */
+    var STAR_VERTEX = HEAD + [
+      'layout(location = 0) in vec3 position;',
+      'uniform mat4 modelViewMatrix;',
+      'uniform mat4 projectionMatrix;',
+      'uniform float size;',
+      'void main() {',
+      '  gl_Position = projectionMatrix * (modelViewMatrix * vec4(position, 1.0));',
+      '  gl_PointSize = size;',
+      '}'
+    ].join('\n');
+    var PLAIN_FRAGMENT = HEAD + [
+      'uniform vec3 diffuse;',
+      'uniform float opacity;',
+      TO_SCREEN,
+      'out vec4 outColor;',
+      'void main() {',
+      '  outColor = vec4(toScreen(diffuse), opacity);',
+      '}'
+    ].join('\n');
+
+    /* The track: a line, dashed by the distance along it (the dashes ahead of the storm) or whole (the gold behind) */
+    function lineVertex(dashed) {
+      return HEAD + [
+        'layout(location = 0) in vec3 position;',
+        dashed ? 'layout(location = 4) in float lineDistance;' : '',
+        'uniform mat4 modelViewMatrix;',
+        'uniform mat4 projectionMatrix;',
+        dashed ? 'out float vAlong;' : '',
+        'void main() {',
+        dashed ? '  vAlong = lineDistance;' : '',
+        '  gl_Position = projectionMatrix * (modelViewMatrix * vec4(position, 1.0));',
+        '}'
+      ].join('\n');
+    }
+    function lineFragment(dashed) {
+      return HEAD + [
+        'uniform vec3 diffuse;',
+        'uniform float opacity;',
+        dashed ? 'uniform float dashSize;' : '',
+        dashed ? 'uniform float cycle;' : '',
+        dashed ? 'in float vAlong;' : '',
+        TO_SCREEN,
+        'out vec4 outColor;',
+        'void main() {',
+        dashed ? '  if (mod(vAlong, cycle) > dashSize) { discard; }' : '',
+        '  outColor = vec4(toScreen(diffuse), opacity);',
+        '}'
+      ].join('\n');
+    }
+
+    /* The dots and the target: a square that always faces the camera, `size` across in the world */
+    var SPRITE_VERTEX = HEAD + [
+      'layout(location = 0) in vec3 position;',
+      'layout(location = 2) in vec2 uv;',
+      'uniform mat4 modelMatrix;',
+      'uniform mat4 modelViewMatrix;',
+      'uniform mat4 projectionMatrix;',
+      'out vec2 vUv;',
+      'void main() {',
+      '  vUv = uv;',
+      '  vec4 centre = modelViewMatrix * vec4(0.0, 0.0, 0.0, 1.0);',
+      '  vec2 size = vec2(length(modelMatrix[0].xyz), length(modelMatrix[1].xyz));',
+      '  centre.xy += position.xy * size;',
+      '  gl_Position = projectionMatrix * centre;',
+      '}'
+    ].join('\n');
+    var SPRITE_FRAGMENT = HEAD + [
+      'uniform vec3 diffuse;',
+      'uniform float opacity;',
+      'uniform sampler2D map;',
+      TO_SCREEN,
+      'in vec2 vUv;',
+      'out vec4 outColor;',
+      'void main() {',
+      '  vec4 picture = texture(map, vUv);',
+      '  outColor = vec4(toScreen(diffuse * picture.rgb), opacity * picture.a);',
+      '}'
+    ].join('\n');
+
     function stormScene(root, options) {
       var canvas = root.querySelector('canvas');
       if (!canvas) { return null; }
@@ -1506,30 +2085,32 @@
       var hold = typeof options.hold === 'number' ? options.hold : null;
       var marks = options.marks || [];
       var base = options.textures || 'textures/';
-      var renderer;
+      var gl;
       try {
-        renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true, alpha: false, preserveDrawingBuffer: hold !== null });
+        // An opaque canvas. (The context r149 made had an alpha channel whatever its `alpha` option said, cleared to
+        // opaque and kept at 1 by the blending below; the pictures are the same either way.)
+        gl = canvas.getContext('webgl2', { antialias: true, alpha: false, depth: true, stencil: true, premultipliedAlpha: true, preserveDrawingBuffer: hold !== null });
       } catch (e) {
         return null;
       }
+      if (!gl || (gl.isContextLost && gl.isContextLost())) { return null; }
       // A held picture is drawn as it stands: its labels and list are not brought in by a transition,
       // which a page with no frames to run it, such as the station's snapshot, never plays
       if (hold !== null) { root.classList.add('pn-wx-st3-held'); }
       var K = tokens(root);
-      renderer.setPixelRatio(2);
-      renderer.setSize(W, H, false);
-      renderer.outputEncoding = THREE.sRGBEncoding;
-      var scene = new THREE.Scene();
-      scene.background = new THREE.Color(0x01030a);
-      var camera = new THREE.PerspectiveCamera(38, W / H, 0.001, 200);
+      var cw = Math.floor(W * RATIO), ch = Math.floor(H * RATIO);
+      function sizeCanvas() {
+        canvas.width = cw;
+        canvas.height = ch;
+      }
+      sizeCanvas();
 
-      var loader = new THREE.TextureLoader();
-      loader.setCrossOrigin('anonymous');
-      var pending = 4;
       var running = true;
       var drawn = false;
       var settle = null;
       var finished = new Promise(function (resolve) { settle = resolve; });
+      var made = { buffers: [], arrays: [], textures: [], programs: [] };
+      var pending = 4;
       /* A still has no frames to wait for: it draws its moment once the pictures have come, or failed to */
       function loaded() {
         pending -= 1;
@@ -1560,271 +2141,511 @@
           return false;
         }
       }
-      function tex(url, srgb) {
-        var t = loader.load(url, loaded, undefined, loaded);
-        if (srgb) { t.encoding = THREE.sRGBEncoding; }
-        t.anisotropy = 8;
-        return t;
-      }
-      var earthMap = tex(base + 'earth.jpg', true);
-      var cloudMap = tex(base + 'clouds.jpg', false);
-      var topoMap = tex(base + 'topo.jpg', false);
-      var waterMap = tex(base + 'water.jpg', false);
 
-      // Light from the south-east, the afternoon sun over the Atlantic
-      var sunDir = geo(14, -70, 1).normalize().add(new THREE.Vector3(0, 0.25, 0)).normalize();
-      var sun = new THREE.DirectionalLight(0xffffff, 1.35);
-      sun.position.copy(sunDir).multiplyScalar(10);
-      scene.add(sun);
-      scene.add(new THREE.AmbientLight(0x3a4466, 0.6));
-
-      // Stars
-      var starGeo = new THREE.BufferGeometry(), sp = [], rs = seeded(9);
-      for (var i = 0; i < 1800; i++) {
-        var v = new THREE.Vector3(rs() * 2 - 1, rs() * 2 - 1, rs() * 2 - 1).normalize().multiplyScalar(80);
-        sp.push(v.x, v.y, v.z);
-      }
-      starGeo.setAttribute('position', new THREE.Float32BufferAttribute(sp, 3));
-      scene.add(new THREE.Points(starGeo, new THREE.PointsMaterial({ color: 0xc9d3e3, size: 1.3, sizeAttenuation: false })));
-
-      // The earth, its satellite clouds with their shadows, and the air's glow
-      var earth = new THREE.Mesh(new THREE.SphereGeometry(1, 160, 120), new THREE.MeshPhongMaterial({
-        map: earthMap, bumpMap: topoMap, bumpScale: 0.012, specularMap: waterMap, specular: new THREE.Color(0x18202e), shininess: 40
-      }));
-      scene.add(earth);
-      var cloudShadow = new THREE.Mesh(new THREE.SphereGeometry(1.0015, 160, 120), new THREE.MeshBasicMaterial({
-        color: K.deep, alphaMap: cloudMap, transparent: true, opacity: 0.42, depthWrite: false
-      }));
-      scene.add(cloudShadow);
-      var clouds = new THREE.Mesh(new THREE.SphereGeometry(1.007, 160, 120), new THREE.MeshLambertMaterial({
-        color: 0xffffff, alphaMap: cloudMap, transparent: true, opacity: 0.92, depthWrite: false
-      }));
-      scene.add(clouds);
-      var atmos = new THREE.Mesh(new THREE.SphereGeometry(1.045, 96, 72), new THREE.ShaderMaterial({
-        uniforms: { glow: { value: K.glow }, edge: { value: K.edge } },
-        vertexShader: 'varying vec3 vN; varying vec3 vV; void main(){ vec4 mv = modelViewMatrix * vec4(position,1.0); vN = normalize(normalMatrix * normal); vV = normalize(-mv.xyz); gl_Position = projectionMatrix * mv; }',
-        fragmentShader: 'uniform vec3 glow; uniform vec3 edge; varying vec3 vN; varying vec3 vV; void main(){ float f = pow(1.0 - abs(dot(vN, vV)), 3.0); gl_FragColor = vec4(mix(glow, edge, f) * f * 1.6, f); }',
-        side: THREE.BackSide, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false
-      }));
-      scene.add(atmos);
-
-      // The track: dashed ahead, the station's gold behind the storm
-      var N = 160, tp = [];
-      for (i = 0; i <= N; i++) { var p = trackAt(i / N, 1.0022); tp.push(p.x, p.y, p.z); }
-      var trackGeo = new THREE.BufferGeometry();
-      trackGeo.setAttribute('position', new THREE.Float32BufferAttribute(tp, 3));
-      var ahead = new THREE.Line(trackGeo, new THREE.LineDashedMaterial({ color: 0xffffff, dashSize: 0.006, gapSize: 0.004, transparent: true, opacity: 0.9 }));
-      ahead.computeLineDistances();
-      scene.add(ahead);
-      var behind = new THREE.Line(trackGeo.clone(), new THREE.LineBasicMaterial({ color: K.goldHi }));
-      scene.add(behind);
-      function sprite(canvasEl, size) {
-        var s = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(canvasEl), depthWrite: false, sizeAttenuation: true }));
-        s.scale.set(size, size, 1);
-        scene.add(s);
+      /* ---- Programs and shapes ---- */
+      function shader(type, source) {
+        var s = gl.createShader(type);
+        gl.shaderSource(s, source);
+        gl.compileShader(s);
+        if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) {
+          var log = gl.getShaderInfoLog(s);
+          gl.deleteShader(s);
+          throw new Error('shader: ' + log);
+        }
         return s;
       }
-      var dotC = dotCanvas(64, false);
-      [0].concat(marks.map(function (m) { return m.at; })).forEach(function (m) { sprite(dotC, 0.016).position.copy(trackAt(m, 1.003)); });
-      var target = sprite(dotCanvas(64, true), 0.03);
-      target.material.color = K.breakingHi;
-      target.position.copy(trackAt(1, 1.003));
-      target.renderOrder = -1;
+      function program(vertex, fragment) {
+        var v = shader(gl.VERTEX_SHADER, vertex), f;
+        try {
+          f = shader(gl.FRAGMENT_SHADER, fragment);
+        } catch (e) {
+          gl.deleteShader(v);
+          throw e;
+        }
+        var p = gl.createProgram();
+        made.programs.push(p);
+        gl.attachShader(p, v);
+        gl.attachShader(p, f);
+        gl.linkProgram(p);
+        gl.deleteShader(v);
+        gl.deleteShader(f);
+        if (!gl.getProgramParameter(p, gl.LINK_STATUS)) { throw new Error('program: ' + gl.getProgramInfoLog(p)); }
+        var found = { handle: p, spots: {} };
+        found.at = function (name) {
+          if (!(name in found.spots)) { found.spots[name] = gl.getUniformLocation(p, name); }
+          return found.spots[name];
+        };
+        return found;
+      }
+      function buffer(target, data) {
+        var b = gl.createBuffer();
+        made.buffers.push(b);
+        gl.bindBuffer(target, b);
+        gl.bufferData(target, data, gl.STATIC_DRAW);
+        return b;
+      }
+      /* A shape's points go to the card once, under a vertex array that remembers where each kind sits:
+         0 position, 1 normal, 2 uv, 3 colour, 4 distance along a line */
+      function shape(parts) {
+        var vao = gl.createVertexArray();
+        made.arrays.push(vao);
+        gl.bindVertexArray(vao);
+        [['position', 0, 3], ['normal', 1, 3], ['uv', 2, 2], ['color', 3, 3], ['distance', 4, 1]].forEach(function (kind) {
+          var data = parts[kind[0]];
+          if (!data) { return; }
+          buffer(gl.ARRAY_BUFFER, new Float32Array(data));
+          gl.enableVertexAttribArray(kind[1]);
+          gl.vertexAttribPointer(kind[1], kind[2], gl.FLOAT, false, 0, 0);
+        });
+        var out = { vao: vao, count: 0, type: 0, mode: parts.mode === undefined ? gl.TRIANGLES : parts.mode };
+        if (parts.index) {
+          var big = parts.position.length / 3 > 65535;
+          buffer(gl.ELEMENT_ARRAY_BUFFER, big ? new Uint32Array(parts.index) : new Uint16Array(parts.index));
+          out.type = big ? gl.UNSIGNED_INT : gl.UNSIGNED_SHORT;
+          out.count = parts.index.length;
+        } else {
+          out.count = parts.position.length / 3;
+        }
+        out.all = out.count;
+        return out;
+      }
+
+      var earthProgram, cloudProgram, atmosProgram, discProgram, starProgram, spriteProgram, rainProgram, flatProgram, dashProgram, lineProgram;
+      try {
+        earthProgram = program(LIT_VERTEX, EARTH_FRAGMENT);
+        cloudProgram = program(LIT_VERTEX, CLOUD_FRAGMENT);
+        flatProgram = program(flatVertex(false), flatFragment(true, false));
+        rainProgram = program(flatVertex(true), flatFragment(false, true));
+        atmosProgram = program(ATMOS_VERTEX, ATMOS_FRAGMENT);
+        discProgram = program(DISC_VERTEX, DISC_FRAGMENT);
+        starProgram = program(STAR_VERTEX, PLAIN_FRAGMENT);
+        spriteProgram = program(SPRITE_VERTEX, SPRITE_FRAGMENT);
+        dashProgram = program(lineVertex(true), lineFragment(true));
+        lineProgram = program(lineVertex(false), lineFragment(false));
+      } catch (e) {
+        // Not a scene to draw: told as no graphics context is
+        running = false;
+        free();
+        settle();
+        return null;
+      }
+
+      /* ---- Pictures: what is uploaded, and how ---- */
+      var anisotropy = gl.getExtension('EXT_texture_filter_anisotropic');
+      var maxAnisotropy = anisotropy ? gl.getParameter(anisotropy.MAX_TEXTURE_MAX_ANISOTROPY_EXT) : 1;
+      /* A picture goes up the way a picture does for a lit surface: flipped, never premultiplied, four bytes to a
+         pixel, with a full chain of smaller ones and the trilinear filter; a colour picture (`srgb`) is stored as sRGB,
+         which the graphics card turns to linear as it reads, before it blends the pixels together. */
+      function texture(image, options2) {
+        var tex = { image: image, handle: null, srgb: !!options2.srgb, repeat: !!options2.repeat, aniso: options2.aniso || 1 };
+        tex.bind = function (unit) {
+          gl.activeTexture(gl.TEXTURE0 + unit);
+          if (tex.handle === null && tex.image) { upload(tex); }
+          gl.bindTexture(gl.TEXTURE_2D, tex.handle);
+        };
+        return tex;
+      }
+      function upload(tex) {
+        var image = tex.image, handle = gl.createTexture();
+        made.textures.push(handle);
+        gl.bindTexture(gl.TEXTURE_2D, handle);
+        gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+        gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+        gl.pixelStorei(gl.UNPACK_ALIGNMENT, 4);
+        gl.pixelStorei(gl.UNPACK_COLORSPACE_CONVERSION_WEBGL, gl.NONE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, tex.repeat ? gl.REPEAT : gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, tex.repeat ? gl.REPEAT : gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+        if (anisotropy && tex.aniso > 1) {
+          gl.texParameterf(gl.TEXTURE_2D, anisotropy.TEXTURE_MAX_ANISOTROPY_EXT, Math.min(tex.aniso, maxAnisotropy));
+        }
+        var levels = Math.floor(Math.log(Math.max(image.width, image.height)) / Math.LN2) + 1;
+        gl.texStorage2D(gl.TEXTURE_2D, levels, tex.srgb ? gl.SRGB8_ALPHA8 : gl.RGBA8, image.width, image.height);
+        // WebKit refuses here, with "The operation is insecure", where the page may not read the file the picture came from
+        gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, gl.RGBA, gl.UNSIGNED_BYTE, image);
+        gl.generateMipmap(gl.TEXTURE_2D);
+        tex.handle = handle;
+      }
+      function picture(url, srgb, repeat) {
+        var img = new Image();
+        img.crossOrigin = 'anonymous';
+        var tex = texture(null, { srgb: srgb, repeat: repeat, aniso: 8 });
+        img.onload = function () { tex.image = img; loaded(); };
+        img.onerror = loaded;
+        img.src = url;
+        return tex;
+      }
+      var earthMap = picture(base + 'earth.jpg', true, false);
+      var cloudMap = picture(base + 'clouds.jpg', false, true);
+      var topoMap = picture(base + 'topo.jpg', false, false);
+      var waterMap = picture(base + 'water.jpg', false, false);
+      var spiralTex = texture(spiralCanvas(512), {});
+      var dotTex = texture(dotCanvas(64, false), {});
+      var ringTex = texture(dotCanvas(64, true), {});
+
+      /* ---- The scene: things in a tree of places, each drawn by its own function ---- */
+      var nextId = 0, nodes = [];
+      function place(parent) {
+        var node = { id: ++nextId, parent: parent || null, p: [0, 0, 0], q: [0, 0, 0, 1], s: [1, 1, 1], world: mFrom([0, 0, 0], [0, 0, 0, 1], [1, 1, 1]) };
+        nodes.push(node);
+        return node;
+      }
+      function settleWorld(node) {
+        var local = mFrom(node.p, node.q, node.s);
+        node.world = node.parent === null ? local : mMul(node.parent.world, local);
+      }
+      var things = [];
+      /* How a thing is blended and where it writes: `blend` none, normal or additive; `side` front, back or both;
+         lower `order` is drawn first, and among the see-through things the farther comes first. */
+      function thing(node, how) {
+        how.node = node;
+        how.id = node.id;
+        how.material = ++nextId;
+        how.order = how.order || 0;
+        things.push(how);
+        return how;
+      }
+
+      // Stars
+      var starAt = [], rs = seeded(9), i;
+      for (i = 0; i < 1800; i++) {
+        var v = vMul(vUnit([rs() * 2 - 1, rs() * 2 - 1, rs() * 2 - 1]), 80);
+        starAt.push(v[0], v[1], v[2]);
+      }
+      var starShape = shape({ position: starAt, mode: gl.POINTS });
+      var starNode = place();
+      thing(starNode, {
+        shape: starShape, transparent: false, blend: 'none', depthWrite: true, side: 'front',
+        show: function (frame) {
+          gl.useProgram(starProgram.handle);
+          matrices(starProgram, this.node, frame, false);
+          gl.uniform3f(starProgram.at('diffuse'), 0xc9 / 255, 0xd3 / 255, 0xe3 / 255);
+          gl.uniform1f(starProgram.at('opacity'), 1);
+          gl.uniform1f(starProgram.at('size'), 1.3 * RATIO);
+        }
+      });
+
+      // The earth, its satellite clouds with their shadows, and the air's glow
+      var earthShape = shape(sphereShape(1, 160, 120));
+      thing(place(), {
+        shape: earthShape, transparent: false, blend: 'none', depthWrite: true, side: 'front',
+        show: function (frame) {
+          gl.useProgram(earthProgram.handle);
+          matrices(earthProgram, this.node, frame, true);
+          lights(earthProgram, frame);
+          earthMap.bind(0); gl.uniform1i(earthProgram.at('map'), 0);
+          topoMap.bind(1); gl.uniform1i(earthProgram.at('bumpMap'), 1);
+          waterMap.bind(2); gl.uniform1i(earthProgram.at('specularMap'), 2);
+          gl.uniform1f(earthProgram.at('bumpScale'), 0.012);
+          gl.uniform3f(earthProgram.at('specularColor'), 0x18 / 255, 0x20 / 255, 0x2e / 255);
+          gl.uniform1f(earthProgram.at('shininess'), 40);
+        }
+      });
+      var cloudShadowNode = place();
+      thing(cloudShadowNode, {
+        shape: shape(sphereShape(1.0015, 160, 120)), transparent: true, blend: 'normal', depthWrite: false, side: 'front',
+        show: function (frame) {
+          gl.useProgram(flatProgram.handle);
+          matrices(flatProgram, this.node, frame, false);
+          gl.uniform3fv(flatProgram.at('diffuse'), K.deep);
+          gl.uniform1f(flatProgram.at('opacity'), 0.42);
+          cloudMap.bind(0); gl.uniform1i(flatProgram.at('alphaMap'), 0);
+        }
+      });
+      var cloudsNode = place();
+      thing(cloudsNode, {
+        shape: shape(sphereShape(1.007, 160, 120)), transparent: true, blend: 'normal', depthWrite: false, side: 'front',
+        show: function (frame) {
+          gl.useProgram(cloudProgram.handle);
+          matrices(cloudProgram, this.node, frame, true);
+          lights(cloudProgram, frame);
+          gl.uniform1f(cloudProgram.at('opacity'), 0.92);
+          cloudMap.bind(0); gl.uniform1i(cloudProgram.at('alphaMap'), 0);
+        }
+      });
+      thing(place(), {
+        shape: shape(sphereShape(1.045, 96, 72)), transparent: true, blend: 'additive', depthWrite: false, side: 'back',
+        show: function (frame) {
+          gl.useProgram(atmosProgram.handle);
+          matrices(atmosProgram, this.node, frame, true);
+          gl.uniform3fv(atmosProgram.at('glow'), K.glow);
+          gl.uniform3fv(atmosProgram.at('edge'), K.edge);
+        }
+      });
+
+      // The track: dashed ahead, the station's gold behind the storm
+      var N = 160, trackAtPoints = [], along = [], last = null, run = 0;
+      for (i = 0; i <= N; i++) {
+        var p = trackAt(i / N, 1.0022);
+        // Float32 here, as the card holds them, so the distances add up as the card's points do
+        p = [Math.fround(p[0]), Math.fround(p[1]), Math.fround(p[2])];
+        if (last !== null) { run += vLen(vSub(p, last)); }
+        along.push(run);
+        trackAtPoints.push(p[0], p[1], p[2]);
+        last = p;
+      }
+      thing(place(), {
+        shape: shape({ position: trackAtPoints, distance: along, mode: gl.LINE_STRIP }), transparent: true, blend: 'normal', depthWrite: true, side: 'front',
+        show: function (frame) {
+          gl.useProgram(dashProgram.handle);
+          matrices(dashProgram, this.node, frame, false);
+          gl.uniform3f(dashProgram.at('diffuse'), 1, 1, 1);
+          gl.uniform1f(dashProgram.at('opacity'), 0.9);
+          gl.uniform1f(dashProgram.at('dashSize'), 0.006);
+          gl.uniform1f(dashProgram.at('cycle'), 0.006 + 0.004);
+        }
+      });
+      var behind = thing(place(), {
+        shape: shape({ position: trackAtPoints, mode: gl.LINE_STRIP }), transparent: false, blend: 'none', depthWrite: true, side: 'front',
+        show: function (frame) {
+          gl.useProgram(lineProgram.handle);
+          matrices(lineProgram, this.node, frame, false);
+          gl.uniform3fv(lineProgram.at('diffuse'), K.goldHi);
+          gl.uniform1f(lineProgram.at('opacity'), 1);
+        }
+      });
+
+      // The dots and the target
+      var quad = shape({
+        position: [-0.5, -0.5, 0, 0.5, -0.5, 0, 0.5, 0.5, 0, -0.5, 0.5, 0], uv: [0, 0, 1, 0, 1, 1, 0, 1], index: [0, 1, 2, 0, 2, 3]
+      });
+      function sprite(tex, size, at, tint, order) {
+        var node = place();
+        node.p = at;
+        node.s = [size, size, 1];
+        var one = thing(node, {
+          shape: quad, transparent: true, blend: 'normal', depthWrite: false, side: 'front', order: order || 0,
+          show: function (frame) {
+            gl.useProgram(spriteProgram.handle);
+            matrices(spriteProgram, this.node, frame, false);
+            gl.uniform3fv(spriteProgram.at('diffuse'), tint);
+            gl.uniform1f(spriteProgram.at('opacity'), 1);
+            tex.bind(0); gl.uniform1i(spriteProgram.at('map'), 0);
+          }
+        });
+        return one;
+      }
+      [0].concat(marks.map(function (m) { return m.at; })).forEach(function (m) { sprite(dotTex, 0.016, trackAt(m, 1.003), [1, 1, 1]); });
+      var target = sprite(ringTex, 0.03, trackAt(1, 1.003), K.breakingHi, -1);
 
       // The rain the storm leaves behind it: a swath along the track
       var SW = 120, swPos = [], swCol = [], swIdx = [];
       for (i = 0; i <= SW; i++) {
         var s0 = i / SW, a = trackAt(Math.max(0, s0 - 0.004), 1.0012), b = trackAt(Math.min(1, s0 + 0.004), 1.0012);
-        var c0 = trackAt(s0, 1.0012), n0 = c0.clone().normalize();
-        var side = new THREE.Vector3().subVectors(b, a).cross(n0).normalize().multiplyScalar(0.012 + 0.05 * s0);
-        swPos.push(c0.x + side.x, c0.y + side.y, c0.z + side.z, c0.x - side.x, c0.y - side.y, c0.z - side.z);
-        var col = new THREE.Color().copy(K.ready).lerp(K.goldHi, s0 * 0.7);
-        swCol.push(col.r, col.g, col.b, col.r, col.g, col.b);
+        var c0 = trackAt(s0, 1.0012), n0 = vUnit(c0);
+        var side = vMul(vUnit(vCross(vSub(b, a), n0)), 0.012 + 0.05 * s0);
+        swPos.push(c0[0] + side[0], c0[1] + side[1], c0[2] + side[2], c0[0] - side[0], c0[1] - side[1], c0[2] - side[2]);
+        var col = vLerp(K.ready, K.goldHi, s0 * 0.7);
+        swCol.push(col[0], col[1], col[2], col[0], col[1], col[2]);
         if (i < SW) { var k = i * 2; swIdx.push(k, k + 1, k + 2, k + 1, k + 3, k + 2); }
       }
-      var swGeo = new THREE.BufferGeometry();
-      swGeo.setAttribute('position', new THREE.Float32BufferAttribute(swPos, 3));
-      swGeo.setAttribute('color', new THREE.Float32BufferAttribute(swCol, 3));
-      swGeo.setIndex(swIdx);
-      var swath = new THREE.Mesh(swGeo, new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.38, depthWrite: false, side: THREE.DoubleSide }));
-      scene.add(swath);
-
-      // The storm: the spiral from above, its tops coloured as it strengthens,
-      // puffs of cloud standing up from it, its shadow on the sea
-      var spiralTex = new THREE.CanvasTexture(spiralCanvas(512));
-      cloudMap.wrapS = cloudMap.wrapT = THREE.RepeatWrapping;
-      var discMat = new THREE.ShaderMaterial({
-        uniforms: {
-          map: { value: spiralTex }, detail: { value: cloudMap }, uH: { value: 0.09 }, uFlash: { value: 0 }, uAlpha: { value: 1 },
-          uSun: { value: sunDir.clone() }, cLit: { value: K.white }, cShade: { value: new THREE.Color(0x8f9bb6) }
-        },
-        vertexShader: [
-          'uniform sampler2D map; uniform sampler2D detail; uniform float uH;',
-          'varying vec2 vUv; varying float vD; varying vec3 vPos;',
-          'void main(){',
-          '  vUv = uv;',
-          '  float d = clamp(texture2D(map, uv).a * 1.25, 0.0, 1.0);',
-          '  float det = texture2D(detail, uv * 1.6 + vec2(0.31, 0.17)).r;',
-          '  float h = (pow(d, 0.9) * 0.85 + det * 0.25 * d) * uH;',
-          '  vD = d;',
-          '  vec3 p = position + vec3(0.0, 0.0, h);',
-          '  vPos = (modelMatrix * vec4(p, 1.0)).xyz;',
-          '  gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);',
-          '}'
-        ].join('\n'),
-        fragmentShader: [
-          'uniform vec3 uSun; uniform float uFlash; uniform float uAlpha; uniform vec3 cLit; uniform vec3 cShade;',
-          'varying vec2 vUv; varying float vD; varying vec3 vPos;',
-          'void main(){',
-          '  vec3 n = normalize(cross(dFdx(vPos), dFdy(vPos)));',
-          '  if (dot(n, normalize(vPos)) < 0.0) { n = -n; }',
-          '  float lam = clamp(dot(n, normalize(uSun)), 0.0, 1.0);',
-          '  vec3 col = mix(cShade, cLit, 0.25 + 0.75 * lam);',
-          '  col = mix(col, vec3(1.0), uFlash * vD);',
-          '  gl_FragColor = vec4(col, smoothstep(0.05, 0.4, vD) * uAlpha);',
-          '}'
-        ].join('\n'),
-        transparent: true, depthWrite: true, extensions: { derivatives: true }
+      var swathLook = { opacity: 0.38 };
+      var swath = thing(place(), {
+        shape: shape({ position: swPos, color: swCol, index: swIdx }), transparent: true, blend: 'normal', depthWrite: false, side: 'both',
+        show: function (frame) {
+          gl.useProgram(rainProgram.handle);
+          matrices(rainProgram, this.node, frame, false);
+          gl.uniform3f(rainProgram.at('diffuse'), 1, 1, 1);
+          gl.uniform1f(rainProgram.at('opacity'), swathLook.opacity);
+        }
       });
-      var storm = new THREE.Group();
-      scene.add(storm);
-      var spin = new THREE.Group();
-      storm.add(spin);
-      var disc = new THREE.Mesh(new THREE.PlaneGeometry(2, 2, 220, 220), discMat);
-      disc.renderOrder = 2;
-      disc.position.z = 0.004;
-      spin.add(disc);
-      var shadowMat = new THREE.MeshBasicMaterial({ color: K.deep, map: null, alphaMap: spiralTex, transparent: true, opacity: 0.55, depthWrite: false });
-      var shadow = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), shadowMat);
-      storm.add(shadow);
-      var bolt = new THREE.PointLight(0xffffff, 0, 0.4);
-      storm.add(bolt);
-      bolt.position.set(0, 0, 0.08);
+
+      // The storm: the spiral from above, its tops coloured as it strengthens, puffs of cloud standing up from it, its shadow on the sea
+      var stormNode = place();
+      var spinNode = place(stormNode);
+      var discNode = place(spinNode);
+      discNode.p = [0, 0, 0.004];
+      var shadowNode = place(stormNode);
+      var boltNode = place(stormNode);
+      boltNode.p = [0, 0, 0.08];
+      var storm = { alpha: 1, flash: 0, shadowOpacity: 0.55, bolt: 0 };
+      thing(discNode, {
+        shape: shape(sheetShape(2, 2, 220, 220)), transparent: true, blend: 'normal', depthWrite: true, side: 'front', order: 2,
+        show: function (frame) {
+          gl.useProgram(discProgram.handle);
+          matrices(discProgram, this.node, frame, false);
+          spiralTex.bind(0); gl.uniform1i(discProgram.at('map'), 0);
+          cloudMap.bind(1); gl.uniform1i(discProgram.at('detail'), 1);
+          gl.uniform1f(discProgram.at('uH'), 0.09);
+          gl.uniform1f(discProgram.at('uFlash'), storm.flash);
+          gl.uniform1f(discProgram.at('uAlpha'), storm.alpha);
+          gl.uniform3fv(discProgram.at('uSun'), SUN);
+          gl.uniform3fv(discProgram.at('cLit'), K.white);
+          gl.uniform3f(discProgram.at('cShade'), 0x8f / 255, 0x9b / 255, 0xb6 / 255);
+        }
+      });
+      thing(shadowNode, {
+        shape: shape(sheetShape(2, 2, 1, 1)), transparent: true, blend: 'normal', depthWrite: false, side: 'front',
+        show: function (frame) {
+          gl.useProgram(flatProgram.handle);
+          matrices(flatProgram, this.node, frame, false);
+          gl.uniform3fv(flatProgram.at('diffuse'), K.deep);
+          gl.uniform1f(flatProgram.at('opacity'), storm.shadowOpacity);
+          spiralTex.bind(0); gl.uniform1i(flatProgram.at('alphaMap'), 0);
+        }
+      });
 
       var labels = {};
       Array.prototype.forEach.call(root.querySelectorAll('[data-at]'), function (el) { labels[el.getAttribute('data-at')] = el; });
       var rows = root.querySelectorAll('[data-row]');
-      var Z = new THREE.Vector3(0, 0, 1);
-      var tmp = new THREE.Vector3(), tmp2 = new THREE.Vector3(), tmp3 = new THREE.Vector3();
+      var END_LABEL = geo(END[0] + 2.2, END[1] + 4.6, 1.004);
 
-      // The camera: from orbit down to a low look north over the Gulf, then
-      // tightening on the storm and its landfall as it comes in
-      function trackPose(s, outCam, outLook) {
-        var ll = trackLatLon(s);
-        var lookLat = ll[0] + (END[0] - ll[0]) * 0.45 + 1.0, lookLon = ll[1] + (END[1] - ll[1]) * 0.45;
-        geo(lookLat - 8.0 + 1.6 * s, lookLon - 0.3, 1.125 - 0.012 * s, outCam);
-        geo(lookLat, lookLon, 1.0, outLook);
+      /* ---- A frame ---- */
+      var view = viewOf(cameraPose(0), W / H);
+      function matrices(prog, node, frame, withNormal) {
+        var modelView = mMul(frame.view.inverse, node.world);
+        gl.uniformMatrix4fv(prog.at('modelViewMatrix'), false, modelView);
+        gl.uniformMatrix4fv(prog.at('projectionMatrix'), false, frame.view.projection);
+        if (withNormal) { gl.uniformMatrix3fv(prog.at('normalMatrix'), false, mNormal(modelView)); }
+        if (prog.at('modelMatrix')) { gl.uniformMatrix4fv(prog.at('modelMatrix'), false, node.world); }
       }
-      var P0 = geo(24, -89, 3.25);
-      var P1 = new THREE.Vector3(), L1 = new THREE.Vector3();
-      trackPose(0, P1, L1);
-      var up0 = new THREE.Vector3(0, 1, 0);
-      var cam = new THREE.Vector3(), look = new THREE.Vector3();
-      function placeCamera(t) {
-        var s = progress(t);
-        trackPose(s, cam, look);
-        if (t < T_DIVE) {
-          // the dive: straight down onto the Gulf, slowing as it nears
-          var f = smooth(t / T_DIVE);
-          var dir = P0.clone().normalize().lerp(P1.clone().normalize(), f).normalize();
-          var r = 3.25 + (P1.length() - 3.25) * (1 - Math.pow(1 - f, 2.6));
-          cam.copy(dir).multiplyScalar(r);
-          look.set(0, 0, 0).lerp(L1, smooth(t / (T_DIVE * 0.7)));
-          camera.up.copy(up0).lerp(P1.clone().normalize(), f).normalize();
-        } else {
-          camera.up.copy(cam).normalize();
+      /* The lights, in the view: the sun, the ambient, and the bolt where the storm is */
+      function lights(prog, frame) {
+        var pi = Math.PI;
+        gl.uniform3f(prog.at('ambientColor'), 0x3a / 255 * 0.6 * pi, 0x44 / 255 * 0.6 * pi, 0x66 / 255 * 0.6 * pi);
+        gl.uniform3fv(prog.at('sunDirection'), mDirection(frame.view.inverse, vMul(SUN, 10)));
+        gl.uniform3f(prog.at('sunColor'), 1.35 * pi, 1.35 * pi, 1.35 * pi);
+        var at = [boltNode.world[12], boltNode.world[13], boltNode.world[14]];
+        gl.uniform3fv(prog.at('boltPosition'), mPoint(frame.view.inverse, at));
+        var power = storm.bolt * pi;
+        gl.uniform3f(prog.at('boltColor'), power, power, power);
+        gl.uniform1f(prog.at('boltReach'), 0.4);
+        gl.uniform1f(prog.at('boltFade'), 2);
+      }
+      function blending(kind) {
+        if (kind === 'none') { gl.disable(gl.BLEND); return; }
+        gl.enable(gl.BLEND);
+        gl.blendEquation(gl.FUNC_ADD);
+        if (kind === 'additive') { gl.blendFunc(gl.SRC_ALPHA, gl.ONE); } else { gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA); }
+      }
+      function paint(one, side, frame) {
+        // The back faces draw by turning which winding counts as the front
+        if (side === 'both') { gl.disable(gl.CULL_FACE); } else {
+          gl.enable(gl.CULL_FACE);
+          gl.cullFace(gl.BACK);
+          gl.frontFace(side === 'back' ? gl.CW : gl.CCW);
         }
-        camera.position.copy(cam);
-        camera.lookAt(look);
+        blending(one.blend);
+        gl.depthMask(one.depthWrite);
+        one.show(frame);
+        gl.bindVertexArray(one.shape.vao);
+        if (one.shape.type === 0) {
+          gl.drawArrays(one.shape.mode, 0, one.shape.count);
+        } else {
+          gl.drawElements(one.shape.mode, one.shape.count, one.shape.type, 0);
+        }
       }
-      function placeStorm(t) {
-        var s = progress(t);
-        var k = 0.026 + 0.042 * Math.pow(s, 0.85);
-        var pos = trackAt(s, 1.0, tmp);
-        var n = pos.clone().normalize();
-        storm.position.copy(n).multiplyScalar(1.0008);
-        storm.quaternion.setFromUnitVectors(Z, n);
-        storm.scale.set(k, k, k);
-        spin.rotation.z = t * 0.5;
-        var formed = smooth((t - T_DIVE + 0.5) / 1.0);
-        discMat.uniforms.uAlpha.value = formed;
-        // the shadow falls away from the sun across the sea
-        var away = sunDir.clone().projectOnPlane(n).normalize().multiplyScalar(-0.42);
-        shadow.position.copy(away.applyQuaternion(storm.quaternion.clone().invert()));
-        shadow.position.z = 0.0005;
-        shadow.rotation.z = t * 0.5;
-        shadowMat.opacity = 0.55 * formed;
-        // landfall: lightning
-        var lt = t - T_LAND;
-        var flash = lt > 0 ? Math.max(0, Math.sin(lt * 23) * Math.sin(lt * 7.3)) * (lt < 1.8 ? 1 : 0) : 0;
-        discMat.uniforms.uFlash.value = flash * 0.8;
-        bolt.intensity = flash * 3;
-        // the swath and the gold track behind it
-        var drawn = Math.floor(s * SW);
-        swath.geometry.setDrawRange(0, drawn * 6);
-        swath.material.opacity = 0.24 * formed;
-        behind.geometry.setDrawRange(0, Math.floor(s * N) + 1);
-        target.scale.setScalar(0.03 * (1 + (lt > 0 ? 0.25 * Math.abs(Math.sin(lt * 5)) : 0)));
-        return s;
+      /* The things in the order a frame draws them: the solid ones first, in the order they were made; then the
+         see-through ones, by `order` and then from the farthest to the nearest, where a thing's distance is how far
+         its middle falls in the depth the camera gives. Things whose middles coincide keep the order they were made in. */
+      function ordered(frame) {
+        var screen = mMul(frame.view.projection, frame.view.inverse), solid = [], clear = [];
+        things.forEach(function (one) {
+          var z = mPoint(screen, [one.node.world[12], one.node.world[13], one.node.world[14]])[2];
+          (one.transparent ? clear : solid).push({ one: one, z: z });
+        });
+        // each key breaks the tie of the one before it
+        solid.sort(function (a, b) {
+          return (a.one.order - b.one.order) || (a.one.material - b.one.material) || (a.z - b.z) || (a.one.id - b.one.id);
+        });
+        clear.sort(function (a, b) {
+          return (a.one.order - b.one.order) || (b.z - a.z) || (a.one.id - b.one.id);
+        });
+        return solid.concat(clear).map(function (entry) { return entry.one; });
       }
-      function screenOf(v) {
-        tmp.copy(v).project(camera);
-        var facing = v.clone().normalize().dot(tmp2.copy(camera.position).sub(v).normalize()) > 0;
-        return { x: (tmp.x + 1) / 2 * W, y: (1 - tmp.y) / 2 * H, on: tmp.z < 1 && facing };
+      function render() {
+        var frame = { view: view };
+        // a place is made after the one it hangs from, so they settle in the order they were made
+        nodes.forEach(settleWorld);
+        var list = ordered(frame);
+        gl.viewport(0, 0, cw, ch);
+        gl.disable(gl.SCISSOR_TEST);
+        gl.enable(gl.DEPTH_TEST);
+        gl.depthFunc(gl.LEQUAL);
+        gl.colorMask(true, true, true, true);
+        gl.depthMask(true);
+        gl.clearColor(CLEAR[0], CLEAR[1], CLEAR[2], 1);
+        gl.clearDepth(1);
+        gl.clearStencil(0);
+        gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT | gl.STENCIL_BUFFER_BIT);
+        list.forEach(function (one) {
+          if (one.shape.count === 0) { return; }
+          if (one.transparent && one.side === 'both') {
+            paint(one, 'back', frame);
+            paint(one, 'front', frame);
+          } else {
+            paint(one, one.side, frame);
+          }
+        });
+        gl.depthMask(true);
       }
+
       function label(name, at, show) {
         var el = labels[name];
         if (!el) { return; }
-        var sc = screenOf(at);
+        var sc = screenPoint(at, view, W, H);
         el.style.transform = 'translate(' + sc.x.toFixed(1) + 'px,' + sc.y.toFixed(1) + 'px)';
         el.classList.toggle('pn-wx-on', !!(show && sc.on));
       }
       function draw(t) {
-        placeCamera(t);
-        // the labels are placed by this pose, before render brings the camera's matrices up to it
-        camera.updateMatrixWorld();
-        clouds.rotation.y = t * 0.006;
-        cloudShadow.rotation.y = t * 0.006 - 0.003;
-        var s = placeStorm(t);
+        view = viewOf(cameraPose(t), W / H);
+        cloudsNode.q = qAboutY(t * 0.006);
+        cloudShadowNode.q = qAboutY(t * 0.006 - 0.003);
+        var pose = stormPose(t);
+        stormNode.p = pose.position;
+        stormNode.q = pose.turn;
+        stormNode.s = [pose.scale, pose.scale, pose.scale];
+        spinNode.q = qAboutZ(pose.spin);
+        shadowNode.p = pose.shadow;
+        shadowNode.q = qAboutZ(pose.spin);
+        storm.alpha = pose.formed;
+        storm.shadowOpacity = 0.55 * pose.formed;
+        storm.flash = pose.flash * 0.8;
+        storm.bolt = pose.flash * 3;
+        var s = pose.s;
+        // the swath and the gold track behind it
+        swath.shape.count = Math.floor(s * SW) * 6;
+        swathLook.opacity = 0.24 * pose.formed;
+        behind.shape.count = Math.floor(s * N) + 1;
+        var grow = 0.03 * (1 + (pose.landfall > 0 ? 0.25 * Math.abs(Math.sin(pose.landfall * 5)) : 0));
+        target.node.s = [grow, grow, grow];
         var ready = t > T_DIVE + 0.3;
         label('now', trackAt(0, 1.006), ready);
         marks.forEach(function (m, i) {
           label('m' + i, trackAt(m.at, 1.006), ready && s >= m.at);
           if (rows[i]) { rows[i].classList.toggle('pn-wx-on', s >= m.at); }
         });
-        label('end', geo(END[0] + 2.2, END[1] + 4.6, 1.004, tmp3), t >= T_LAND + 0.15);
+        label('end', END_LABEL, t >= T_LAND + 0.15);
         if (rows[marks.length]) { rows[marks.length].classList.toggle('pn-wx-on', t >= T_LAND); }
         root.classList.toggle('pn-wx-st3-tracking', ready);
-        renderer.render(scene, camera);
+        render();
       }
       var start = performance.now();
       function frame() {
         if (!running) { return; }
         if (!root.isConnected) { dispose(); return; }
         // the page may reset the canvas's size attributes when it redraws its markup
-        if (canvas.width !== W * 2 || canvas.height !== H * 2) { renderer.setSize(W, H, false); }
+        if (canvas.width !== cw || canvas.height !== ch) { sizeCanvas(); }
         // one run from mount, then the last picture stays
         if (!drawSafely(Math.min(DUR, (performance.now() - start) / 1000))) { return; }
         requestAnimationFrame(frame);
       }
       /* Gives back everything the scene holds on the graphics card: the pictures
          are large, and a new scene comes with each warning and report */
+      function free() {
+        made.programs.forEach(function (p) { gl.deleteProgram(p); });
+        made.textures.forEach(function (t) { gl.deleteTexture(t); });
+        made.arrays.forEach(function (a) { gl.deleteVertexArray(a); });
+        made.buffers.forEach(function (b) { gl.deleteBuffer(b); });
+        made.programs = []; made.textures = []; made.arrays = []; made.buffers = [];
+        var lose = gl.getExtension('WEBGL_lose_context');
+        if (lose) { lose.loseContext(); }
+      }
       function dispose() {
         if (!running) { return; }
         running = false;
-        function free(value) { if (value && value.isTexture) { value.dispose(); } }
-        scene.traverse(function (item) {
-          if (item.geometry) { item.geometry.dispose(); }
-          var materials = item.material ? [].concat(item.material) : [];
-          materials.forEach(function (m) {
-            Object.keys(m).forEach(function (key) { free(m[key]); });
-            Object.keys(m.uniforms || {}).forEach(function (key) { free(m.uniforms[key].value); });
-            m.dispose();
-          });
-        });
-        [earthMap, cloudMap, topoMap, waterMap, spiralTex].forEach(free);
-        renderer.dispose();
-        renderer.forceContextLoss();
+        free();
         // a still waiting for this scene's picture waits no longer
         settle();
       }
@@ -1832,6 +2653,11 @@
       // `ready` comes once a held moment has been drawn, so a still can wait for it
       return { dispose: dispose, ready: hold === null ? Promise.resolve() : finished, drawn: function () { return drawn; } };
     }
+    stormScene.cameraPose = cameraPose;
+    stormScene.viewOf = viewOf;
+    stormScene.screenPoint = screenPoint;
+    stormScene.stormPose = stormPose;
+    stormScene.trackAt = trackAt;
     return stormScene;
   })();
 
@@ -1842,13 +2668,13 @@
     promise.then(function () { HELD.splice(HELD.indexOf(promise), 1); });
   }
   function drawn() { return Promise.all(HELD.slice()); }
-  function hasWebGL() { return !!(window.THREE && window.WebGLRenderingContext); }
+  function hasWebGL() { return !!window.WebGL2RenderingContext; }
 
   /* STORMTRACKER: the globe on the weather wall in BREAKING's red, with its
      labels over it and TIME OF ARRIVAL listing the marks and the hour the
-     week runs out. Drawn only where three.js and a graphics context are:
-     without them the globe stays dark, and the list and the OUT tag show at
-     their resting places with every row lit. With `animate` it runs 13 s;
+     week runs out. Drawn only where WebGL 2 is: without it the globe stays
+     dark, and the list and the OUT tag show at their resting places with
+     every row lit. With `animate` it runs 13 s;
      without it, or with reduced motion, it holds the last moment. */
   function Stormtracker(props) {
     var wx = props.weather || SAMPLES.stormtracker.weather;
@@ -3615,6 +4441,7 @@
     crawlSpeed: CRAWL_SPEED,
     weatherIconMarkup: weatherIconMarkup,
     drawn: drawn,
+    stormScene: stormScene,
     WEATHER: WEATHER,
     OUTLOOKS: OUTLOOKS,
     EVENTS: EVENTS,
