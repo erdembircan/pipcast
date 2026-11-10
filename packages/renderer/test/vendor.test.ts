@@ -33,13 +33,23 @@ describe('the React files the page ships', () => {
 describe('the page and the files beside it', () => {
   const web = (name: string) => readFileSync(new URL(`../../../plugin/station/web/${name}`, import.meta.url))
 
-  it('loads React and then the page, and no other library', () => {
+  it('loads React, then the design system’s bundle, then the page, and no other library', () => {
     const html = web('index.html').toString('utf8')
     expect([...html.matchAll(/<script src="([^"]+)">/g)].map((match) => match[1])).toEqual([
       'vendor/react.production.min.js',
       'vendor/react-dom.production.min.js',
+      'design.js',
       'station.js',
     ])
+  })
+
+  it('ships the design system’s bundle as its own script, as it is, and the page’s own code holds none of it', () => {
+    expect(web('design.js').equals(readFileSync(new URL('../../../design/components/bundle.js', import.meta.url)))).toBe(true)
+    const page = web('station.js').toString('utf8')
+    expect(page).not.toContain('window.PipNews = {')
+    // It reads what the bundle set, from the global
+    expect(page).toContain('window.PipNews')
+    expect(page.length).toBeLessThan(150_000)
   })
 
   it('ships no three.js: its file and license are not in the page, and nothing in the page reads a THREE', () => {

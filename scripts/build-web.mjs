@@ -1,15 +1,19 @@
 // Builds the page the station shows into plugin/station/web/: index.html,
-// station.js, station.css, fonts/, textures/ and vendor/. Nothing is minified,
-// since Anthropic's plugin directory holds code it can't read for a reviewer:
-// station.js is the page's own code, bundled as written, and React comes as its
-// own production files in vendor/, from its npm package with its license.
+// station.js, design.js, station.css, fonts/, textures/ and vendor/. Nothing is
+// minified, since Anthropic's plugin directory holds code it can't read for a
+// reviewer: station.js is the page's own code, bundled as written, design.js is
+// the design system's bundle, design/components/bundle.js, copied as it is
+// (each file has its own 256 KiB, and the design's comments, which say where
+// code follows another's, are kept), and React comes as its own production
+// files in vendor/, from its npm package with its license.
 // React's is copied unchanged, and React DOM's with two minified names renamed
 // (scripts/lib/react-dom-names.mjs says why). STORMTRACKER draws its globe in
 // station.js itself, with WebGL, so there is no library for it, and the
 // pictures of the Earth it draws on are copied from design/textures into
-// textures/. index.html loads React first, and station.js takes React and
-// ReactDOM from the globals it sets. The output folder is emptied first, so the
-// build is reproducible.
+// textures/. index.html loads React first, then design.js, which takes React
+// from its global and sets PipNews, then station.js, which takes React,
+// ReactDOM and PipNews from the globals they set. The output folder is emptied
+// first, so the build is reproducible.
 // With --dev it builds the development build's page instead, from
 // packages/dev/src/main.tsx into .dev/web, for scripts/build-dev.sh: never into
 // plugin/.
@@ -61,6 +65,18 @@ const reactGlobals = {
   },
 }
 
+// The design system's bundle is its own script in the page, loaded before
+// station.js, so the page's code reads PipNews from the global it sets and the
+// import that loads the bundle (packages/renderer/src/design.ts, which the
+// tests use) is an empty module here
+const designGlobal = {
+  name: 'design-global',
+  setup(pluginBuild) {
+    pluginBuild.onResolve({ filter: /design\/components\/bundle\.js$/ }, () => ({ path: 'design.js', namespace: 'design-global' }))
+    pluginBuild.onLoad({ filter: /.*/, namespace: 'design-global' }, () => ({ contents: '', loader: 'js' }))
+  },
+}
+
 await build({
   entryPoints: [entry],
   outfile: join(out, 'station.js'),
@@ -68,7 +84,7 @@ await build({
   format: 'iife',
   target: 'safari16',
   minify: false,
-  plugins: [reactGlobals],
+  plugins: [reactGlobals, designGlobal],
   // JSX compiles to React.createElement, against the global React. No
   // tsconfig.json is read, since its own jsx setting would win over esbuild's;
   // the aliases stand in for its paths.
@@ -99,6 +115,7 @@ writeFileSync(join(out, 'station.css'), styles.code)
 cpSync(join(root, 'assets/fonts'), join(out, 'fonts'), { recursive: true })
 cpSync(join(root, 'design/textures'), join(out, 'textures'), { recursive: true })
 cpSync(join(renderer, 'index.html'), join(out, 'index.html'))
+copyFileSync(join(root, 'design/components/bundle.js'), join(out, 'design.js'))
 
 mkdirSync(join(out, 'vendor'), { recursive: true })
 for (const [from, to] of VENDOR) {

@@ -41,6 +41,11 @@ const VENDOR = {
   'station/web/vendor/LICENSE-react.txt': 'node_modules/react/LICENSE',
 }
 
+// Files the build copies from this repository as they are
+const COPIES = {
+  'station/web/design.js': 'design/components/bundle.js',
+}
+
 const PLUGIN = 'plugin'
 const KIB = 1024
 const MIB = 1048576
@@ -315,6 +320,12 @@ for (const [path, source] of Object.entries(VENDOR)) {
     }
   } else if (!(pluginBytes.get(path)?.equals(original) ?? false)) {
     problem(`plugin/${path} differs from ${source}: copy React's file unchanged.`)
+  }
+}
+
+for (const [path, source] of Object.entries(COPIES)) {
+  if (!(pluginBytes.get(path)?.equals(readFileSync(join(root, source))) ?? false)) {
+    problem(`plugin/${path} differs from ${source}: build it with scripts/build-web.mjs, which copies the file as it is.`)
   }
 }
 
