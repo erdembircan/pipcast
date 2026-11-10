@@ -644,7 +644,7 @@
    the storm (the week's usage) crossing the Gulf from left to right, growing,
    to its landfall on Florida's coast where the week runs out. The labels
    pinned to the track and the TIME OF ARRIVAL list are HTML over the scene,
-   placed every frame by the scene's camera. 11 s. */
+   placed every frame by the scene's camera. 13 s. */
 .pn-wx-st3-box { flex: 1; min-height: 0; padding: 10px 14px 10px; }
 .pn-wx-st3 { position: relative; width: 840px; height: 306px; overflow: hidden; border-radius: var(--radius-bar, 10px); background: #01030a; box-shadow: inset 0 0 0 2px rgba(6, 18, 51, 0.7), 0 4px 10px rgba(0, 0, 0, 0.3); }
 .pn-wx-st3 > canvas { position: absolute; left: 0; top: 0; width: 840px; height: 306px; display: block; }

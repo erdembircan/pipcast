@@ -130,17 +130,17 @@ describe('STORM WARNING', () => {
     expect(modes(h.history, 'warning:')).toEqual(['alert', 'stormtracker', 'outro'])
     expect(h.cues()).toEqual([
       { now: T, jingle: 'weather-alert' },
-      { now: T + 13_000, jingle: 'breaking-out' },
+      { now: T + 15_000, jingle: 'breaking-out' },
     ])
     expect(h.sounds().map(({ now, sound }) => [now - T, sound.type, 'bed' in sound ? sound.bed : 'jingle' in sound ? sound.jingle : undefined])).toEqual([
       [0, 'cue', 'weather-alert'],
       [2_000, 'bed', 'beat-minor'],
-      [13_000, 'cue', 'breaking-out'],
-      [13_000, 'bed-out', undefined],
+      [15_000, 'cue', 'breaking-out'],
+      [15_000, 'bed-out', undefined],
     ])
-    // The segment ends 1.9 + 11 + 1.4 s in, on the tick after
-    expect(h.history.find((sample) => sample.now === T + 14_000)?.program.key).toMatch(/^warning:.*:2$/)
-    expect(h.history.find((sample) => sample.now === T + 14_500)?.program.key).toBe('board')
+    // The segment ends 1.9 + 13 + 1.4 s in, on the tick after
+    expect(h.history.find((sample) => sample.now === T + 16_000)?.program.key).toMatch(/^warning:.*:2$/)
+    expect(h.history.find((sample) => sample.now === T + 16_500)?.program.key).toBe('board')
   })
 
   it('keeps when it came due, and tells the station', () => {

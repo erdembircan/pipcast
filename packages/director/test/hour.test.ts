@@ -205,10 +205,10 @@ describe('the report on the hour with KLWD WEATHER', () => {
     }
   })
 
-  it('adds STORMTRACKER with a storm, 11 s under the same beat', () => {
+  it('adds STORMTRACKER with a storm, 13 s under the same beat', () => {
     const report = steps(stormy)
     expect(report.map((step) => step.scene(context).mode)).toEqual(['ident', 'desk', 'review', 'weather-now', 'weather-days', 'stormtracker', 'outro'])
-    expect(report[5]).toMatchObject({ role: 'weather', length: 11_000, bed: 'beat-major' })
+    expect(report[5]).toMatchObject({ role: 'weather', length: 13_000, bed: 'beat-major' })
   })
 
   it('follows the desk in a quiet hour', () => {

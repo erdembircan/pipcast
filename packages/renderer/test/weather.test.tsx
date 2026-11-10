@@ -186,15 +186,24 @@ describe('KLWD WEATHER', () => {
 
     // A THREE whose every constructor and method answers with another stand-in, but for a renderer that cannot draw: it
     // throws as WebKit does when the page may not read the files its pictures come from
-    function brokenThree() {
+    // With `draws`, the renderer draws: then every z the scene is given is kept, which includes the storm's turn
+    function brokenThree(draws = false) {
+      const zs: number[] = []
       const standIn: object = new Proxy(function () {}, {
         get: (_target, key) => (key === Symbol.toPrimitive ? () => 0 : standIn),
         apply: () => standIn,
         construct: () => standIn,
-        set: () => true,
+        set: (_target, key, value) => {
+          if (key === 'z' && typeof value === 'number') {
+            zs.push(value)
+          }
+          return true
+        },
       })
       const render = vi.fn(() => {
-        throw new Error('The operation is insecure.')
+        if (!draws) {
+          throw new Error('The operation is insecure.')
+        }
       })
       const dispose = vi.fn()
       const forceContextLoss = vi.fn()
@@ -217,7 +226,7 @@ describe('KLWD WEATHER', () => {
       ;(window as unknown as { THREE: unknown }).THREE = three
       ;(window as unknown as { WebGLRenderingContext: unknown }).WebGLRenderingContext = class {}
       vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation((() => standIn) as never)
-      return { render, dispose, forceContextLoss }
+      return { render, dispose, forceContextLoss, zs }
     }
 
     it('gives the globe up when a picture is refused as it draws, once, and shows the list and the tag', async () => {
@@ -242,6 +251,33 @@ describe('KLWD WEATHER', () => {
         expect(label.classList.contains('pn-wx-on')).toBe(false)
         expect(label.style.transform).toBe('')
       }
+    })
+
+    it('keeps drawing through its 13 s, the storm turning on over the coast, and holds the last picture after', () => {
+      const three = brokenThree(true)
+      const frames: (() => void)[] = []
+      vi.stubGlobal('requestAnimationFrame', (frame: () => void) => frames.push(frame))
+      let clock = 5_000
+      vi.spyOn(performance, 'now').mockImplementation(() => clock)
+      draw(<news.Stormtracker weather={weatherOf('stormtracker')} animate />)
+      expect(frames).toHaveLength(1)
+      const turn = (seconds: number) => {
+        three.zs.length = 0
+        clock = 5_000 + seconds * 1000
+        act(() => frames.shift()?.())
+        expect(frames).toHaveLength(1)
+        // The storm's spin, half a turn a second of the timeline
+        return three.zs.includes(seconds * 0.5)
+      }
+      // Past the 11 s the storm used to freeze at, to the end of the 13
+      expect(turn(9.5)).toBe(true)
+      expect(turn(11.5)).toBe(true)
+      expect(turn(12.9)).toBe(true)
+      // Then the last picture holds: the timeline stops at 13 s, and the loop goes on drawing it
+      expect(turn(14)).toBe(false)
+      expect(three.zs).toContain(13 * 0.5)
+      expect(three.render).toHaveBeenCalledTimes(4)
+      expect(container.querySelector('.pn-wx-st3')?.classList.contains('pn-wx-st3-plain')).toBe(false)
     })
 
     it('gives a held picture up too, and a still stops waiting for it', async () => {

@@ -1399,8 +1399,9 @@
      before it runs out. Landfall on Florida's Gulf coast is where the week
      runs out: lightning, OUT.
 
-     One timeline, 11 s: 0-2.6 s the dive from orbit, 2.6-9 s the storm on
-     its track, 9-11 s landfall. stormScene(root, options) draws into the
+     One timeline, 13 s: 0-2.6 s the dive from orbit, 2.6-9 s the storm on
+     its track, 9-13 s landfall, the storm turning on over the coast with its
+     OUT tag up. stormScene(root, options) draws into the
      canvas in `root`, and places the elements in it that have data-at and
      data-row from the scene's camera. `options.marks` are the TrackMarks
      (`at` is how far along the track), `options.textures` the folder of the
@@ -1412,7 +1413,7 @@
      scene up and calls `options.onFail`, once. Colours are read from the
      station's tokens on `root`. */
   var stormScene = (function () {
-    var DUR = 11, T_DIVE = 2.6, T_LAND = 9.0;
+    var DUR = 13, T_DIVE = 2.6, T_LAND = 9.0;
     var START = [25.4, -95.4], END = [27.95, -82.75];
 
     function rad(d) { return d * Math.PI / 180; }
@@ -1847,7 +1848,7 @@
      labels over it and TIME OF ARRIVAL listing the marks and the hour the
      week runs out. Drawn only where three.js and a graphics context are:
      without them the globe stays dark, and the list and the OUT tag show at
-     their resting places with every row lit. With `animate` it runs 11 s;
+     their resting places with every row lit. With `animate` it runs 13 s;
      without it, or with reduced motion, it holds the last moment. */
   function Stormtracker(props) {
     var wx = props.weather || SAMPLES.stormtracker.weather;
@@ -2805,7 +2806,7 @@
       { scene: SAMPLES['hour-review'], dur: 10 },
       { scene: inReport(SAMPLES['weather-now-storm']), dur: 10 },
       { scene: inReport(SAMPLES['weather-days-storm']), dur: 10 },
-      { scene: inReport(SAMPLES.stormtracker), dur: 11 },
+      { scene: inReport(SAMPLES.stormtracker), dur: 13 },
       { scene: outroOf(SAMPLES['hour-return'], 1, 'hour', '15:00'), dur: 1.6 },
       { scene: SAMPLES['hour-return'], dur: 5 }
     ],
@@ -2813,7 +2814,7 @@
     warning: [
       { scene: SAMPLES['board-warning'], dur: 2 },
       { scene: SAMPLES.alert, dur: 1.9 },
-      { scene: SAMPLES.stormtracker, dur: 11 },
+      { scene: SAMPLES.stormtracker, dur: 13 },
       { scene: outroOf(SAMPLES['board-warning'], 1, 'alert'), dur: 1.4 },
       { scene: SAMPLES['board-warning'], dur: 8 }
     ],

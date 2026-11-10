@@ -400,7 +400,7 @@
   var REVIEW_ROWS = 4;
   var HOUR_OUTRO_MS = 1600;
   var WEATHER_PAGE_MS = 1e4;
-  var STORMTRACKER_MS = 11e3;
+  var STORMTRACKER_MS = 13e3;
   var ALERT_MS = 1900;
   var ALERT_OUTRO_MS = 1400;
   var REDUCED_OPENER_MS = 1e3;
@@ -3118,7 +3118,7 @@
       ]);
     }
     var stormScene = /* @__PURE__ */ (function() {
-      var DUR = 11, T_DIVE = 2.6, T_LAND = 9;
+      var DUR = 13, T_DIVE = 2.6, T_LAND = 9;
       var START = [25.4, -95.4], END = [27.95, -82.75];
       function rad(d) {
         return d * Math.PI / 180;
@@ -4596,7 +4596,7 @@
         { scene: SAMPLES["hour-review"], dur: 10 },
         { scene: inReport(SAMPLES["weather-now-storm"]), dur: 10 },
         { scene: inReport(SAMPLES["weather-days-storm"]), dur: 10 },
-        { scene: inReport(SAMPLES.stormtracker), dur: 11 },
+        { scene: inReport(SAMPLES.stormtracker), dur: 13 },
         { scene: outroOf(SAMPLES["hour-return"], 1, "hour", "15:00"), dur: 1.6 },
         { scene: SAMPLES["hour-return"], dur: 5 }
       ],
@@ -4604,7 +4604,7 @@
       warning: [
         { scene: SAMPLES["board-warning"], dur: 2 },
         { scene: SAMPLES.alert, dur: 1.9 },
-        { scene: SAMPLES.stormtracker, dur: 11 },
+        { scene: SAMPLES.stormtracker, dur: 13 },
         { scene: outroOf(SAMPLES["board-warning"], 1, "alert"), dur: 1.4 },
         { scene: SAMPLES["board-warning"], dur: 8 }
       ],

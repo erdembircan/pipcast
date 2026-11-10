@@ -16,7 +16,7 @@ export const HOUR_OUTRO_MS = 1_600
 // each, STORMTRACKER STORMTRACKER_MS, and STORM WARNING's open and outro
 // ALERT_MS and ALERT_OUTRO_MS
 export const WEATHER_PAGE_MS = 10_000
-export const STORMTRACKER_MS = 11_000
+export const STORMTRACKER_MS = 13_000
 export const ALERT_MS = 1_900
 export const ALERT_OUTRO_MS = 1_400
 

@@ -213,8 +213,8 @@ The director is a pure function of time and the latest snapshot. Each tick it re
 | Segment | Steps |
 | --- | --- |
 | A story | BREAKING NEWS 1.9 s, cue `breaking`; the desk 10 s, the beat in D minor under it; the outro 1.4 s, cue `breaking-out` |
-| The hour | The ident 7.5 s from five seconds before the hour, cue `hour`; the desk 10 s, the beat in D major under it; THE HOUR IN REVIEW 10 s for each page of four rows, the beat playing on, left out in a quiet hour; CURRENT CONDITIONS and EXTENDED FORECAST, 10 s each, and STORMTRACKER 11 s with a storm, the beat playing on, left out in the week's first day; the outro 1.6 s, cue `hour-out` |
-| STORM WARNING | WEATHER ALERT 1.9 s, cue `weather-alert`; STORMTRACKER 11 s, the beat in D minor under it; the outro 1.4 s, cue `breaking-out` |
+| The hour | The ident 7.5 s from five seconds before the hour, cue `hour`; the desk 10 s, the beat in D major under it; THE HOUR IN REVIEW 10 s for each page of four rows, the beat playing on, left out in a quiet hour; CURRENT CONDITIONS and EXTENDED FORECAST, 10 s each, and STORMTRACKER 13 s with a storm, the beat playing on, left out in the week's first day; the outro 1.6 s, cue `hour-out` |
+| STORM WARNING | WEATHER ALERT 1.9 s, cue `weather-alert`; STORMTRACKER 13 s, the beat in D minor under it; the outro 1.4 s, cue `breaking-out` |
 
 Between segments, the live board. The rules, from the design system's *Event desks*:
 
