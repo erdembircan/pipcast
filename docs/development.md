@@ -30,6 +30,8 @@ builds everything an install gets into `plugin/`: the mod bundled into one file,
 
 The build minifies nothing, since Anthropic's plugin directory holds code it can't read for a reviewer. The broadcast's page is its own code, `station.js`, bundled as written, beside React's production files from its npm package, in `plugin/station/web/vendor` with React's license. React's file is copied unchanged. React DOM's is copied with two of its minified names, `sh` and `Sh`, renamed `sQ9` and `SQ9` by `scripts/lib/react-dom-names.mjs`, and nothing else changed: the directory reads those two names as the shell, and warns that the file holds a command that downloads and runs code. The page loads React first.
 
+three.js, the graphics library STORMTRACKER draws its globe with, comes the same way: its own file from its npm package, `three/build/three.js` at version 0.149.0, readable and unchanged, in `plugin/station/web/vendor` with its license, loaded after React. The globe's pictures of the Earth are in `design/textures`, which the build copies to `plugin/station/web/textures`; `CREDITS.txt` there says where they come from.
+
 The plugin's icon is KLWD's tower over the city at dusk, its beacon sending out the board's signal. `scripts/build-icon.mjs` draws it in layers from the design system's colours and the band's letters: `assets/icon.svg` stacks them, and `assets/icon-layers` holds each one on its own, as an SVG and as a 2048-pixel PNG, with `layers.json` saying how they stack, for animating the icon. The build draws them every time; their PNGs render only on a Mac, with Chrome, and on CI the build stops when the PNGs were rendered from another drawing.
 
 ## The manifest and the listing
@@ -129,6 +131,14 @@ scripts/live.sh hour
 
 cues the report on the next hour, now, from the sessions on air: what they did since the last report, as the report at the hour would show it if nothing else happened. `--sessions` with a number from 1 to 7 makes it the design system's sample sessions instead, and `--quiet` makes it a quiet hour, with every session working and no story.
 
+`--weather clear`, `clouds` or `storm` adds KLWD WEATHER to that report, on a week made up for the cue that gives that outlook, and `--used` sets how much of that week is used, from 1 to 99.
+
+```bash
+scripts/live.sh warning
+```
+
+cues STORM WARNING, on a made-up week forecast to run out, 72% used unless `--used` says otherwise.
+
 A cue waits until the window shows and nothing else is on air or due, so you can cue it from Claude and then switch to another app. It waits five minutes at most. Then it airs as the real thing does: the same open, desk, review and outro, the jingles and the beat, and the window out of the side for it. Hiding the window cuts it, as it cuts any segment. Nothing it airs is kept: the report on the next hour still comes at the hour, covering the whole hour, and a story that lands while a cue is on air waits its turn and airs after it. With no cue, the development build airs what a release does.
 
 ### The cue
@@ -160,6 +170,8 @@ An hour cue's report covers the sessions you give it, 1 to 24, in place of the o
   ]
 }
 ```
+
+An hour cue with `weather`, `clear`, `clouds` or `storm`, adds KLWD WEATHER to its report, and `used`, 1 to 99, sets the made-up week's share. A warning cue is `{ "segment": "warning" }`, with `used` as well if you want.
 
 `packages/dev/src/cue.ts` says what each field takes. `scripts/live.sh` checks a cue with it before it sends one, and says what is wrong with one the page would drop. The development build logs each cue it takes in `station.log`, with every sound and window the page asks for, so the log also says what aired.
 

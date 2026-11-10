@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- KLWD WEATHER: a forecast of whether your week's usage limit lasts until it resets, with your usage as the weather. A FORECAST line on the crawl says how the week ends, and the report on the hour adds CURRENT CONDITIONS and EXTENDED FORECAST.
+- STORM WARNING: when the week looks like running out before it resets, a weather alert breaks in, with a jingle of its own, and STORMTRACKER follows the storm over the Gulf of Mexico to the hour it's forecast to hit. It airs at most once an hour, and the report on the hour shows STORMTRACKER too.
+
 ## [1.2.0] - 2026-11-02
 
 ### Changed
