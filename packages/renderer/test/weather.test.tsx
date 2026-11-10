@@ -278,6 +278,17 @@ describe('KLWD WEATHER', () => {
       expect(container.querySelector('.pn-wx-st3')?.classList.contains('pn-wx-st3-plain')).toBe(false)
     })
 
+    it('draws a moment the same each time it comes, whatever was drawn between: its frame keeps nothing of the one before', () => {
+      const [first, between, again, later] = runOf([5, 9.3, 5, 9.3])
+      expect(uniforms(first ?? [])).toBe(uniforms(again ?? []))
+      expect(uniforms(between ?? [])).toBe(uniforms(later ?? []))
+      expect(uniforms(first ?? [])).not.toBe(uniforms(between ?? []))
+      // and in the same order, with the same sizes of what it draws
+      const draws = (frame: { name: string; args: unknown[] }[] | undefined) => JSON.stringify((frame ?? []).filter((call) => call.name.startsWith('draw')))
+      expect(draws(first)).toBe(draws(again))
+      expect(draws(between)).toBe(draws(later))
+    })
+
     it('draws the solid things first and the storm’s sheet last', () => {
       const [frame] = runOf([5])
       const draws = (frame ?? []).filter((call) => call.name === 'drawElements' || call.name === 'drawArrays')

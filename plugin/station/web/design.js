@@ -1422,10 +1422,11 @@
      Epic's 2013 form of Schlick's Fresnel, Mikkelsen's bump mapping from
      derivatives (2010), the sRGB curve of IEC 61966-2-1, and the usual
      projection and rotation matrices. Its pictures were checked against the
-     ones three.js r149 drew of this scene, and match to within a level, so
-     what the lighting, the texture settings, the order things are drawn and
-     blended in, and the camera's numbers do is what the scene looked like
-     before. */
+     ones three.js r149 drew of this scene at eight moments of the 13 s: the
+     mean difference is under a thousandth of a level in each channel, and
+     about one pixel in a thousand is one to three levels off (the sRGB
+     exponent is 1/2.4 here and 0.41666 there), and two are off by more than
+     eight. */
   var stormScene = (function () {
     var DUR = 13, T_DIVE = 2.6, T_LAND = 9.0;
     var START = [25.4, -95.4], END = [27.95, -82.75];
@@ -1436,55 +1437,71 @@
     function clamp(x, a, b) { return Math.max(a, Math.min(b, x)); }
     function smooth(x) { x = clamp(x, 0, 1); return x * x * (3 - 2 * x); }
 
-    /* Vectors are [x, y, z], quaternions [x, y, z, w] and matrices sixteen
-       numbers, one column after another, as WebGL takes them. */
-    function vAdd(a, b) { return [a[0] + b[0], a[1] + b[1], a[2] + b[2]]; }
-    function vSub(a, b) { return [a[0] - b[0], a[1] - b[1], a[2] - b[2]]; }
-    function vMul(a, k) { return [a[0] * k, a[1] * k, a[2] * k]; }
+    /* Vectors are three numbers, quaternions four ([x, y, z, w]) and matrices sixteen, one column after another,
+       as WebGL takes them. A function that makes one fills its first argument, which the caller keeps (a
+       Float64Array, so the numbers are the doubles they were worked out as), and returns it, so a frame allocates
+       none of them. That argument may also be one of the others, but for the matrices that say it may not. */
+    function vec3() { return new Float64Array(3); }
+    function vec4() { return new Float64Array(4); }
+    function mat4() { return new Float64Array(16); }
+    function vSet(out, x, y, z) { out[0] = x; out[1] = y; out[2] = z; return out; }
+    function vAdd(out, a, b) { return vSet(out, a[0] + b[0], a[1] + b[1], a[2] + b[2]); }
+    function vSub(out, a, b) { return vSet(out, a[0] - b[0], a[1] - b[1], a[2] - b[2]); }
+    function vMul(out, a, k) { return vSet(out, a[0] * k, a[1] * k, a[2] * k); }
     function vDot(a, b) { return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]; }
-    function vCross(a, b) { return [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]]; }
+    function vCross(out, a, b) { return vSet(out, a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]); }
     function vLen(a) { return Math.sqrt(vDot(a, a)); }
-    function vUnit(a) { return vMul(a, 1 / (vLen(a) || 1)); }
-    function vLerp(a, b, f) { return [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f, a[2] + (b[2] - a[2]) * f]; }
+    function vUnit(out, a) { var k = 1 / (vLen(a) || 1); return vSet(out, a[0] * k, a[1] * k, a[2] * k); }
+    function vLerp(out, a, b, f) { return vSet(out, a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f, a[2] + (b[2] - a[2]) * f); }
     /* the part of `a` that lies in the plane whose normal is `n` */
-    function vAcross(a, n) { var d = vDot(n, n); return d === 0 ? [0, 0, 0] : vSub(a, vMul(n, vDot(n, a) / d)); }
+    function vAcross(out, a, n) {
+      var d = vDot(n, n), k = d === 0 ? 0 : vDot(n, a) / d;
+      return d === 0 ? vSet(out, 0, 0, 0) : vSet(out, a[0] - n[0] * k, a[1] - n[1] * k, a[2] - n[2] * k);
+    }
+    function plain(numbers) { return Array.prototype.slice.call(numbers); }
 
-    function qAboutY(angle) { return [0, Math.sin(angle / 2), 0, Math.cos(angle / 2)]; }
-    function qAboutZ(angle) { return [0, 0, Math.sin(angle / 2), Math.cos(angle / 2)]; }
-    function qConjugate(q) { return [-q[0], -q[1], -q[2], q[3]]; }
+    // scratch the functions below work in
+    var WORK_A = vec3(), WORK_B = vec3(), WORK_C = vec3();
+    var X_AXIS = vSet(vec3(), 1, 0, 0), Y_AXIS = vSet(vec3(), 0, 1, 0), Z_AXIS = vSet(vec3(), 0, 0, 1);
+
+    function qAboutY(out, angle) { out[0] = 0; out[1] = Math.sin(angle / 2); out[2] = 0; out[3] = Math.cos(angle / 2); return out; }
+    function qAboutZ(out, angle) { out[0] = 0; out[1] = 0; out[2] = Math.sin(angle / 2); out[3] = Math.cos(angle / 2); return out; }
+    function qConjugate(out, q) { out[0] = -q[0]; out[1] = -q[1]; out[2] = -q[2]; out[3] = q[3]; return out; }
     /* the turn that takes the unit vector `a` to the unit vector `b` */
-    function qBetween(a, b) {
-      var across = vCross(a, b), cosPlusOne = vDot(a, b) + 1, q;
+    function qBetween(out, a, b) {
+      var cosPlusOne = vDot(a, b) + 1, axis = WORK_A;
       if (cosPlusOne < 1e-8) {
         // opposite: half a turn about any axis that lies across `a`
-        var axis = vUnit(vCross(a, Math.abs(a[0]) < 0.9 ? [1, 0, 0] : [0, 1, 0]));
-        q = [axis[0], axis[1], axis[2], 0];
+        vUnit(axis, vCross(axis, a, Math.abs(a[0]) < 0.9 ? X_AXIS : Y_AXIS));
+        out[0] = axis[0]; out[1] = axis[1]; out[2] = axis[2]; out[3] = 0;
       } else {
-        q = [across[0], across[1], across[2], cosPlusOne];
+        vCross(axis, a, b);
+        out[0] = axis[0]; out[1] = axis[1]; out[2] = axis[2]; out[3] = cosPlusOne;
       }
-      var l = Math.sqrt(q[0] * q[0] + q[1] * q[1] + q[2] * q[2] + q[3] * q[3]) || 1;
-      return [q[0] / l, q[1] / l, q[2] / l, q[3] / l];
+      var l = Math.sqrt(out[0] * out[0] + out[1] * out[1] + out[2] * out[2] + out[3] * out[3]) || 1;
+      out[0] /= l; out[1] /= l; out[2] /= l; out[3] /= l;
+      return out;
     }
     /* `v` turned by the unit quaternion `q`: v + w t + u x t, where u is the quaternion's axis part and t is twice u x v */
-    function qRotate(q, v) {
-      var u = [q[0], q[1], q[2]];
-      var t = vMul(vCross(u, v), 2);
-      return vAdd(vAdd(v, vMul(t, q[3])), vCross(u, t));
+    function qRotate(out, q, v) {
+      var ux = q[0], uy = q[1], uz = q[2], w = q[3], vx = v[0], vy = v[1], vz = v[2];
+      var tx = 2 * (uy * vz - uz * vy), ty = 2 * (uz * vx - ux * vz), tz = 2 * (ux * vy - uy * vx);
+      return vSet(out, vx + w * tx + (uy * tz - uz * ty), vy + w * ty + (uz * tx - ux * tz), vz + w * tz + (ux * ty - uy * tx));
     }
 
     /* a place, a turn and a size, as a matrix: the turn's rotation matrix with each column made as long as its size */
-    function mFrom(p, q, s) {
+    function mFrom(out, p, q, s) {
       var x = q[0], y = q[1], z = q[2], w = q[3];
       var xx = x * x, yy = y * y, zz = z * z, xy = x * y, xz = x * z, yz = y * z, wx = w * x, wy = w * y, wz = w * z;
-      return [
-        (1 - 2 * (yy + zz)) * s[0], 2 * (xy + wz) * s[0], 2 * (xz - wy) * s[0], 0,
-        2 * (xy - wz) * s[1], (1 - 2 * (xx + zz)) * s[1], 2 * (yz + wx) * s[1], 0,
-        2 * (xz + wy) * s[2], 2 * (yz - wx) * s[2], (1 - 2 * (xx + yy)) * s[2], 0,
-        p[0], p[1], p[2], 1
-      ];
+      out[0] = (1 - 2 * (yy + zz)) * s[0]; out[1] = 2 * (xy + wz) * s[0]; out[2] = 2 * (xz - wy) * s[0]; out[3] = 0;
+      out[4] = 2 * (xy - wz) * s[1]; out[5] = (1 - 2 * (xx + zz)) * s[1]; out[6] = 2 * (yz + wx) * s[1]; out[7] = 0;
+      out[8] = 2 * (xz + wy) * s[2]; out[9] = 2 * (yz - wx) * s[2]; out[10] = (1 - 2 * (xx + yy)) * s[2]; out[11] = 0;
+      out[12] = p[0]; out[13] = p[1]; out[14] = p[2]; out[15] = 1;
+      return out;
     }
-    function mMul(a, b) {
-      var out = new Array(16), c, r, k, sum;
+    /* a x b; `out` must be neither */
+    function mMul(out, a, b) {
+      var c, r, k, sum;
       for (c = 0; c < 4; c++) {
         for (r = 0; r < 4; r++) {
           sum = 0;
@@ -1494,71 +1511,83 @@
       }
       return out;
     }
-    /* the inverse of a matrix that is only a turn and a move, as the camera's */
-    function mInverseRigid(m) {
-      var t = [m[12], m[13], m[14]];
-      return [
-        m[0], m[4], m[8], 0,
-        m[1], m[5], m[9], 0,
-        m[2], m[6], m[10], 0,
-        -(m[0] * t[0] + m[1] * t[1] + m[2] * t[2]), -(m[4] * t[0] + m[5] * t[1] + m[6] * t[2]), -(m[8] * t[0] + m[9] * t[1] + m[10] * t[2]), 1
-      ];
+    /* the inverse of a matrix that is only a turn and a move, as the camera's; `out` must not be `m` */
+    function mInverseRigid(out, m) {
+      var tx = m[12], ty = m[13], tz = m[14];
+      out[0] = m[0]; out[1] = m[4]; out[2] = m[8]; out[3] = 0;
+      out[4] = m[1]; out[5] = m[5]; out[6] = m[9]; out[7] = 0;
+      out[8] = m[2]; out[9] = m[6]; out[10] = m[10]; out[11] = 0;
+      out[12] = -(m[0] * tx + m[1] * ty + m[2] * tz); out[13] = -(m[4] * tx + m[5] * ty + m[6] * tz); out[14] = -(m[8] * tx + m[9] * ty + m[10] * tz); out[15] = 1;
+      return out;
     }
     /* the camera's place in the world, looking from `eye` at `target` with `up` as its up: its axes are
        sideways, up and back (from the target to the eye), and it stands at `eye` */
-    function mLookFrom(eye, target, up) {
-      var back = vSub(eye, target);
-      back = vDot(back, back) === 0 ? [0, 0, 1] : vUnit(back);
-      var side = vCross(up, back);
+    function mLookFrom(out, eye, target, up) {
+      var back = vSub(WORK_A, eye, target), side = WORK_B, over = WORK_C;
+      if (vDot(back, back) === 0) { vSet(back, 0, 0, 1); } else { vUnit(back, back); }
+      vCross(side, up, back);
       if (vDot(side, side) === 0) {
         // up lies along the way it looks: any sideways will do
-        side = vCross(Math.abs(back[1]) < 0.9 ? [0, 1, 0] : [1, 0, 0], back);
+        vCross(side, Math.abs(back[1]) < 0.9 ? Y_AXIS : X_AXIS, back);
       }
-      side = vUnit(side);
-      var over = vCross(back, side);
-      return [side[0], side[1], side[2], 0, over[0], over[1], over[2], 0, back[0], back[1], back[2], 0, eye[0], eye[1], eye[2], 1];
+      vUnit(side, side);
+      vCross(over, back, side);
+      out[0] = side[0]; out[1] = side[1]; out[2] = side[2]; out[3] = 0;
+      out[4] = over[0]; out[5] = over[1]; out[6] = over[2]; out[7] = 0;
+      out[8] = back[0]; out[9] = back[1]; out[10] = back[2]; out[11] = 0;
+      out[12] = eye[0]; out[13] = eye[1]; out[14] = eye[2]; out[15] = 1;
+      return out;
     }
     /* the lens: `fov` degrees from the top of the picture to the bottom, `aspect` wide for its height */
-    function mPerspective(fov, aspect, near, far) {
+    function mPerspective(out, fov, aspect, near, far) {
       var top = near * Math.tan(rad(fov) * 0.5), height = 2 * top, width = aspect * height, left = -0.5 * width;
       var scaleX = 2 * near / width, scaleY = 2 * near / height;
       var shiftX = (2 * left + width) / width, shiftY = (top + (top - height)) / height;
       var depthScale = -(far + near) / (far - near), depthShift = -2 * far * near / (far - near);
-      return [scaleX, 0, 0, 0, 0, scaleY, 0, 0, shiftX, shiftY, depthScale, -1, 0, 0, depthShift, 0];
+      out[0] = scaleX; out[1] = 0; out[2] = 0; out[3] = 0;
+      out[4] = 0; out[5] = scaleY; out[6] = 0; out[7] = 0;
+      out[8] = shiftX; out[9] = shiftY; out[10] = depthScale; out[11] = -1;
+      out[12] = 0; out[13] = 0; out[14] = depthShift; out[15] = 0;
+      return out;
     }
     /* the point `v` taken through a matrix, and divided by its w */
-    function mPoint(m, v) {
+    function mPoint(out, m, v) {
       var x = v[0], y = v[1], z = v[2];
       var hx = m[0] * x + m[4] * y + m[8] * z + m[12];
       var hy = m[1] * x + m[5] * y + m[9] * z + m[13];
       var hz = m[2] * x + m[6] * y + m[10] * z + m[14];
       var hw = m[3] * x + m[7] * y + m[11] * z + m[15];
-      return [hx / hw, hy / hw, hz / hw];
+      return vSet(out, hx / hw, hy / hw, hz / hw);
     }
     /* a direction through the turn part of a matrix, made a unit again */
-    function mDirection(m, v) {
-      return vUnit([m[0] * v[0] + m[4] * v[1] + m[8] * v[2], m[1] * v[0] + m[5] * v[1] + m[9] * v[2], m[2] * v[0] + m[6] * v[1] + m[10] * v[2]]);
+    function mDirection(out, m, v) {
+      vSet(out, m[0] * v[0] + m[4] * v[1] + m[8] * v[2], m[1] * v[0] + m[5] * v[1] + m[9] * v[2], m[2] * v[0] + m[6] * v[1] + m[10] * v[2]);
+      return vUnit(out, out);
     }
     /* what turns a surface's normal into the view's: the inverse transpose of a matrix's upper 3 x 3, which is its
-       cofactors over its determinant, laid out column by column */
-    function mNormal(m) {
+       cofactors over its determinant, laid out column by column (`out` holds nine numbers) */
+    function mNormal(out, m) {
       var a = m[0], b = m[4], c = m[8], d = m[1], e = m[5], f = m[9], g = m[2], h = m[6], i = m[10];
       var c00 = e * i - f * h, c01 = f * g - d * i, c02 = d * h - e * g;
       var c10 = c * h - b * i, c11 = a * i - c * g, c12 = b * g - a * h;
       var c20 = b * f - c * e, c21 = c * d - a * f, c22 = a * e - b * d;
       var det = a * c00 + b * c01 + c * c02;
       var k = det === 0 ? 0 : 1 / det;
-      return [c00 * k, c10 * k, c20 * k, c01 * k, c11 * k, c21 * k, c02 * k, c12 * k, c22 * k];
+      out[0] = c00 * k; out[1] = c10 * k; out[2] = c20 * k; out[3] = c01 * k; out[4] = c11 * k; out[5] = c21 * k; out[6] = c02 * k; out[7] = c12 * k; out[8] = c22 * k;
+      return out;
     }
 
-    function geo(lat, lon, r) {
+    function geo(out, lat, lon, r) {
       var p = rad(lon + 180), t = rad(90 - lat);
-      return [-r * Math.sin(t) * Math.cos(p), r * Math.cos(t), r * Math.sin(t) * Math.sin(p)];
+      return vSet(out, -r * Math.sin(t) * Math.cos(p), r * Math.cos(t), r * Math.sin(t) * Math.sin(p));
     }
-    function trackLatLon(s) {
-      return [START[0] + (END[0] - START[0]) * s + Math.sin(s * Math.PI) * 1.4, START[1] + (END[1] - START[1]) * s];
+    var LATLON = new Float64Array(2);
+    function trackLatLon(out, s) {
+      out[0] = START[0] + (END[0] - START[0]) * s + Math.sin(s * Math.PI) * 1.4;
+      out[1] = START[1] + (END[1] - START[1]) * s;
+      return out;
     }
-    function trackAt(s, r) { var ll = trackLatLon(s); return geo(ll[0], ll[1], r); }
+    function trackAt(out, s, r) { trackLatLon(LATLON, s); return geo(out, LATLON[0], LATLON[1], r); }
     // The storm's progress along its track at time t: faster as it goes
     function progress(t) { var u = clamp((t - T_DIVE) / (T_LAND - T_DIVE), 0, 1); return Math.pow(u, 1.6); }
 
@@ -1593,62 +1622,87 @@
        tightening on the storm and its landfall as it comes in. A pure
        function of the time: where it is, which way is up, and what it
        looks at. */
-    function trackPose(s) {
-      var ll = trackLatLon(s);
-      var lookLat = ll[0] + (END[0] - ll[0]) * 0.45 + 1.0, lookLon = ll[1] + (END[1] - ll[1]) * 0.45;
-      return { eye: geo(lookLat - 8.0 + 1.6 * s, lookLon - 0.3, 1.125 - 0.012 * s), look: geo(lookLat, lookLon, 1.0) };
+    function trackPose(eye, look, s) {
+      trackLatLon(LATLON, s);
+      var lookLat = LATLON[0] + (END[0] - LATLON[0]) * 0.45 + 1.0, lookLon = LATLON[1] + (END[1] - LATLON[1]) * 0.45;
+      geo(eye, lookLat - 8.0 + 1.6 * s, lookLon - 0.3, 1.125 - 0.012 * s);
+      geo(look, lookLat, lookLon, 1.0);
     }
-    var ORBIT = geo(24, -89, 3.25);
-    var SETTLED = trackPose(0);
-    var UP0 = [0, 1, 0];
-    function cameraPose(t) {
-      var pose = trackPose(progress(t)), eye = pose.eye, look = pose.look, up;
+    var ORBIT = geo(vec3(), 24, -89, 3.25), ORBIT_DIR = vUnit(vec3(), ORBIT);
+    var SETTLED_EYE = vec3(), SETTLED_LOOK = vec3(), ORIGIN = vec3();
+    trackPose(SETTLED_EYE, SETTLED_LOOK, 0);
+    var SETTLED_DIR = vUnit(vec3(), SETTLED_EYE), SETTLED_DISTANCE = vLen(SETTLED_EYE);
+    var DIVE_DIR = vec3(), DIVE_UP = vec3();
+    function newCameraPose() { return { eye: vec3(), look: vec3(), up: vec3() }; }
+    function cameraPose(pose, t) {
+      trackPose(pose.eye, pose.look, progress(t));
       if (t < T_DIVE) {
         // the dive: straight down onto the Gulf, slowing as it nears
         var f = smooth(t / T_DIVE);
-        var dir = vUnit(vLerp(vUnit(ORBIT), vUnit(SETTLED.eye), f));
-        var r = 3.25 + (vLen(SETTLED.eye) - 3.25) * (1 - Math.pow(1 - f, 2.6));
-        eye = vMul(dir, r);
-        look = vLerp([0, 0, 0], SETTLED.look, smooth(t / (T_DIVE * 0.7)));
-        up = vUnit(vLerp(UP0, vUnit(SETTLED.eye), f));
+        vUnit(DIVE_DIR, vLerp(DIVE_DIR, ORBIT_DIR, SETTLED_DIR, f));
+        var r = 3.25 + (SETTLED_DISTANCE - 3.25) * (1 - Math.pow(1 - f, 2.6));
+        vMul(pose.eye, DIVE_DIR, r);
+        vLerp(pose.look, ORIGIN, SETTLED_LOOK, smooth(t / (T_DIVE * 0.7)));
+        vUnit(pose.up, vLerp(DIVE_UP, Y_AXIS, SETTLED_DIR, f));
       } else {
-        up = vUnit(eye);
+        vUnit(pose.up, pose.eye);
       }
-      return { eye: eye, look: look, up: up };
+      return pose;
     }
-    /* The camera as matrices for a canvas `aspect` wide for its height: where it stands, its inverse and its lens */
-    function viewOf(pose, aspect) {
-      var world = mLookFrom(pose.eye, pose.look, pose.up);
-      return { eye: pose.eye, world: world, inverse: mInverseRigid(world), projection: mPerspective(FOV, aspect, NEAR, FAR) };
+    /* The camera as matrices for a canvas `aspect` wide for its height: where it stands, its inverse and its lens.
+       The lens is made once, by newView; a pose is put in a view with lookView. */
+    function newView(aspect) {
+      return { eye: vec3(), world: mat4(), inverse: mat4(), projection: mPerspective(mat4(), FOV, aspect, NEAR, FAR) };
+    }
+    function lookView(view, pose) {
+      vSet(view.eye, pose.eye[0], pose.eye[1], pose.eye[2]);
+      mLookFrom(view.world, pose.eye, pose.look, pose.up);
+      mInverseRigid(view.inverse, view.world);
+      return view;
     }
     /* Where a point of the world falls in a W x H canvas, in pixels from its top left, and whether the camera sees that side of the globe */
-    function screenPoint(v, view, W, H) {
-      var p = mPoint(view.projection, mPoint(view.inverse, v));
-      var facing = vDot(vUnit(v), vUnit(vSub(view.eye, v))) > 0;
-      return { x: (p[0] + 1) / 2 * W, y: (1 - p[1]) / 2 * H, on: p[2] < 1 && facing };
+    var SEEN_A = vec3(), SEEN_B = vec3(), SEEN_C = vec3();
+    function screenPoint(out, v, view, W, H) {
+      mPoint(SEEN_A, view.projection, mPoint(SEEN_A, view.inverse, v));
+      vUnit(SEEN_B, v);
+      vUnit(SEEN_C, vSub(SEEN_C, view.eye, v));
+      out.x = (SEEN_A[0] + 1) / 2 * W;
+      out.y = (1 - SEEN_A[1]) / 2 * H;
+      out.on = SEEN_A[2] < 1 && vDot(SEEN_B, SEEN_C) > 0;
+      return out;
     }
 
     // Light from the south-east, the afternoon sun over the Atlantic
-    var SUN = vUnit(vAdd(vUnit(geo(14, -70, 1)), [0, 0.25, 0]));
+    var SUN = geo(vec3(), 14, -70, 1);
+    vUnit(SUN, SUN);
+    SUN[1] += 0.25;
+    vUnit(SUN, SUN);
+    var SUN_FAR = vMul(vec3(), SUN, 10);
 
     /* Where the storm is and how it looks at time t: also pure. */
-    function stormPose(t) {
+    var STORM_N = vec3(), STORM_AWAY = vec3(), STORM_Q = vec4();
+    function newStormPose() {
+      return { s: 0, scale: 0, position: vec3(), turn: vec4(), spin: 0, formed: 0, shadow: vec3(), flash: 0, landfall: 0 };
+    }
+    function stormPose(pose, t) {
       var s = progress(t);
-      var k = 0.026 + 0.042 * Math.pow(s, 0.85);
-      var n = vUnit(trackAt(s, 1.0));
-      var turn = qBetween([0, 0, 1], n);
-      var formed = smooth((t - T_DIVE + 0.5) / 1.0);
+      pose.s = s;
+      pose.scale = 0.026 + 0.042 * Math.pow(s, 0.85);
+      vUnit(STORM_N, trackAt(STORM_N, s, 1.0));
+      qBetween(pose.turn, Z_AXIS, STORM_N);
+      vMul(pose.position, STORM_N, 1.0008);
+      pose.formed = smooth((t - T_DIVE + 0.5) / 1.0);
       // the shadow falls away from the sun across the sea
-      var away = vMul(vUnit(vAcross(SUN, n)), -0.42);
-      var shadow = qRotate(qConjugate(turn), away);
-      shadow[2] = 0.0005;
+      vAcross(STORM_AWAY, SUN, STORM_N);
+      vMul(STORM_AWAY, vUnit(STORM_AWAY, STORM_AWAY), -0.42);
+      qRotate(pose.shadow, qConjugate(STORM_Q, pose.turn), STORM_AWAY);
+      pose.shadow[2] = 0.0005;
       // landfall: lightning
       var lt = t - T_LAND;
-      var flash = lt > 0 ? Math.max(0, Math.sin(lt * 23) * Math.sin(lt * 7.3)) * (lt < 1.8 ? 1 : 0) : 0;
-      return {
-        s: s, scale: k, position: vMul(n, 1.0008), turn: turn, spin: t * 0.5, formed: formed,
-        shadow: shadow, flash: flash, landfall: lt
-      };
+      pose.flash = lt > 0 ? Math.max(0, Math.sin(lt * 23) * Math.sin(lt * 7.3)) * (lt < 1.8 ? 1 : 0) : 0;
+      pose.landfall = lt;
+      pose.spin = t * 0.5;
+      return pose;
     }
 
     /* The storm seen from above: spiral bands round a clear eye, drawn once */
@@ -2294,14 +2348,18 @@
 
       /* ---- The scene: things in a tree of places, each drawn by its own function ---- */
       var nextId = 0, nodes = [];
+      /* A place: where something is (p), how it is turned (q) and how big it is (s), in the place it hangs from if
+         it hangs from one; `world` is the matrix of all that, worked out in settleWorld. */
       function place(parent) {
-        var node = { id: ++nextId, parent: parent || null, p: [0, 0, 0], q: [0, 0, 0, 1], s: [1, 1, 1], world: mFrom([0, 0, 0], [0, 0, 0, 1], [1, 1, 1]) };
+        var node = { id: ++nextId, parent: parent || null, p: vec3(), q: vec4(), s: vSet(vec3(), 1, 1, 1), local: mat4(), world: mat4() };
+        node.q[3] = 1;
+        mFrom(node.world, node.p, node.q, node.s);
         nodes.push(node);
         return node;
       }
       function settleWorld(node) {
-        var local = mFrom(node.p, node.q, node.s);
-        node.world = node.parent === null ? local : mMul(node.parent.world, local);
+        mFrom(node.local, node.p, node.q, node.s);
+        if (node.parent === null) { node.world.set(node.local); } else { mMul(node.world, node.parent.world, node.local); }
       }
       var things = [];
       /* How a thing is blended and where it writes: `blend` none, normal or additive; `side` front, back or both;
@@ -2311,6 +2369,8 @@
         how.id = node.id;
         how.material = ++nextId;
         how.order = how.order || 0;
+        // what the order of drawing sorts, kept so a frame makes none
+        how.entry = { one: how, z: 0 };
         things.push(how);
         return how;
       }
@@ -2318,7 +2378,7 @@
       // Stars
       var starAt = [], rs = seeded(9), i;
       for (i = 0; i < 1800; i++) {
-        var v = vMul(vUnit([rs() * 2 - 1, rs() * 2 - 1, rs() * 2 - 1]), 80);
+        var v = vMul(WORK_A, vUnit(WORK_A, vSet(WORK_A, rs() * 2 - 1, rs() * 2 - 1, rs() * 2 - 1)), 80);
         starAt.push(v[0], v[1], v[2]);
       }
       var starShape = shape({ position: starAt, mode: gl.POINTS });
@@ -2356,7 +2416,7 @@
         show: function (frame) {
           gl.useProgram(flatProgram.handle);
           matrices(flatProgram, this.node, frame, false);
-          gl.uniform3fv(flatProgram.at('diffuse'), K.deep);
+          colour(flatProgram.at('diffuse'), K.deep);
           gl.uniform1f(flatProgram.at('opacity'), 0.42);
           cloudMap.bind(0); gl.uniform1i(flatProgram.at('alphaMap'), 0);
         }
@@ -2377,18 +2437,18 @@
         show: function (frame) {
           gl.useProgram(atmosProgram.handle);
           matrices(atmosProgram, this.node, frame, true);
-          gl.uniform3fv(atmosProgram.at('glow'), K.glow);
-          gl.uniform3fv(atmosProgram.at('edge'), K.edge);
+          colour(atmosProgram.at('glow'), K.glow);
+          colour(atmosProgram.at('edge'), K.edge);
         }
       });
 
       // The track: dashed ahead, the station's gold behind the storm
       var N = 160, trackAtPoints = [], along = [], last = null, run = 0;
       for (i = 0; i <= N; i++) {
-        var p = trackAt(i / N, 1.0022);
+        var p = trackAt(vec3(), i / N, 1.0022);
         // Float32 here, as the card holds them, so the distances add up as the card's points do
-        p = [Math.fround(p[0]), Math.fround(p[1]), Math.fround(p[2])];
-        if (last !== null) { run += vLen(vSub(p, last)); }
+        vSet(p, Math.fround(p[0]), Math.fround(p[1]), Math.fround(p[2]));
+        if (last !== null) { run += vLen(vSub(WORK_A, p, last)); }
         along.push(run);
         trackAtPoints.push(p[0], p[1], p[2]);
         last = p;
@@ -2409,7 +2469,7 @@
         show: function (frame) {
           gl.useProgram(lineProgram.handle);
           matrices(lineProgram, this.node, frame, false);
-          gl.uniform3fv(lineProgram.at('diffuse'), K.goldHi);
+          colour(lineProgram.at('diffuse'), K.goldHi);
           gl.uniform1f(lineProgram.at('opacity'), 1);
         }
       });
@@ -2420,34 +2480,35 @@
       });
       function sprite(tex, size, at, tint, order) {
         var node = place();
-        node.p = at;
-        node.s = [size, size, 1];
+        node.p.set(at);
+        vSet(node.s, size, size, 1);
         var one = thing(node, {
           shape: quad, transparent: true, blend: 'normal', depthWrite: false, side: 'front', order: order || 0,
           show: function (frame) {
             gl.useProgram(spriteProgram.handle);
-            var world = this.node.world, middle = mPoint(frame.view.inverse, [world[12], world[13], world[14]]);
-            gl.uniformMatrix4fv(spriteProgram.at('projectionMatrix'), false, frame.view.projection);
-            gl.uniform3f(spriteProgram.at('centre'), middle[0], middle[1], middle[2]);
+            var world = this.node.world;
+            mPoint(UP_A, frame.view.inverse, vSet(UP_B, world[12], world[13], world[14]));
+            up4(spriteProgram.at('projectionMatrix'), frame.view.projection);
+            gl.uniform3f(spriteProgram.at('centre'), UP_A[0], UP_A[1], UP_A[2]);
             gl.uniform1f(spriteProgram.at('size'), this.node.s[0]);
-            gl.uniform3fv(spriteProgram.at('diffuse'), tint);
+            colour(spriteProgram.at('diffuse'), tint);
             gl.uniform1f(spriteProgram.at('opacity'), 1);
             tex.bind(0); gl.uniform1i(spriteProgram.at('map'), 0);
           }
         });
         return one;
       }
-      [0].concat(marks.map(function (m) { return m.at; })).forEach(function (m) { sprite(dotTex, 0.016, trackAt(m, 1.003), [1, 1, 1]); });
-      var target = sprite(ringTex, 0.03, trackAt(1, 1.003), K.breakingHi, -1);
+      [0].concat(marks.map(function (m) { return m.at; })).forEach(function (m) { sprite(dotTex, 0.016, trackAt(vec3(), m, 1.003), [1, 1, 1]); });
+      var target = sprite(ringTex, 0.03, trackAt(vec3(), 1, 1.003), K.breakingHi, -1);
 
       // The rain the storm leaves behind it: a swath along the track
       var SW = 120, swPos = [], swCol = [], swIdx = [];
       for (i = 0; i <= SW; i++) {
-        var s0 = i / SW, a = trackAt(Math.max(0, s0 - 0.004), 1.0012), b = trackAt(Math.min(1, s0 + 0.004), 1.0012);
-        var c0 = trackAt(s0, 1.0012), n0 = vUnit(c0);
-        var side = vMul(vUnit(vCross(vSub(b, a), n0)), 0.012 + 0.05 * s0);
+        var s0 = i / SW, a = trackAt(vec3(), Math.max(0, s0 - 0.004), 1.0012), b = trackAt(vec3(), Math.min(1, s0 + 0.004), 1.0012);
+        var c0 = trackAt(vec3(), s0, 1.0012), n0 = vUnit(vec3(), c0);
+        var side = vMul(vec3(), vUnit(WORK_A, vCross(WORK_A, vSub(WORK_B, b, a), n0)), 0.012 + 0.05 * s0);
         swPos.push(c0[0] + side[0], c0[1] + side[1], c0[2] + side[2], c0[0] - side[0], c0[1] - side[1], c0[2] - side[2]);
-        var col = vLerp(K.ready, K.goldHi, s0 * 0.7);
+        var col = vLerp(vec3(), K.ready, K.goldHi, s0 * 0.7);
         swCol.push(col[0], col[1], col[2], col[0], col[1], col[2]);
         if (i < SW) { var k = i * 2; swIdx.push(k, k + 1, k + 2, k + 1, k + 3, k + 2); }
       }
@@ -2466,10 +2527,10 @@
       var stormNode = place();
       var spinNode = place(stormNode);
       var discNode = place(spinNode);
-      discNode.p = [0, 0, 0.004];
+      vSet(discNode.p, 0, 0, 0.004);
       var shadowNode = place(stormNode);
       var boltNode = place(stormNode);
-      boltNode.p = [0, 0, 0.08];
+      vSet(boltNode.p, 0, 0, 0.08);
       var storm = { alpha: 1, flash: 0, shadowOpacity: 0.55, bolt: 0 };
       thing(discNode, {
         shape: shape(sheetShape(2, 2, 220, 220)), transparent: true, blend: 'normal', depthWrite: true, side: 'front', order: 2,
@@ -2481,8 +2542,8 @@
           gl.uniform1f(discProgram.at('uH'), 0.09);
           gl.uniform1f(discProgram.at('uFlash'), storm.flash);
           gl.uniform1f(discProgram.at('uAlpha'), storm.alpha);
-          gl.uniform3fv(discProgram.at('uSun'), SUN);
-          gl.uniform3fv(discProgram.at('cLit'), K.white);
+          colour(discProgram.at('uSun'), SUN);
+          colour(discProgram.at('cLit'), K.white);
           gl.uniform3f(discProgram.at('cShade'), 0x8f / 255, 0x9b / 255, 0xb6 / 255);
         }
       });
@@ -2491,7 +2552,7 @@
         show: function (frame) {
           gl.useProgram(flatProgram.handle);
           matrices(flatProgram, this.node, frame, false);
-          gl.uniform3fv(flatProgram.at('diffuse'), K.deep);
+          colour(flatProgram.at('diffuse'), K.deep);
           gl.uniform1f(flatProgram.at('opacity'), storm.shadowOpacity);
           spiralTex.bind(0); gl.uniform1i(flatProgram.at('alphaMap'), 0);
         }
@@ -2500,25 +2561,40 @@
       var labels = {};
       Array.prototype.forEach.call(root.querySelectorAll('[data-at]'), function (el) { labels[el.getAttribute('data-at')] = el; });
       var rows = root.querySelectorAll('[data-row]');
-      var END_LABEL = geo(END[0] + 2.2, END[1] + 4.6, 1.004);
+      // where the labels are pinned, and the names they go by, are the same each frame
+      var LABEL_NOW = trackAt(vec3(), 0, 1.006), LABEL_END = geo(vec3(), END[0] + 2.2, END[1] + 4.6, 1.004);
+      var markAt = marks.map(function (m) { return trackAt(vec3(), m.at, 1.006); });
+      var markName = marks.map(function (m, index) { return 'm' + index; });
 
       /* ---- A frame ---- */
-      var view = viewOf(cameraPose(0), W / H);
+      // what a frame works in, made once: the camera and the storm, the places' matrices, what goes to the card
+      var view = newView(W / H);
+      var pose = newCameraPose(), weather = newStormPose();
+      var drawing = { view: view };
+      var spot = { x: 0, y: 0, on: false };
+      var MV = mat4(), NM = new Float64Array(9), SCREEN = mat4();
+      var UP_A = vec3(), UP_B = vec3();
+      var U16 = new Float32Array(16), U9 = new Float32Array(9);
+      function up4(loc, m) { U16.set(m); gl.uniformMatrix4fv(loc, false, U16); }
+      function up3(loc, m) { U9.set(m); gl.uniformMatrix3fv(loc, false, U9); }
+      function colour(loc, c) { gl.uniform3f(loc, c[0], c[1], c[2]); }
       function matrices(prog, node, frame, withNormal) {
-        var modelView = mMul(frame.view.inverse, node.world);
-        gl.uniformMatrix4fv(prog.at('modelViewMatrix'), false, modelView);
-        gl.uniformMatrix4fv(prog.at('projectionMatrix'), false, frame.view.projection);
-        if (withNormal) { gl.uniformMatrix3fv(prog.at('normalMatrix'), false, mNormal(modelView)); }
-        if (prog.at('modelMatrix')) { gl.uniformMatrix4fv(prog.at('modelMatrix'), false, node.world); }
+        mMul(MV, frame.view.inverse, node.world);
+        up4(prog.at('modelViewMatrix'), MV);
+        up4(prog.at('projectionMatrix'), frame.view.projection);
+        if (withNormal) { up3(prog.at('normalMatrix'), mNormal(NM, MV)); }
+        var model = prog.at('modelMatrix');
+        if (model) { up4(model, node.world); }
       }
       /* The lights, in the view: the sun, the ambient, and the bolt where the storm is */
       function lights(prog, frame) {
         var pi = Math.PI;
         gl.uniform3f(prog.at('ambientColor'), 0x3a / 255 * 0.6 * pi, 0x44 / 255 * 0.6 * pi, 0x66 / 255 * 0.6 * pi);
-        gl.uniform3fv(prog.at('sunDirection'), mDirection(frame.view.inverse, vMul(SUN, 10)));
+        mDirection(UP_A, frame.view.inverse, SUN_FAR);
+        gl.uniform3f(prog.at('sunDirection'), UP_A[0], UP_A[1], UP_A[2]);
         gl.uniform3f(prog.at('sunColor'), 1.35 * pi, 1.35 * pi, 1.35 * pi);
-        var at = [boltNode.world[12], boltNode.world[13], boltNode.world[14]];
-        gl.uniform3fv(prog.at('boltPosition'), mPoint(frame.view.inverse, at));
+        mPoint(UP_A, frame.view.inverse, vSet(UP_B, boltNode.world[12], boltNode.world[13], boltNode.world[14]));
+        gl.uniform3f(prog.at('boltPosition'), UP_A[0], UP_A[1], UP_A[2]);
         var power = storm.bolt * pi;
         gl.uniform3f(prog.at('boltColor'), power, power, power);
       }
@@ -2545,29 +2621,38 @@
           gl.drawElements(one.shape.mode, one.shape.count, one.shape.type, 0);
         }
       }
+      function paintAll(one, frame) {
+        if (one.shape.count === 0) { return; }
+        if (one.transparent && one.side === 'both') {
+          paint(one, 'back', frame);
+          paint(one, 'front', frame);
+        } else {
+          paint(one, one.side, frame);
+        }
+      }
       /* The things in the order a frame draws them: the solid ones first, in the order they were made; then the
          see-through ones, by `order` and then from the farthest to the nearest, where a thing's distance is how far
-         its middle falls in the depth the camera gives. Things whose middles coincide keep the order they were made in. */
+         its middle falls in the depth the camera gives. Things whose middles coincide keep the order they were made in.
+         Each key breaks the tie of the one before it. The two lists are kept between frames. */
+      var solid = [], clear = [];
+      function bySolid(a, b) { return (a.one.order - b.one.order) || (a.one.material - b.one.material) || (a.z - b.z) || (a.one.id - b.one.id); }
+      function byClear(a, b) { return (a.one.order - b.one.order) || (b.z - a.z) || (a.one.id - b.one.id); }
       function ordered(frame) {
-        var screen = mMul(frame.view.projection, frame.view.inverse), solid = [], clear = [];
-        things.forEach(function (one) {
-          var z = mPoint(screen, [one.node.world[12], one.node.world[13], one.node.world[14]])[2];
-          (one.transparent ? clear : solid).push({ one: one, z: z });
-        });
-        // each key breaks the tie of the one before it
-        solid.sort(function (a, b) {
-          return (a.one.order - b.one.order) || (a.one.material - b.one.material) || (a.z - b.z) || (a.one.id - b.one.id);
-        });
-        clear.sort(function (a, b) {
-          return (a.one.order - b.one.order) || (b.z - a.z) || (a.one.id - b.one.id);
-        });
-        return solid.concat(clear).map(function (entry) { return entry.one; });
+        mMul(SCREEN, frame.view.projection, frame.view.inverse);
+        solid.length = 0;
+        clear.length = 0;
+        for (var n = 0; n < things.length; n++) {
+          var one = things[n], world = one.node.world;
+          one.entry.z = mPoint(UP_A, SCREEN, vSet(UP_B, world[12], world[13], world[14]))[2];
+          (one.transparent ? clear : solid).push(one.entry);
+        }
+        solid.sort(bySolid);
+        clear.sort(byClear);
       }
       function render() {
-        var frame = { view: view };
         // a place is made after the one it hangs from, so they settle in the order they were made
-        nodes.forEach(settleWorld);
-        var list = ordered(frame);
+        for (var n = 0; n < nodes.length; n++) { settleWorld(nodes[n]); }
+        ordered(drawing);
         gl.viewport(0, 0, cw, ch);
         gl.disable(gl.SCISSOR_TEST);
         gl.enable(gl.DEPTH_TEST);
@@ -2578,54 +2663,47 @@
         gl.clearDepth(1);
         gl.clearStencil(0);
         gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT | gl.STENCIL_BUFFER_BIT);
-        list.forEach(function (one) {
-          if (one.shape.count === 0) { return; }
-          if (one.transparent && one.side === 'both') {
-            paint(one, 'back', frame);
-            paint(one, 'front', frame);
-          } else {
-            paint(one, one.side, frame);
-          }
-        });
+        for (n = 0; n < solid.length; n++) { paintAll(solid[n].one, drawing); }
+        for (n = 0; n < clear.length; n++) { paintAll(clear[n].one, drawing); }
         gl.depthMask(true);
       }
 
       function label(name, at, show) {
         var el = labels[name];
         if (!el) { return; }
-        var sc = screenPoint(at, view, W, H);
-        el.style.transform = 'translate(' + sc.x.toFixed(1) + 'px,' + sc.y.toFixed(1) + 'px)';
-        el.classList.toggle('pn-wx-on', !!(show && sc.on));
+        screenPoint(spot, at, view, W, H);
+        el.style.transform = 'translate(' + spot.x.toFixed(1) + 'px,' + spot.y.toFixed(1) + 'px)';
+        el.classList.toggle('pn-wx-on', !!(show && spot.on));
       }
       function draw(t) {
-        view = viewOf(cameraPose(t), W / H);
-        cloudsNode.q = qAboutY(t * 0.006);
-        cloudShadowNode.q = qAboutY(t * 0.006 - 0.003);
-        var pose = stormPose(t);
-        stormNode.p = pose.position;
-        stormNode.q = pose.turn;
-        stormNode.s = [pose.scale, pose.scale, pose.scale];
-        spinNode.q = qAboutZ(pose.spin);
-        shadowNode.p = pose.shadow;
-        shadowNode.q = qAboutZ(pose.spin);
-        storm.alpha = pose.formed;
-        storm.shadowOpacity = 0.55 * pose.formed;
-        storm.flash = pose.flash * 0.8;
-        storm.bolt = pose.flash * 3;
-        var s = pose.s;
+        lookView(view, cameraPose(pose, t));
+        qAboutY(cloudsNode.q, t * 0.006);
+        qAboutY(cloudShadowNode.q, t * 0.006 - 0.003);
+        stormPose(weather, t);
+        stormNode.p.set(weather.position);
+        stormNode.q.set(weather.turn);
+        vSet(stormNode.s, weather.scale, weather.scale, weather.scale);
+        qAboutZ(spinNode.q, weather.spin);
+        shadowNode.p.set(weather.shadow);
+        qAboutZ(shadowNode.q, weather.spin);
+        storm.alpha = weather.formed;
+        storm.shadowOpacity = 0.55 * weather.formed;
+        storm.flash = weather.flash * 0.8;
+        storm.bolt = weather.flash * 3;
+        var s = weather.s;
         // the swath and the gold track behind it
         swath.shape.count = Math.floor(s * SW) * 6;
-        swathLook.opacity = 0.24 * pose.formed;
+        swathLook.opacity = 0.24 * weather.formed;
         behind.shape.count = Math.floor(s * N) + 1;
-        var grow = 0.03 * (1 + (pose.landfall > 0 ? 0.25 * Math.abs(Math.sin(pose.landfall * 5)) : 0));
-        target.node.s = [grow, grow, grow];
+        var grow = 0.03 * (1 + (weather.landfall > 0 ? 0.25 * Math.abs(Math.sin(weather.landfall * 5)) : 0));
+        vSet(target.node.s, grow, grow, grow);
         var ready = t > T_DIVE + 0.3;
-        label('now', trackAt(0, 1.006), ready);
-        marks.forEach(function (m, i) {
-          label('m' + i, trackAt(m.at, 1.006), ready && s >= m.at);
-          if (rows[i]) { rows[i].classList.toggle('pn-wx-on', s >= m.at); }
-        });
-        label('end', END_LABEL, t >= T_LAND + 0.15);
+        label('now', LABEL_NOW, ready);
+        for (var m = 0; m < marks.length; m++) {
+          label(markName[m], markAt[m], ready && s >= marks[m].at);
+          if (rows[m]) { rows[m].classList.toggle('pn-wx-on', s >= marks[m].at); }
+        }
+        label('end', LABEL_END, t >= T_LAND + 0.15);
         if (rows[marks.length]) { rows[marks.length].classList.toggle('pn-wx-on', t >= T_LAND); }
         root.classList.toggle('pn-wx-st3-tracking', ready);
         render();
@@ -2662,11 +2740,23 @@
       // `ready` comes once a held moment has been drawn, so a still can wait for it
       return { dispose: dispose, ready: hold === null ? Promise.resolve() : finished, drawn: function () { return drawn; } };
     }
-    stormScene.cameraPose = cameraPose;
-    stormScene.viewOf = viewOf;
-    stormScene.screenPoint = screenPoint;
-    stormScene.stormPose = stormPose;
-    stormScene.trackAt = trackAt;
+    stormScene.cameraPose = function (t) {
+      var pose = cameraPose(newCameraPose(), t);
+      return { eye: plain(pose.eye), look: plain(pose.look), up: plain(pose.up) };
+    };
+    stormScene.viewOf = function (pose, aspect) {
+      var view = lookView(newView(aspect), pose);
+      return { eye: plain(view.eye), world: plain(view.world), inverse: plain(view.inverse), projection: plain(view.projection) };
+    };
+    stormScene.screenPoint = function (v, view, width, height) { return screenPoint({ x: 0, y: 0, on: false }, v, view, width, height); };
+    stormScene.stormPose = function (t) {
+      var pose = stormPose(newStormPose(), t);
+      return {
+        s: pose.s, scale: pose.scale, position: plain(pose.position), turn: plain(pose.turn), spin: pose.spin,
+        formed: pose.formed, shadow: plain(pose.shadow), flash: pose.flash, landfall: pose.landfall
+      };
+    };
+    stormScene.trackAt = function (s, radius) { return plain(trackAt(vec3(), s, radius)); };
     return stormScene;
   })();
 

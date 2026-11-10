@@ -8,7 +8,7 @@
 // files in vendor/, from its npm package with its license.
 // React's is copied unchanged, and React DOM's with two minified names renamed
 // (scripts/lib/react-dom-names.mjs says why). STORMTRACKER draws its globe in
-// station.js itself, with WebGL, so there is no library for it, and the
+// design.js itself, with WebGL, so there is no library for it, and the
 // pictures of the Earth it draws on are copied from design/textures into
 // textures/. index.html loads React first, then design.js, which takes React
 // from its global and sets PipNews, then station.js, which takes React,
