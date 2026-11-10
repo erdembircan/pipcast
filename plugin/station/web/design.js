@@ -1417,14 +1417,15 @@
      fixed order each frame, with a few lights, in linear colour that is
      turned to the screen's sRGB on the way out (so a colour given as
      #rrggbb is used as it stands, then encoded, which is what makes the
-     palette read as it does). The lighting, the texture settings, the way the
-     things are sorted and blended, and the numbers of the camera all follow
-     three.js r149, which drew this scene before this code did, so the
-     picture is the same. The shaders and the code are written here from that
-     arithmetic, not from that library's text: its equations are published
-     ones (Blinn-Phong with Schlick's Fresnel, bump mapping from derivatives,
-     the sRGB curve, the rotation and projection matrices) and the sources of
-     the less common are named where they are used. */
+     palette read as it does). This is our code, written from the published
+     math: Blinn, Phong, Cook and Torrance and Schlick for the highlight,
+     Epic's 2013 form of Schlick's Fresnel, Mikkelsen's bump mapping from
+     derivatives (2010), the sRGB curve of IEC 61966-2-1, and the usual
+     projection and rotation matrices. Its pictures were checked against the
+     ones three.js r149 drew of this scene, and match to within a level, so
+     what the lighting, the texture settings, the order things are drawn and
+     blended in, and the camera's numbers do is what the scene looked like
+     before. */
   var stormScene = (function () {
     var DUR = 13, T_DIVE = 2.6, T_LAND = 9.0;
     var START = [25.4, -95.4], END = [27.95, -82.75];
@@ -1711,32 +1712,34 @@
 
     /* ---------------- The shapes ---------------- */
 
-    /* A globe of `radius`, in rings of quads from the north pole down: a point
-       is [x, y, z] with its normal and the picture's [u, v] (v up from the
-       south pole; each pole's points are shifted half a quad so the picture
-       does not pinch). The points are numbered ring by ring, and each quad is two triangles
-       wound the same way, the pole's quads one triangle. */
+    /* A globe of `radius`: `down` bands of `across` quads each, from the north pole to the south. A point is
+       [x, y, z] with its normal and the picture's [u, v], and the points are numbered ring by ring, a ring's
+       first and last at the seam. The picture runs once round (u) and from the south pole up (v); at a pole,
+       where the ring is a single point, its points are moved half a quad along so the picture does not pinch.
+       Each quad is two triangles, counter-clockwise from outside, and the bands at the poles have only the
+       triangle that is not flat. */
     function sphereShape(radius, across, down) {
-      var pos = [], nor = [], uvs = [], idx = [], stride = across + 1, ix, iy;
-      for (iy = 0; iy <= down; iy++) {
-        var v = iy / down;
-        var shift = iy === 0 ? 0.5 / across : (iy === down ? -0.5 / across : 0);
-        for (ix = 0; ix <= across; ix++) {
-          var u = ix / across;
-          var x = -radius * Math.cos(u * Math.PI * 2) * Math.sin(v * Math.PI);
-          var y = radius * Math.cos(v * Math.PI);
-          var z = radius * Math.sin(u * Math.PI * 2) * Math.sin(v * Math.PI);
-          var l = 1 / (Math.sqrt(x * x + y * y + z * z) || 1);
-          pos.push(x, y, z);
-          nor.push(x * l, y * l, z * l);
-          uvs.push(u + shift, 1 - v);
+      var columns = across + 1, rows = down + 1;
+      // the angle round the axis for each column, the angle down from the north pole for each ring
+      var round = [], polar = [], c, r;
+      for (c = 0; c < columns; c++) { round.push({ cos: Math.cos(2 * Math.PI * c / across), sin: Math.sin(2 * Math.PI * c / across) }); }
+      for (r = 0; r < rows; r++) { polar.push({ cos: Math.cos(Math.PI * r / down), sin: Math.sin(Math.PI * r / down) }); }
+      var pos = [], nor = [], uvs = [], idx = [];
+      for (r = 0; r < rows; r++) {
+        var pole = r === 0 ? 0.5 : (r === down ? -0.5 : 0);
+        for (c = 0; c < columns; c++) {
+          // x runs against the angle's cosine, so the seam is at +x and the picture reads west to east
+          var nx = -polar[r].sin * round[c].cos, ny = polar[r].cos, nz = polar[r].sin * round[c].sin;
+          pos.push(radius * nx, radius * ny, radius * nz);
+          nor.push(nx, ny, nz);
+          uvs.push((c + pole) / across, 1 - r / down);
         }
       }
-      for (iy = 0; iy < down; iy++) {
-        for (ix = 0; ix < across; ix++) {
-          var nw = iy * stride + ix, ne = nw + 1, sw = nw + stride, se = sw + 1;
-          if (iy !== 0) { idx.push(ne, nw, se); }
-          if (iy !== down - 1) { idx.push(nw, sw, se); }
+      for (r = 0; r < down; r++) {
+        for (c = 0; c < across; c++) {
+          var nw = r * columns + c, ne = nw + 1, sw = nw + columns, se = sw + 1;
+          if (r > 0) { idx.push(nw, se, ne); }
+          if (r < down - 1) { idx.push(sw, se, nw); }
         }
       }
       return { position: pos, normal: nor, uv: uvs, index: idx };
@@ -1764,12 +1767,14 @@
 
     var HEAD = '#version 300 es\nprecision highp float;\nprecision highp int;\nprecision highp sampler2D;\n';
 
-    /* The colour on its way to the screen: linear to sRGB, with the 0.41666
-       of the exponent the picture was made with. */
+    /* The colour on its way to the screen: linear light to sRGB, channel by channel, as IEC 61966-2-1 gives
+       it: a straight line near black and a power of 1/2.4 above. */
     var TO_SCREEN = [
+      'float encodeChannel(float c) {',
+      '  return c <= 0.0031308 ? 12.92 * c : 1.055 * pow(c, 1.0 / 2.4) - 0.055;',
+      '}',
       'vec3 toScreen(vec3 c) {',
-      '  vec3 curve = pow(c, vec3(0.41666)) * 1.055 - vec3(0.055);',
-      '  return mix(curve, c * 12.92, vec3(lessThanEqual(c, vec3(0.0031308))));',
+      '  return vec3(encodeChannel(c.r), encodeChannel(c.g), encodeChannel(c.b));',
       '}'
     ].join('\n');
 
@@ -1783,35 +1788,38 @@
       'uniform vec3 sunColor;',
       'uniform vec3 boltPosition;',
       'uniform vec3 boltColor;',
-      'uniform float boltReach;',
-      'uniform float boltFade;',
-      'const float INV_PI = 0.3183098861837907;',
-      '// Blinn-Phong highlight, with Schlick\'s Fresnel in the form Epic gave at SIGGRAPH 2013',
-      'vec3 gloss(vec3 toLight, vec3 toEye, vec3 n, vec3 f0, float shininess) {',
-      '  vec3 half_ = normalize(toLight + toEye);',
-      '  float nh = clamp(dot(n, half_), 0.0, 1.0);',
-      '  float vh = clamp(dot(toEye, half_), 0.0, 1.0);',
-      '  float fresnel = exp2((-5.55473 * vh - 6.98316) * vh);',
-      '  vec3 F = f0 * (1.0 - fresnel) + vec3(fresnel);',
-      '  float lobe = INV_PI * (shininess * 0.5 + 1.0) * pow(nh, shininess);',
-      '  return F * (0.25 * lobe);',
+      'const float PI = 3.141592653589793;',
+      '// The bolt lights what is within 0.4 of it, less and less to nothing at that distance.',
+      'const float BOLT_REACH = 0.4;',
+      'const float BOLT_FADE = 2.0;',
+      '// The highlight light from `toLight` makes, seen along `toEye`, off a surface facing `n` that reflects',
+      '// `f0` of it head on: Cook and Torrance\'s DFG / (4 (n.l)(n.v)) with the half vector h = (l + v) / |l + v|',
+      '// and the geometry term taken as (n.l)(n.v), which leaves D F / 4. D is Blinn\'s (n.h)^s, with the',
+      '// (s + 2) / 2pi that keeps its energy whatever s is; F is Schlick\'s f0 + (1 - f0)(1 - v.h)^5, in the',
+      '// form Epic gave at SIGGRAPH 2013 (2 to the power of a quadratic in v.h in place of the fifth power).',
+      'vec3 highlight(vec3 toLight, vec3 toEye, vec3 n, vec3 f0, float shininess) {',
+      '  vec3 h = normalize(toLight + toEye);',
+      '  float vh = clamp(dot(toEye, h), 0.0, 1.0);',
+      '  vec3 fresnel = f0 + (1.0 - f0) * exp2((-5.55473 * vh - 6.98316) * vh);',
+      '  float spread = (shininess + 2.0) / (2.0 * PI) * pow(clamp(dot(n, h), 0.0, 1.0), shininess);',
+      '  return fresnel * (0.25 * spread);',
       '}',
       '// The light on a surface at `pos` (in the view) facing `n`: what the sun and the bolt give it, then the ambient.',
+      '// The colours of the lights are already multiplied by pi, which the 1/pi of the surface\'s diffuse cancels.',
       'vec3 lit(vec3 albedo, vec3 n, vec3 pos, float shininess, vec3 specular, float glossy) {',
       '  vec3 toEye = normalize(-pos);',
       '  vec3 diffuse = vec3(0.0);',
       '  vec3 shine = vec3(0.0);',
       '  vec3 toBolt = boltPosition - pos;',
-      '  vec3 l = normalize(toBolt);',
-      '  float reach = (boltReach > 0.0 && boltFade > 0.0) ? pow(clamp(-length(toBolt) / boltReach + 1.0, 0.0, 1.0), boltFade) : 1.0;',
-      '  vec3 incoming = clamp(dot(n, l), 0.0, 1.0) * (boltColor * reach);',
-      '  diffuse += incoming * (INV_PI * albedo);',
-      '  if (glossy > 0.0) { shine += incoming * gloss(l, toEye, n, specular, shininess) * glossy; }',
-      '  incoming = clamp(dot(n, sunDirection), 0.0, 1.0) * sunColor;',
-      '  diffuse += incoming * (INV_PI * albedo);',
-      '  if (glossy > 0.0) { shine += incoming * gloss(sunDirection, toEye, n, specular, shininess) * glossy; }',
-      '  vec3 ambient = ambientColor * (INV_PI * albedo);',
-      '  return diffuse + ambient + shine;',
+      '  vec3 boltDir = normalize(toBolt);',
+      '  float near = pow(max(1.0 - length(toBolt) / BOLT_REACH, 0.0), BOLT_FADE);',
+      '  vec3 incoming = max(dot(n, boltDir), 0.0) * (boltColor * near);',
+      '  diffuse += incoming * albedo / PI;',
+      '  if (glossy > 0.0) { shine += incoming * highlight(boltDir, toEye, n, specular, shininess) * glossy; }',
+      '  incoming = max(dot(n, sunDirection), 0.0) * sunColor;',
+      '  diffuse += incoming * albedo / PI;',
+      '  if (glossy > 0.0) { shine += incoming * highlight(sunDirection, toEye, n, specular, shininess) * glossy; }',
+      '  return diffuse + ambientColor * albedo / PI + shine;',
       '}'
     ].join('\n');
 
@@ -1848,25 +1856,27 @@
       'in vec3 vNormal;',
       'in vec3 vViewPosition;',
       'out vec4 outColor;',
-      '// Bump mapping from the screen\'s derivatives, after Morten Mikkelsen, "Bump Mapping Unparametrized Surfaces on the GPU" (2010):',
-      '// the height map is read one pixel over each way, and the normal is leant against the way it rises.',
-      'float relief(vec2 at) { return bumpScale * texture(bumpMap, at).x; }',
-      'vec3 bumped(vec3 pos, vec3 n, float facing) {',
-      '  float here = relief(vUv);',
-      '  float riseX = relief(vUv + dFdx(vUv)) - here;',
-      '  float riseY = relief(vUv + dFdy(vUv)) - here;',
-      '  vec3 stepX = dFdx(pos);',
-      '  vec3 stepY = dFdy(pos);',
-      '  vec3 acrossY = cross(stepY, n);',
-      '  vec3 acrossX = cross(n, stepX);',
-      '  float area = dot(stepX, acrossY) * facing;',
-      '  vec3 lean = sign(area) * (riseX * acrossY + riseY * acrossX);',
-      '  return normalize(abs(area) * n - lean);',
+      '// Bump mapping from the screen\'s derivatives, after Morten Mikkelsen, "Bump Mapping Unparametrized',
+      '// Surfaces on the GPU" (2010). The surface is taken as parametrized by the screen\'s x and y: px and py',
+      '// are how the position changes one pixel along each, so a height h(x, y) on it has the surface',
+      '// gradient (dh/dx (py x n) + dh/dy (n x px)) / (px . (py x n)), and the bumped normal leans against it.',
+      'float heightAt(vec2 at) { return bumpScale * texture(bumpMap, at).x; }',
+      'vec3 bumpedNormal(vec3 n, vec3 pos) {',
+      '  // dh/dx and dh/dy by forward differences, one pixel over along each screen axis in the map',
+      '  float h = heightAt(vUv);',
+      '  float dhdx = heightAt(vUv + dFdx(vUv)) - h;',
+      '  float dhdy = heightAt(vUv + dFdy(vUv)) - h;',
+      '  vec3 px = dFdx(pos);',
+      '  vec3 py = dFdy(pos);',
+      '  vec3 ex = cross(py, n);',
+      '  vec3 ey = cross(n, px);',
+      '  vec3 gradient = (dhdx * ex + dhdy * ey) / dot(px, ex);',
+      '  return normalize(n - gradient);',
       '}',
       'void main() {',
       '  vec4 surface = texture(map, vUv);',
       '  float glossy = texture(specularMap, vUv).r;',
-      '  vec3 n = bumped(-vViewPosition, normalize(vNormal), gl_FrontFacing ? 1.0 : -1.0);',
+      '  vec3 n = bumpedNormal(normalize(vNormal), -vViewPosition);',
       '  vec3 colour = lit(surface.rgb, n, -vViewPosition, shininess, specularColor, glossy);',
       '  outColor = vec4(toScreen(colour), 1.0);',
       '}'
@@ -2049,20 +2059,19 @@
       ].join('\n');
     }
 
-    /* The dots and the target: a square that always faces the camera, `size` across in the world */
+    /* The dots and the target: a square that always faces the camera, `size` across in the world. Its four
+       corners are put out from its middle, which is given in the view, sideways and up in the view, so the
+       square lies across the way the camera looks. */
     var SPRITE_VERTEX = HEAD + [
       'layout(location = 0) in vec3 position;',
       'layout(location = 2) in vec2 uv;',
-      'uniform mat4 modelMatrix;',
-      'uniform mat4 modelViewMatrix;',
       'uniform mat4 projectionMatrix;',
+      'uniform vec3 centre;',
+      'uniform float size;',
       'out vec2 vUv;',
       'void main() {',
       '  vUv = uv;',
-      '  vec4 centre = modelViewMatrix * vec4(0.0, 0.0, 0.0, 1.0);',
-      '  vec2 size = vec2(length(modelMatrix[0].xyz), length(modelMatrix[1].xyz));',
-      '  centre.xy += position.xy * size;',
-      '  gl_Position = projectionMatrix * centre;',
+      '  gl_Position = projectionMatrix * vec4(centre + vec3(position.xy * size, 0.0), 1.0);',
       '}'
     ].join('\n');
     var SPRITE_FRAGMENT = HEAD + [
@@ -2087,8 +2096,7 @@
       var base = options.textures || 'textures/';
       var gl;
       try {
-        // An opaque canvas. (The context r149 made had an alpha channel whatever its `alpha` option said, cleared to
-        // opaque and kept at 1 by the blending below; the pictures are the same either way.)
+        // An opaque canvas, with the depth and stencil buffers
         gl = canvas.getContext('webgl2', { antialias: true, alpha: false, depth: true, stencil: true, premultipliedAlpha: true, preserveDrawingBuffer: hold !== null });
       } catch (e) {
         return null;
@@ -2418,7 +2426,10 @@
           shape: quad, transparent: true, blend: 'normal', depthWrite: false, side: 'front', order: order || 0,
           show: function (frame) {
             gl.useProgram(spriteProgram.handle);
-            matrices(spriteProgram, this.node, frame, false);
+            var world = this.node.world, middle = mPoint(frame.view.inverse, [world[12], world[13], world[14]]);
+            gl.uniformMatrix4fv(spriteProgram.at('projectionMatrix'), false, frame.view.projection);
+            gl.uniform3f(spriteProgram.at('centre'), middle[0], middle[1], middle[2]);
+            gl.uniform1f(spriteProgram.at('size'), this.node.s[0]);
             gl.uniform3fv(spriteProgram.at('diffuse'), tint);
             gl.uniform1f(spriteProgram.at('opacity'), 1);
             tex.bind(0); gl.uniform1i(spriteProgram.at('map'), 0);
@@ -2510,8 +2521,6 @@
         gl.uniform3fv(prog.at('boltPosition'), mPoint(frame.view.inverse, at));
         var power = storm.bolt * pi;
         gl.uniform3f(prog.at('boltColor'), power, power, power);
-        gl.uniform1f(prog.at('boltReach'), 0.4);
-        gl.uniform1f(prog.at('boltFade'), 2);
       }
       function blending(kind) {
         if (kind === 'none') { gl.disable(gl.BLEND); return; }

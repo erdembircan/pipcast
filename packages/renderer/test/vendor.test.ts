@@ -52,9 +52,10 @@ describe('the page and the files beside it', () => {
     expect(page.length).toBeLessThan(150_000)
   })
 
-  it('ships no three.js: its file and license are not in the page, and nothing in the page reads a THREE', () => {
+  it('ships no three.js: neither its code nor a license of it, and nothing in the page reads a THREE', () => {
     expect(existsSync(new URL('../../../plugin/station/web/vendor/three.js', import.meta.url))).toBe(false)
     expect(existsSync(new URL('../../../plugin/station/web/vendor/LICENSE-three.txt', import.meta.url))).toBe(false)
+    expect(existsSync(new URL('../../../plugin/station/web/LICENSE-three.txt', import.meta.url))).toBe(false)
     expect(web('station.js').toString('utf8')).not.toMatch(/\bTHREE\b/)
   })
 
