@@ -426,9 +426,9 @@ describe('KLWD WEATHER', () => {
       expect(root?.querySelector('.pn-ticker')).not.toBeNull()
     })
 
-    it('reads WARNING on the crawl’s tab, with the storm warning leading it', () => {
+    it('leaves the crawl’s tab reading LATEST, with the storm warning leading it', () => {
       broadcast(scene('stormtracker'))
-      expect(container.querySelector('.pn-ticker-label')?.textContent).toBe('WARNING')
+      expect(container.querySelector('.pn-ticker-label')?.textContent).toBe('LATEST')
       expect(container.querySelector('.pn-ticker-track .pn-ticker-lead')?.textContent).toBe('STORM WARNING ')
     })
 
@@ -444,14 +444,14 @@ describe('KLWD WEATHER', () => {
     it('hands WEATHER ALERT’s outro back to the board underneath, with its warning', () => {
       broadcast(scene('alert-outro-1'))
       const root = container.querySelector('.pn-mode-outro')
-      expect(root?.querySelector('.pn-board-under .pn-ticker-label')?.textContent).toBe('WARNING')
+      expect(root?.querySelector('.pn-board-under .pn-ticker-label')?.textContent).toBe('LATEST')
       expect(root?.querySelector('.pn-wx-alert-out')).not.toBeNull()
       expect(root?.querySelector('.pn-ticker')?.parentElement?.classList.contains('pn-board-under')).toBe(true)
     })
 
-    it('draws the board while the warning holds, its tab reading WARNING', () => {
+    it('draws the board while the warning holds, its tab reading LATEST', () => {
       broadcast(scene('board-warning'))
-      expect(container.querySelector('.pn-ticker-label')?.textContent).toBe('WARNING')
+      expect(container.querySelector('.pn-ticker-label')?.textContent).toBe('LATEST')
       expect(text()).toContain('STORM WARNING')
     })
   })

@@ -288,8 +288,6 @@
     storm: "STORM WARNING"
   };
   var WEATHER = {
-    // The crawl's tab while a storm warning holds
-    warningLabel: "WARNING",
     // KLWD WEATHER's pages
     now: "CURRENT CONDITIONS",
     days: "EXTENDED FORECAST",
@@ -1340,9 +1338,6 @@
       state: session.state
     }));
     const scene = { mode: "board", clock: clock(now), sessions, ticker: boardTicker(now, snapshot, state) };
-    if (state.forecast !== null && state.forecast.outlook === "storm") {
-      scene.tickerLabel = WEATHER.warningLabel;
-    }
     const limits = limitMeters(snapshot.sessions, now);
     return limits.length === 0 ? scene : { ...scene, limits };
   }
@@ -1735,8 +1730,7 @@
       const atDesk = step.role === "desk" || step.role === "review" || step.role === "weather";
       const ticker = atDesk && snapshot !== null && extra !== void 0 ? boardTicker(now, snapshot, boardState(), extra(snapshot)) : board.ticker ?? [];
       const made = step.scene({ now, ticker, board });
-      const scene = board.tickerLabel !== void 0 && made.tickerLabel === void 0 ? { ...made, tickerLabel: board.tickerLabel } : made;
-      return { scene, key: `${current.segment.id}:${current.index}`, sounds, reported, wantsWindow, weather };
+      return { scene: made, key: `${current.segment.id}:${current.index}`, sounds, reported, wantsWindow, weather };
     }
     return { tick };
   }

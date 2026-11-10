@@ -273,7 +273,7 @@ describe('a warning cue', () => {
     const tracker = h.until(open.now + ALERT_MS + 250)
     expect(tracker.program.key).toBe(`warning:${open.now}:1`)
     expect(tracker.program.scene.mode).toBe('stormtracker')
-    expect(tracker.program.scene.tickerLabel).toBe('WARNING')
+    expect(tracker.program.scene.tickerLabel).toBeUndefined()
     expect(tracker.program.scene.weather).toMatchObject({ outlook: 'storm', used: '72%', sky: 'storm' })
     expect(tracker.program.scene.weather?.track?.marks.length).toBeGreaterThan(0)
     expect(tracker.program.sounds).toEqual([{ type: 'bed', bed: 'beat-minor' }])

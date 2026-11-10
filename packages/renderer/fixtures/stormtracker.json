@@ -2,7 +2,6 @@
   "scene": {
     "mode": "stormtracker",
     "clock": "15:12",
-    "tickerLabel": "WARNING",
     "weather": {
       "outlook": "storm",
       "used": "72%",

@@ -260,8 +260,8 @@ describe('the forecast in the ticker', () => {
     }
   })
 
-  it('reads WARNING on the board’s tab only while a storm holds', () => {
-    expect(boardScene(T0, snap(...sessions), { ...empty, forecast: storm }).tickerLabel).toBe('WARNING')
+  it('leaves the crawl’s tab as it is while a storm holds, as at any other time', () => {
+    expect(boardScene(T0, snap(...sessions), { ...empty, forecast: storm }).tickerLabel).toBeUndefined()
     expect(boardScene(T0, snap(...sessions), { ...empty, forecast: forecast('clouds') }).tickerLabel).toBeUndefined()
     expect(boardScene(T0, snap(...sessions), empty).tickerLabel).toBeUndefined()
   })

@@ -235,16 +235,16 @@ describe('the crawl while the week is forecast', () => {
     expect(typeof forecast !== 'string' && forecast?.text).toMatch(/^Clear skies: the week ends near \d+%, resets Mon 18:00$/)
   })
 
-  it('leads with the STORM WARNING line and reads WARNING on its tab while a storm holds', () => {
+  it('leads with the STORM WARNING line, and leaves the tab alone, while a storm holds', () => {
     // Warned a minute ago, so the board is what airs
     const scene = board(1.6, T, { warnedAt: T - MIN })
     expect(texts(scene)[0]).toMatch(/^STORM WARNING in effect until Mon 18:00: at this pace the week runs out (Mon|Sun) around \d\d:00$/)
-    expect(scene.tickerLabel).toBe('WARNING')
+    expect(scene.tickerLabel).toBeUndefined()
     expect(texts(scene).some((text) => text.startsWith('FORECAST'))).toBe(false)
     expect((scene.ticker ?? []).length).toBeLessThanOrEqual(6)
   })
 
-  it('reads WARNING at the desk too', () => {
+  it('leaves the tab alone at the desk too', () => {
     const { h } = onAStorm(T, { warnedAt: T - MIN })
     h.until(T + 1_000)
     h.world.sessions = [
@@ -252,7 +252,7 @@ describe('the crawl while the week is forecast', () => {
     ]
     const desk = h.until(T + 2_000 + 3_000)
     expect(desk.program.scene.mode).toBe('desk')
-    expect(desk.program.scene.tickerLabel).toBe('WARNING')
+    expect(desk.program.scene.tickerLabel).toBeUndefined()
   })
 
   it('says when the outlook starts in the week’s first day', () => {

@@ -14,7 +14,6 @@ import {
   stillWaitingLine,
   storyLine,
   warningLine,
-  WEATHER,
   wholeMinutes,
   waitingForReviewLine,
 } from '@pipcast/contract'
@@ -257,10 +256,6 @@ export function boardScene(now: number, snapshot: Snapshot | null, state: BoardS
     state: session.state,
   }))
   const scene: Scene = { mode: 'board', clock: clock(now), sessions, ticker: boardTicker(now, snapshot, state) }
-  // While a storm warning holds, the crawl's tab reads WARNING
-  if (state.forecast !== null && state.forecast.outlook === 'storm') {
-    scene.tickerLabel = WEATHER.warningLabel
-  }
   // With no reading, no meters: the board as it always was
   const limits = limitMeters(snapshot.sessions, now)
   return limits.length === 0 ? scene : { ...scene, limits }

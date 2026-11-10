@@ -359,8 +359,6 @@ export const OUTLOOK_WORDS: Record<OutlookWord, string> = {
 }
 
 export const WEATHER = {
-  // The crawl's tab while a storm warning holds
-  warningLabel: 'WARNING',
   // KLWD WEATHER's pages
   now: 'CURRENT CONDITIONS',
   days: 'EXTENDED FORECAST',

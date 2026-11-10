@@ -348,9 +348,7 @@ export function createDirector(options: DirectorOptions = {}): { tick(input: Tic
         ? boardTicker(now, snapshot, boardState(), extra(snapshot))
         : (board.ticker ?? [])
     const made = step.scene({ now, ticker, board })
-    // While a storm warning holds, every page's crawl reads WARNING, as the board's does
-    const scene = board.tickerLabel !== undefined && made.tickerLabel === undefined ? { ...made, tickerLabel: board.tickerLabel } : made
-    return { scene, key: `${current.segment.id}:${current.index}`, sounds, reported, wantsWindow, weather }
+    return { scene: made, key: `${current.segment.id}:${current.index}`, sounds, reported, wantsWindow, weather }
   }
 
   return { tick }

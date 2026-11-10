@@ -161,7 +161,7 @@ describe('the weekly forecast', () => {
     expect(WEATHER.now).toBe('CURRENT CONDITIONS')
     expect(WEATHER.days).toBe('EXTENDED FORECAST')
     expect(WEATHER.tracker).toBe('STORMTRACKER')
-    expect(WEATHER.warningLabel).toBe('WARNING')
+    expect(WEATHER).not.toHaveProperty('warningLabel')
     expect(WEATHER.alert).toEqual(['WEATHER', 'ALERT'])
   })
 })

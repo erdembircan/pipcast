@@ -2,7 +2,6 @@
   "scene": {
     "mode": "board",
     "clock": "15:31",
-    "tickerLabel": "WARNING",
     "sessions": [
       {
         "id": "forecast",

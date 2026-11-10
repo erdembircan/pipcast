@@ -3067,7 +3067,7 @@
       parts.push(h('div', { key: 'under', className: 'pn-board-under', style: { position: 'absolute', left: 0, top: 0, width: STAGE_W + 'px', height: STAGE_H + 'px', zIndex: 0 } },
         h(Backdrop, { animate: animate }),
         h(SessionBoard, { sessions: back.sessions, limits: back.limits }),
-        h(Ticker, { items: back.ticker, time: back.clock, label: back.tickerLabel, animate: animate })));
+        h(Ticker, { items: back.ticker, time: back.clock, animate: animate })));
       if (scene.open === 'hour') {
         parts.push(h(Ident, { key: 'id-out', outro: true, hour: scene.hour, progress: scene.progress, animate: animate }));
       } else if (scene.open === 'alert') {
@@ -3646,13 +3646,12 @@
   SAMPLES['weather-now-storm'] = { mode: 'weather-now', clock: '16:00', weather: WX_STORM, ticker: [WX_HOUR, WX_STORM_LINE] };
   SAMPLES['weather-days'] = { mode: 'weather-days', clock: '16:00', weather: WX_CLOUDS, ticker: [WX_HOUR, WX_CLOUDS_LINE] };
   SAMPLES['weather-days-storm'] = { mode: 'weather-days', clock: '16:00', weather: WX_STORM, ticker: [WX_HOUR, WX_STORM_LINE] };
-  /* STORMTRACKER and the board while the warning holds: the crawl's tab reads WARNING and the warning leads it */
-  SAMPLES.stormtracker = { mode: 'stormtracker', clock: '15:12', tickerLabel: 'WARNING', weather: WX_STORM, ticker: [WX_WARNING_LINE, WX_ACTIVITY] };
+  /* STORMTRACKER and the board while the warning holds: the warning leads the crawl */
+  SAMPLES.stormtracker = { mode: 'stormtracker', clock: '15:12', weather: WX_STORM, ticker: [WX_WARNING_LINE, WX_ACTIVITY] };
   SAMPLES.alert = { mode: 'alert', clock: '15:12', progress: 1 };
   SAMPLES['board-warning'] = {
     mode: 'board',
     clock: '15:31',
-    tickerLabel: 'WARNING',
     sessions: WX_SESSIONS,
     limits: [{ kind: 'session', percent: 58 }, { kind: 'week', percent: 72 }],
     ticker: [WX_WARNING_LINE, WX_ACTIVITY]
