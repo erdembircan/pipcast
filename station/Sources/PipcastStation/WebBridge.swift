@@ -15,6 +15,8 @@ enum PageMessage {
     case window(wanted: Bool)
     /// The weather desk's memory, as the page sends it: a JSON object `WeatherMemory(json:)` accepts.
     case weather([String: Any])
+    /// The page has the weather memory: the station leaves it out of its snapshots until the page loads again.
+    case weatherTaken
     case rendered
     case log(level: String, text: String)
 
@@ -42,6 +44,8 @@ enum PageMessage {
         case "weather":
             guard let memory = object["memory"] as? [String: Any], WeatherMemory(json: memory) != nil else { return nil }
             self = .weather(memory)
+        case "weather-taken":
+            self = .weatherTaken
         case "rendered":
             self = .rendered
         case "log":

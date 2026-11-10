@@ -58,7 +58,7 @@
 
   // packages/contract/src/constants.ts
   var STORY_FRESH_MS = 12e4;
-  var WEATHER_MAX_POINTS = 700;
+  var WEATHER_MAX_POINTS = 200;
 
   // packages/contract/src/format.ts
   var MINUS = "\u2212";
@@ -410,7 +410,6 @@
   var AFTER_REPORT_MS = 10 * 6e4;
   var LAST_REPORT_KEEP_MS = 24 * 60 * 6e4;
   var HOUR_MS = 60 * 6e4;
-  var FORECAST_EVERY_MS = 15 * 6e4;
   var WARNING_EVERY_MS = 60 * 6e4;
 
   // packages/director/src/story.ts
@@ -608,7 +607,6 @@
   // packages/director/src/forecast.ts
   var WEEK_MS = 7 * 24 * HOUR_MS;
   var DAY_MS = 24 * HOUR_MS;
-  var QUARTER_MS = 15 * 6e4;
   var SHORT_GAP_MS = 2 * HOUR_MS;
   var HALF_LIFE_MS = 72 * HOUR_MS;
   var PROFILE_PRIOR_HOURS = 1;
@@ -616,7 +614,7 @@
   var PRIOR_WEIGHT = 2;
   var MIN_ELAPSED_MS = 24 * HOUR_MS;
   var MIN_SHORT_HOURS = 6;
-  var MAX_POINTS = 700;
+  var MAX_POINTS = 200;
   var RESET_TOLERANCE_MS = 10 * 6e4;
   var STORM_CHANCE = 0.5;
   var CLOUDS_END = 70;
@@ -641,12 +639,24 @@
         return history;
       }
       percent = Math.max(percent, last[1]);
-      if (Math.floor(reading.at / QUARTER_MS) === Math.floor(last[0] / QUARTER_MS)) {
+      if (hourStart(reading.at) === hourStart(last[0])) {
         points = points.slice(0, -1);
       }
     }
     points = [...points, [reading.at, percent]];
     return { resetsAt: history.resetsAt, points: points.slice(-MAX_POINTS) };
+  }
+  function hourlyPoints(points) {
+    const out = [];
+    for (const [at2, percent] of points) {
+      const last = out[out.length - 1];
+      if (last !== void 0 && hourStart(last[0]) === hourStart(at2)) {
+        out[out.length - 1] = [at2, percent];
+      } else {
+        out.push([at2, percent]);
+      }
+    }
+    return out;
   }
   function lnGamma(z) {
     const c = [
@@ -932,88 +942,108 @@
   // packages/director/src/weather.ts
   function createWeatherDesk(options = {}) {
     const forecastFn = options.forecastWeek ?? forecastWeek;
+    const readingFn = options.weekReading ?? newestWeekReading;
     let loaded = false;
     let history = null;
     let warnedAt = null;
-    let dirty = false;
+    let posted = { hour: null, resetsAt: null, last: null, warnedAt: null };
+    let scanned = null;
     let reading = null;
     let cached = null;
-    let computedAt = 0;
-    let computedReadingAt = null;
+    function stand() {
+      const last = history === null ? void 0 : history.points[history.points.length - 1];
+      return {
+        hour: last === void 0 ? null : hourStart(last[0]),
+        resetsAt: history === null ? null : history.resetsAt,
+        last: last === void 0 ? null : last[1],
+        warnedAt
+      };
+    }
+    function load(memory) {
+      loaded = true;
+      if (memory !== null) {
+        history = memory.resetsAt === null ? null : { resetsAt: memory.resetsAt, points: hourlyPoints(memory.points).slice(-MAX_POINTS) };
+        warnedAt = memory.warnedAt;
+      }
+      posted = stand();
+    }
+    if (options.memory !== void 0) {
+      load(options.memory);
+    }
     function compute(now) {
-      if (reading === null || history === null) {
+      if (reading === null || history === null || now >= history.resetsAt) {
         cached = null;
-        computedReadingAt = null;
         return;
       }
       cached = forecastFn(history, reading.percent, now);
-      computedAt = now;
-      computedReadingAt = reading.at;
     }
     function stormy() {
       return cached !== null && cached.outlook === "storm";
     }
-    function keep(next) {
-      if (next === history) {
+    function clock2(now) {
+      if (cached === null) {
         return;
       }
-      const before = history;
-      history = next;
-      if (next === null || before === null) {
-        dirty = true;
-        return;
-      }
-      const last = next.points[next.points.length - 1];
-      const was = before.points[before.points.length - 1];
-      if (next.points.length !== before.points.length || next.resetsAt !== before.resetsAt || last !== void 0 && was !== void 0 && last[1] < was[1]) {
-        dirty = true;
+      if (now >= cached.resetsAt) {
+        cached = null;
+      } else if (cached.outlook === "early" && cached.startsAt !== null && now >= cached.startsAt) {
+        compute(now);
       }
     }
-    function tick(snapshot, now) {
-      if (!loaded) {
-        loaded = true;
-        const memory = parseWeather(snapshot.weather);
-        if (memory !== null) {
-          history = memory.resetsAt === null ? null : { resetsAt: memory.resetsAt, points: memory.points };
-          warnedAt = memory.warnedAt;
-        }
-      }
-      reading = newestWeekReading(snapshot.sessions, now);
-      if (reading === null) {
+    function scan(found, now) {
+      if (found === null) {
+        reading = null;
         cached = null;
-        computedReadingAt = null;
         return;
       }
-      keep(recordReading(history, reading));
+      const first = reading === null;
+      const moved = reading !== null && Math.abs(found.resetsAt - reading.resetsAt) > RESET_TOLERANCE_MS;
+      const fell = reading !== null && found.percent < reading.percent - 0.5;
+      if (reading !== null && !moved && found.at <= reading.at) {
+        return;
+      }
+      reading = found;
+      history = recordReading(history, found);
       if (history === null) {
         cached = null;
         return;
       }
-      const held = cached;
-      if (computedReadingAt === null) {
+      if (first || moved || fell || cached !== null && found.percent - cached.used >= 1) {
         compute(now);
-      } else if (held !== null && Math.abs(held.resetsAt - reading.resetsAt) > RESET_TOLERANCE_MS) {
-        compute(now);
-      } else if (reading.at > computedReadingAt && (held === null || now - computedAt >= FORECAST_EVERY_MS || reading.percent - held.used >= 1)) {
-        compute(now);
-      } else if (held !== null && held.outlook === "early" && held.startsAt !== null && now >= held.startsAt) {
-        compute(now);
-      } else if (held !== null && now >= held.resetsAt) {
-        cached = null;
       }
     }
+    function behind() {
+      const now = stand();
+      if (now.hour !== posted.hour || now.resetsAt !== posted.resetsAt || now.warnedAt !== posted.warnedAt) {
+        return true;
+      }
+      return now.last !== null && posted.last !== null && (now.last < posted.last || now.last - posted.last >= 1);
+    }
     return {
-      tick,
+      tick(snapshot, now) {
+        if (!loaded) {
+          if (snapshot.weather === void 0) {
+            return;
+          }
+          load(parseWeather(snapshot.weather));
+        }
+        clock2(now);
+        if (snapshot.records !== void 0 && snapshot.records === scanned) {
+          return;
+        }
+        scanned = snapshot.records;
+        scan(readingFn(snapshot.sessions, now), now);
+      },
       forecast: () => cached,
       refresh(now) {
         compute(now);
         return cached;
       },
       due(now, busy) {
-        if (busy || warnedAt !== null && now - warnedAt < WARNING_EVERY_MS || !stormy()) {
+        if (busy || warnedAt !== null && now - warnedAt < WARNING_EVERY_MS || cached === null || cached.resetsAt <= now || !stormy()) {
           return false;
         }
-        if (warnedAt !== null && cached !== null && cached.computedAt < warnedAt + WARNING_EVERY_MS) {
+        if (warnedAt !== null && cached.computedAt < warnedAt + WARNING_EVERY_MS) {
           compute(now);
           return stormy();
         }
@@ -1021,13 +1051,12 @@
       },
       markDue(now) {
         warnedAt = now;
-        dirty = true;
       },
       memory() {
-        if (!dirty) {
+        if (!loaded || !behind()) {
           return null;
         }
-        dirty = false;
+        posted = stand();
         return { v: 1, resetsAt: history?.resetsAt ?? null, points: history?.points ?? [], warnedAt };
       }
     };
@@ -1440,7 +1469,11 @@
   // packages/director/src/director.ts
   function createDirector(options = {}) {
     const reducedMotion = options.reducedMotion === true;
-    const desk = createWeatherDesk(options.forecastWeek === void 0 ? {} : { forecastWeek: options.forecastWeek });
+    const desk = createWeatherDesk({
+      ...options.forecastWeek === void 0 ? {} : { forecastWeek: options.forecastWeek },
+      ...options.weekReading === void 0 ? {} : { weekReading: options.weekReading },
+      ...options.weather === void 0 ? {} : { memory: options.weather }
+    });
     let initialized = false;
     const seen = /* @__PURE__ */ new Set();
     const queue = [];
@@ -5443,7 +5476,11 @@
     }
   }
   function App({ reducedMotion = prefersReducedMotion(), createSource = createDirector }) {
-    const director = (0, import_react.useMemo)(() => createSource({ reducedMotion }), [createSource, reducedMotion]);
+    const memory = (0, import_react.useRef)({ taken: false, weather: null });
+    const director = (0, import_react.useMemo)(
+      () => createSource({ reducedMotion, ...memory.current.taken ? { weather: memory.current.weather } : {} }),
+      [createSource, reducedMotion]
+    );
     const snapshot = (0, import_react.useRef)(null);
     const [program, setProgram] = (0, import_react.useState)(null);
     const [width, setWidth] = (0, import_react.useState)(window.innerWidth);
@@ -5467,6 +5504,7 @@
           post({ type: "reported", at: next.reported });
         }
         if (next.weather !== null) {
+          memory.current = { taken: true, weather: next.weather };
           post({ type: "weather", memory: next.weather });
         }
         if (snapshot.current !== null) {
@@ -5475,6 +5513,12 @@
       };
       const unsubscribe = subscribe((message) => {
         if (message.type === "snapshot") {
+          if (message.weather !== void 0) {
+            if (!memory.current.taken) {
+              memory.current = { taken: true, weather: parseWeather(message.weather) };
+            }
+            post({ type: "weather-taken" });
+          }
           snapshot.current = message;
           tick();
         }
@@ -5593,6 +5637,7 @@
     let cycleStart = started;
     let sessions = newSessions(started);
     let pending = plan();
+    let records = 0;
     function step() {
       const now = Date.now();
       if (now - cycleStart >= CYCLE_MS) {
@@ -5608,7 +5653,8 @@
       for (const session of sessions) {
         session.checkedInAt = now;
       }
-      receive({ type: "snapshot", now, visible: true, sessions, lastReportAt: null });
+      records += 1;
+      receive({ type: "snapshot", now, visible: true, sessions, lastReportAt: null, records });
     }
     step();
     const timer = window.setInterval(step, 1e3);

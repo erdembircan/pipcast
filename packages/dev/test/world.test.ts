@@ -189,14 +189,15 @@ describe('syntheticWeek', () => {
     expect((syntheticWeek('clear', 99, now).memory.resetsAt as number) - now).toBe(168 * HOUR - 151 * HOUR)
   })
 
-  it('has a point every quarter hour from the week’s start, the last at the share used', () => {
+  it('has a point every hour from the week’s start, the last at the share used', () => {
     const { memory, reading } = syntheticWeek('clouds', 60, now)
     const start = (memory.resetsAt as number) - 168 * HOUR
     const times = memory.points.map(([at]) => at)
-    expect(times[0]).toBe(start + 15 * MINUTE)
+    expect(times[0]).toBe(start + HOUR)
     expect(times[times.length - 1]).toBeLessThanOrEqual(now)
-    expect(now - (times[times.length - 1] as number)).toBeLessThan(15 * MINUTE)
-    times.slice(1).forEach((at, index) => expect(at - (times[index] as number)).toBe(15 * MINUTE))
+    expect(now - (times[times.length - 1] as number)).toBeLessThan(HOUR)
+    times.slice(1).forEach((at, index) => expect(at - (times[index] as number)).toBe(HOUR))
+    expect(memory.points.length).toBeLessThanOrEqual(168)
     expect(memory.points[memory.points.length - 1]?.[1]).toBe(60)
     expect(reading.percentUsed).toBe(60)
     expect(memory.points.every(([, percent]) => percent * 10 === Math.round(percent * 10))).toBe(true)
@@ -210,11 +211,15 @@ describe('syntheticWeek', () => {
     for (let i = 1; i < memory.points.length; i += 1) {
       const [at, percent] = memory.points[i] as [number, number]
       const before = (memory.points[i - 1] as [number, number])[1]
-      const hour = new Date(at - 15 * MINUTE).getHours()
-      if (hour >= 9 && hour < 21) {
-        expect(percent).toBeGreaterThanOrEqual(before)
+      // The quarter hours the point is the end of, by the hour each began in
+      const active = [1, 2, 3, 4].filter((quarter) => {
+        const hour = new Date(at - quarter * 15 * MINUTE).getHours()
+        return hour >= 9 && hour < 21
+      }).length
+      if (active === 4) {
+        expect(percent).toBeGreaterThan(before)
         rose += 1
-      } else {
+      } else if (active === 0) {
         expect(percent).toBe(before)
         stood += 1
       }

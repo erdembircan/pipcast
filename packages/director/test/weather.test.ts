@@ -8,7 +8,7 @@ import type { Forecast } from '../src/forecast.ts'
 import { newestWeekReading } from '../src/limits.ts'
 import { skyFor, weatherScene } from '../src/weather.ts'
 import type { Outlooked } from '../src/weather.ts'
-import { harness, local, RESET, session, steadyWeek, story } from './helpers.ts'
+import { harness, local, posts, RESET, session, steadyWeek, story } from './helpers.ts'
 import type { Sample } from './helpers.ts'
 
 const MIN = 60_000
@@ -55,72 +55,6 @@ function modes(history: Sample[], prefix: string): string[] {
   }
   return [...seen.values()]
 }
-
-// What the station was told to keep, with the tick it came on
-function posts(history: Sample[]) {
-  return history.flatMap((sample) => (sample.program.weather === null ? [] : [{ now: sample.now, memory: sample.program.weather }]))
-}
-
-describe('the forecast runs only when it can have changed', () => {
-  // Readings every 30 s, the share rising 0.4 a quarter hour, from 13:00:05
-  function readings(visible: boolean) {
-    const start = local(13, 13, 0, 5)
-    const calls: number[] = []
-    const h = harness(start, [], {
-      forecastWeek: (history, used, now) => {
-        calls.push(now)
-        return forecastWeek(history, used, now)
-      },
-    })
-    h.world.visible = visible
-    for (let reading = 0; reading < 120; reading += 1) {
-      const at = start + reading * 30_000
-      const limit: UsageLimit = { kind: 'week', percentUsed: 30 + (reading / 30) * 0.4, resetsAt: RESET, at }
-      h.world.sessions = [session('a', { limits: [limit] })]
-      h.until(at)
-      if (reading < 119) {
-        h.until(at + 29_750)
-      }
-    }
-    return { h, calls }
-  }
-
-  it('runs a first time and then once a quarter hour for an hour of readings every 30 s', () => {
-    const { calls } = readings(false)
-    expect(calls.length).toBeLessThanOrEqual(5)
-    expect(calls.length).toBeGreaterThanOrEqual(4)
-    calls.slice(1).forEach((at, i) => expect(at - (calls[i] as number)).toBeGreaterThanOrEqual(15 * MIN))
-  })
-
-  it('tells the station of a new quarter hour’s point, and of nothing else', () => {
-    const { h } = readings(false)
-    // 13:00, 13:15, 13:30, 13:45, 14:00 hold a point each
-    const told = posts(h.history)
-    expect(told.length).toBeLessThanOrEqual(5)
-    expect(told.length).toBeGreaterThanOrEqual(4)
-    expect(told[told.length - 1]?.memory.points.length).toBe(told.length)
-    expect(told.every((post) => post.memory.warnedAt === null)).toBe(true)
-  })
-
-  it('works the forecast out again for the report on the hour', () => {
-    const start = local(13, 13, 0, 5)
-    const { memory, limit } = steadyWeek(0.9, start)
-    const calls: number[] = []
-    const h = harness(start, [session('a', { limits: [limit] })], {
-      forecastWeek: (history, used, now) => {
-        calls.push(now)
-        return forecastWeek(history, used, now)
-      },
-    })
-    h.world.weather = memory
-    h.until(local(13, 13, 59, 50))
-    const before = calls.length
-    expect(before).toBe(1)
-    h.until(local(13, 14, 0, 10))
-    expect(calls.length).toBe(before + 1)
-    expect(calls[calls.length - 1]).toBe(local(13, 13, 59, 55))
-  })
-})
 
 describe('STORM WARNING', () => {
   it('airs at once on a storm: WEATHER ALERT, STORMTRACKER, the outro, with their sounds', () => {

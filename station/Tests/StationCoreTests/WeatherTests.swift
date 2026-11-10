@@ -42,9 +42,30 @@ import Testing
     @Test func keepsTheNewestPointsWhenThereAreTooMany() {
         let points = (0..<(Constants.weatherMaxPoints + 25)).map { "[\(1000 + $0),50]" }.joined(separator: ",")
         let read = memory(#"{"v":1,"points":["# + points + "]}")
-        #expect(read?.points.count == 700)
+        #expect(read?.points.count == 200)
         #expect(read?.points.first == [1025, 50])
-        #expect(read?.points.last == [Double(1000 + 700 + 24), 50])
+        #expect(read?.points.last == [Double(1000 + 200 + 24), 50])
+    }
+
+    @Test func sendsTheMemoryUntilThePageHasItAndThenLeavesItOut() {
+        var handoff = WeatherHandoff()
+        let memory = WeatherMemory(resetsAt: 1_800_000_000_000, points: [[1_799_000_000_000, 12.5]], warnedAt: nil)
+        #expect((handoff.snapshotEntries(memory)["weather"] as? [String: Any])?["resetsAt"] as? Double == 1_800_000_000_000)
+        // Every snapshot until the page says so, so one that failed to send is covered by the next
+        #expect(handoff.snapshotEntries(memory)["weather"] != nil)
+        handoff.pageTook()
+        #expect(handoff.snapshotEntries(memory).isEmpty)
+        #expect(handoff.snapshotEntries(nil).isEmpty)
+        // A page that loads again has none
+        handoff.pageLoaded()
+        #expect(handoff.snapshotEntries(memory)["weather"] != nil)
+    }
+
+    @Test func sendsNullWhenThereIsNoMemoryYet() {
+        let handoff = WeatherHandoff()
+        let entries = handoff.snapshotEntries(nil)
+        #expect(entries.count == 1)
+        #expect(entries["weather"] is NSNull)
     }
 
     @Test func writesAnExplicitNullForATimeItHasNot() {

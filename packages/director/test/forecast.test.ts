@@ -1,7 +1,7 @@
-import { dayName } from '@pipcast/contract'
+import { dayName, hourStart } from '@pipcast/contract'
 import { describe, expect, it } from 'vitest'
 
-import { forecastWeek, gammaMedian, gammaP, MAX_POINTS, QUARTER_MS, recordReading, WEEK_MS } from '../src/forecast.ts'
+import { forecastWeek, gammaMedian, gammaP, hourlyPoints, MAX_POINTS, recordReading, WEEK_MS } from '../src/forecast.ts'
 import type { Forecast, WeekHistory } from '../src/forecast.ts'
 import { HOUR_MS } from '../src/timing.ts'
 
@@ -10,6 +10,8 @@ import { HOUR_MS } from '../src/timing.ts'
 const RESET = new Date(2026, 10, 16, 18, 0).getTime()
 const NOW = new Date(2026, 10, 13, 15, 12).getTime()
 const START = RESET - WEEK_MS
+// The fixtures' weeks are read at a point every quarter hour, finer than the one an hour the desk keeps
+const QUARTER_MS = 15 * 60_000
 
 // A week of steady use: `rate` percent an hour from 09:00 to 21:00 local, every
 // day, one point a quarter hour, rounded to one decimal
@@ -276,22 +278,38 @@ describe('recordReading', () => {
     expect(history).toEqual({ resetsAt: RESET, points: [[NOW, 12.3]] })
   })
 
-  it('appends a reading in a new quarter hour', () => {
+  it('appends a reading in a new hour', () => {
     const first = recordReading(null, reading(10, NOW)) as WeekHistory
-    const next = recordReading(first, reading(11, NOW + QUARTER_MS)) as WeekHistory
+    const next = recordReading(first, reading(11, NOW + HOUR_MS)) as WeekHistory
     expect(next).not.toBe(first)
     expect(next.points).toEqual([
       [NOW, 10],
-      [NOW + QUARTER_MS, 11],
+      [NOW + HOUR_MS, 11],
     ])
   })
 
-  it('replaces the last point for a reading in the same quarter hour', () => {
-    const slot = Math.floor(NOW / QUARTER_MS) * QUARTER_MS
+  it('replaces the last point for a reading in the same hour, so the point holds the hour’s last reading at its own time', () => {
+    const slot = hourStart(NOW)
     const first = recordReading(null, reading(10, slot + 1000)) as WeekHistory
-    const next = recordReading(first, reading(10.6, slot + 5000)) as WeekHistory
+    const next = recordReading(first, reading(10.6, slot + 20 * 60_000)) as WeekHistory
     expect(next).not.toBe(first)
-    expect(next.points).toEqual([[slot + 5000, 10.6]])
+    expect(next.points).toEqual([[slot + 20 * 60_000, 10.6]])
+    const last = recordReading(next, reading(11.2, slot + HOUR_MS - 1000)) as WeekHistory
+    expect(last.points).toEqual([[slot + HOUR_MS - 1000, 11.2]])
+    const following = recordReading(last, reading(11.3, slot + HOUR_MS)) as WeekHistory
+    expect(following.points).toEqual([
+      [slot + HOUR_MS - 1000, 11.2],
+      [slot + HOUR_MS, 11.3],
+    ])
+  })
+
+  it('keeps a week of readings at every minute to its 168 hours', () => {
+    let history: WeekHistory | null = null
+    for (let t = START + 60_000; t < START + WEEK_MS; t += 60_000) {
+      history = recordReading(history, reading(Math.min(100, (t - START) / WEEK_MS * 100), t))
+    }
+    expect(history?.points.length).toBeLessThanOrEqual(169)
+    expect(history?.points.length).toBeGreaterThanOrEqual(168)
   })
 
   it('returns the same history for an older reading, or one at the same moment', () => {
@@ -306,29 +324,29 @@ describe('recordReading', () => {
     const over = recordReading(first, reading(2, nextWeek - WEEK_MS + HOUR_MS, nextWeek)) as WeekHistory
     expect(over.resetsAt).toBe(nextWeek)
     expect(over.points).toEqual([[nextWeek - WEEK_MS + HOUR_MS, 2]])
-    const jitter = recordReading(first, reading(41, NOW + QUARTER_MS, RESET + 9 * 60_000)) as WeekHistory
+    const jitter = recordReading(first, reading(41, NOW + HOUR_MS, RESET + 9 * 60_000)) as WeekHistory
     expect(jitter.resetsAt).toBe(RESET)
     expect(jitter.points).toHaveLength(2)
   })
 
   it('starts over when the share falls by more than half a point, and keeps the old share for a smaller fall', () => {
     const first = recordReading(null, reading(40, NOW)) as WeekHistory
-    const restart = recordReading(first, reading(10, NOW + QUARTER_MS)) as WeekHistory
-    expect(restart.points).toEqual([[NOW + QUARTER_MS, 10]])
-    const small = recordReading(first, reading(39.8, NOW + QUARTER_MS)) as WeekHistory
+    const restart = recordReading(first, reading(10, NOW + HOUR_MS)) as WeekHistory
+    expect(restart.points).toEqual([[NOW + HOUR_MS, 10]])
+    const small = recordReading(first, reading(39.8, NOW + HOUR_MS)) as WeekHistory
     expect(small.points).toEqual([
       [NOW, 40],
-      [NOW + QUARTER_MS, 40],
+      [NOW + HOUR_MS, 40],
     ])
   })
 
   it('keeps the newest points when there are more than the cap', () => {
-    // A week holds 672 quarter hours, so a full history is made by hand
+    // A week holds 168 hours, so a full history is made by hand, a point a minute
     const points = Array.from({ length: MAX_POINTS }, (_, i): [number, number] => [START + i * 60_000, i / 10])
-    const next = recordReading({ resetsAt: RESET, points }, reading(99, START + MAX_POINTS * 60_000 + QUARTER_MS)) as WeekHistory
+    const next = recordReading({ resetsAt: RESET, points }, reading(99, START + MAX_POINTS * 60_000 + HOUR_MS)) as WeekHistory
     expect(next.points).toHaveLength(MAX_POINTS)
     expect(next.points[0]).toEqual(points[1])
-    expect(next.points[MAX_POINTS - 1]).toEqual([START + MAX_POINTS * 60_000 + QUARTER_MS, 99])
+    expect(next.points[MAX_POINTS - 1]).toEqual([START + MAX_POINTS * 60_000 + HOUR_MS, 99])
   })
 
   it('ignores a reading outside its own window', () => {
@@ -341,5 +359,81 @@ describe('recordReading', () => {
   it('holds a reading to 0..100', () => {
     expect(recordReading(null, reading(130, NOW))?.points).toEqual([[NOW, 100]])
     expect(recordReading(null, reading(-4, NOW))?.points).toEqual([[NOW, 0]])
+  })
+})
+
+describe('hourlyPoints', () => {
+  it('keeps the last point of each hour, at its own time', () => {
+    const slot = hourStart(NOW)
+    const points: [number, number][] = [
+      [slot + 5 * 60_000, 10],
+      [slot + 20 * 60_000, 10.4],
+      [slot + 50 * 60_000, 10.9],
+      [slot + HOUR_MS + 10 * 60_000, 11.5],
+      [slot + 3 * HOUR_MS, 12],
+    ]
+    expect(hourlyPoints(points)).toEqual([
+      [slot + 50 * 60_000, 10.9],
+      [slot + HOUR_MS + 10 * 60_000, 11.5],
+      [slot + 3 * HOUR_MS, 12],
+    ])
+  })
+
+  it('leaves an hourly week alone, and an empty one', () => {
+    const hourly = steady(0.9).points.filter(([t]) => t % HOUR_MS === 0)
+    expect(hourlyPoints(hourly)).toEqual(hourly)
+    expect(hourlyPoints([])).toEqual([])
+  })
+})
+
+describe('a week kept at one point an hour', () => {
+  const HOURLY_SHAPES: [string, (t: number) => number][] = [
+    ['steady 0.6', () => 0.6],
+    ['steady 0.9', () => 0.9],
+    ['steady 1.2', () => 1.2],
+    ['steady 1.5', () => 1.5],
+    ['front-loaded', (t) => (t < START + 48 * HOUR_MS ? 2.4 : 0.15)],
+    ['ramp-up', (t) => (t > START + 5 * 24 * HOUR_MS ? 2.0 : 0.25)],
+  ]
+
+  // The week up to `now` at a point every quarter hour
+  function quarters(rate: (t: number) => number, now: number): [number, number][] {
+    const points: [number, number][] = []
+    let cum = 0
+    for (let t = START; t + QUARTER_MS <= now; t += QUARTER_MS) {
+      const hour = new Date(t).getHours()
+      if (hour >= 9 && hour < 21) {
+        cum += rate(t) / 4
+      }
+      points.push([t + QUARTER_MS, Math.round(cum * 10) / 10])
+    }
+    return points
+  }
+
+  it('reads as the same weather as the same week at a point every quarter hour: no outlook changes, the changes small', () => {
+    let largestChance = 0
+    let largestEnd = 0
+    let moments = 0
+    for (const [name, rate] of HOURLY_SHAPES) {
+      // Every 45 minutes from Tue 18:00 to the day before the reset
+      for (let now = START + 24 * HOUR_MS; now < RESET - HOUR_MS; now += 45 * 60_000) {
+        const full = quarters(rate, now)
+        if (full.length < 2 || (full[full.length - 1] as [number, number])[1] >= 100) {
+          continue
+        }
+        const used = (full[full.length - 1] as [number, number])[1]
+        const quarter = forecastWeek({ resetsAt: RESET, points: full }, used, now)
+        const hourly = forecastWeek({ resetsAt: RESET, points: hourlyPoints(full) }, used, now)
+        expect(hourly?.outlook, `${name} at ${new Date(now).toString()}`).toBe(quarter?.outlook)
+        if (quarter !== null && hourly !== null) {
+          moments += 1
+          largestChance = Math.max(largestChance, Math.abs(quarter.chance - hourly.chance))
+          largestEnd = Math.max(largestEnd, Math.abs(quarter.end - hourly.end))
+        }
+      }
+    }
+    expect(moments).toBeGreaterThan(500)
+    expect(largestChance).toBeLessThan(0.02)
+    expect(largestEnd).toBeLessThan(1)
   })
 })

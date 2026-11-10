@@ -27,6 +27,13 @@ import StationCore
         #expect(read(#"{"type":"weather","memory":{"points":[]}}"#) == nil)
     }
 
+    @Test func readsThatThePageHasTheWeatherMemory() {
+        guard case .weatherTaken? = read(#"{"type":"weather-taken"}"#) else {
+            Issue.record("weather-taken was not read")
+            return
+        }
+    }
+
     @Test func stillReadsTheMessagesItAlwaysDid() {
         guard case .ready? = read(#"{"type":"ready"}"#) else {
             Issue.record("ready was not read")

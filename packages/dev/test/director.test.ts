@@ -349,6 +349,20 @@ describe('a warning cue', () => {
     expect(posted.every((memory) => memory.points.every(([, percent]) => percent <= 31))).toBe(true)
     expect(posted.every((memory) => memory.warnedAt === null)).toBe(true)
   })
+
+  it('does the same when the snapshots carry no counter of the records', () => {
+    const h = devHarness(T0, [session('a', { limits: [realWeek(30, T0 - 60_000)] })], { records: false })
+    h.until(T0 + 3000)
+    h.dev.cue(cue({ id: 'w7', segment: 'warning' }))
+    const open = h.step()
+    expect(open.program.key).toMatch(/^warning:/)
+    h.world.sessions = [session('a', { limits: [realWeek(31, open.now + 1_000)] })]
+    h.until(open.now + 20_000)
+    const posted = h.history.flatMap((sample) => (sample.program.weather === null ? [] : [sample.program.weather]))
+    // The station's own desk saw the new reading, and the made-up week never reached it
+    expect(posted[posted.length - 1]?.points.map(([, percent]) => percent)).toEqual([31])
+    expect(posted.every((memory) => memory.points.every(([, percent]) => percent <= 31))).toBe(true)
+  })
 })
 
 describe('an hour cue with weather', () => {

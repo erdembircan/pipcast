@@ -122,6 +122,9 @@ export function startDemo(): () => void {
   let cycleStart = started
   let sessions = newSessions(started)
   let pending = plan()
+  // The station's counter of changes to the records: the sessions check in anew
+  // at every step
+  let records = 0
 
   function step(): void {
     const now = Date.now()
@@ -138,7 +141,8 @@ export function startDemo(): () => void {
     for (const session of sessions) {
       session.checkedInAt = now
     }
-    receive({ type: 'snapshot', now, visible: true, sessions, lastReportAt: null })
+    records += 1
+    receive({ type: 'snapshot', now, visible: true, sessions, lastReportAt: null, records })
   }
 
   step()

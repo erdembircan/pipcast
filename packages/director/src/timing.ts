@@ -40,9 +40,5 @@ export const LAST_REPORT_KEEP_MS = 24 * 60 * 60_000
 
 export const HOUR_MS = 60 * 60_000
 
-// The forecast is worked out again at most this often for a newer reading,
-// unless the share has risen a whole point
-export const FORECAST_EVERY_MS = 15 * 60_000
-
 // STORM WARNING comes due at most this often, counted from when it last did
 export const WARNING_EVERY_MS = 60 * 60_000

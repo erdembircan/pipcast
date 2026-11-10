@@ -2,9 +2,10 @@ import Foundation
 
 /// `weather.json`: `{ v, resetsAt, points, warnedAt }`, the week's usage readings the page's forecast goes by and when
 /// STORM WARNING last came due. The page owns it and the station only keeps it: it saves what the page sends and sends
-/// it back in every snapshot. Reading mirrors the contract's `parseWeather`: anything but a version 1 object is not the
+/// it back in the snapshots until the page says it has it (`WeatherHandoff`). Reading mirrors the contract's `parseWeather`: anything but a version 1 object is not the
 /// file, a reset or warning time that is not a finite number is null, and of the points only those that are two finite
 /// numbers are kept, each later than the one before, the percent held to 0...100, the newest `Constants.weatherMaxPoints`.
+/// It does not thin them to the hours: the page's forecast does that, as it takes the memory.
 public struct WeatherMemory: Equatable {
     /// When the week the readings belong to resets, in ms; nil before the first reading.
     public var resetsAt: Double?
@@ -54,5 +55,30 @@ public struct WeatherMemory: Equatable {
 
     public static func save(_ memory: WeatherMemory, to path: String) throws {
         try writeAtomically(try JSONSerialization.data(withJSONObject: memory.json, options: [.sortedKeys]), to: path)
+    }
+}
+
+/// Whether the page has the weather memory yet. The station puts it in its snapshots from each `ready` until the page
+/// says it has it (`weather-taken`): a snapshot that fails to send is covered by the next, and a page that loads again
+/// is sent it again.
+public struct WeatherHandoff: Equatable {
+    public private(set) var taken = false
+
+    public init() {}
+
+    /// The page has loaded, and has no memory yet.
+    public mutating func pageLoaded() {
+        taken = false
+    }
+
+    /// The page has said it has the memory.
+    public mutating func pageTook() {
+        taken = true
+    }
+
+    /// What a snapshot carries for the station's `memory`: `weather`, an explicit null for none, until the page has it;
+    /// nothing after.
+    public func snapshotEntries(_ memory: WeatherMemory?) -> [String: Any] {
+        taken ? [:] : ["weather": memory.map { $0.json as Any } ?? NSNull()]
     }
 }

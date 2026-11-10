@@ -138,7 +138,7 @@ const ACTIVE_TO = 21
 // without it). The week is as far along as that share is of the end it is
 // aimed at, between a fifth of it and nine tenths and at least 30 hours, to the
 // hour, so that its pace ends the week near the target. Its readings are one
-// every quarter hour from the week's start, the share rising evenly through
+// an hour from the week's start, the share rising evenly through
 // 09:00 to 21:00 of each day and standing still otherwise, scaled so the last
 // is `used`. The week's limit as a session reads it is that share, now.
 export function syntheticWeek(
@@ -151,7 +151,9 @@ export function syntheticWeek(
   const elapsed = Math.max(30, Math.round(along * WEEK_HOURS)) * HOUR_MS
   const resetsAt = now + WEEK_HOURS * HOUR_MS - elapsed
   const start = now - elapsed
-  // The use in each quarter hour before a point: even through the active hours
+  // The use in each quarter hour before a point: even through the active
+  // hours. The points are the hours' ends, from the week's start. Counted by
+  // the quarter hour so a point is the share of the active quarters before it.
   const times: number[] = []
   const running: number[] = []
   let active = 0
@@ -160,8 +162,10 @@ export function syntheticWeek(
     if (hour >= ACTIVE_FROM && hour < ACTIVE_TO) {
       active += 1
     }
-    times.push(at)
-    running.push(active)
+    if ((at - start) % HOUR_MS === 0) {
+      times.push(at)
+      running.push(active)
+    }
   }
   const points: [number, number][] = times.map((at, index): [number, number] => [
     at,

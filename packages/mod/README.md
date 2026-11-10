@@ -84,7 +84,7 @@ It keeps its files in one folder, `~/Library/Application Support/Pipcast`, which
 
 - a file for each session on air, with its project's folder name, its title, its state, what Claude is doing, the question Claude asked or what a permission is for, Claude's last words when a turn ends, the lines and files it changed in each hour, and your account's usage limits. A session deletes its file when it goes off the air or ends. A file left behind by a session that stopped without ending, as when Claude Code is force-quit, is deleted the next time a session goes on air, once it's an hour old.
 - the window's corner and size, whether it's tucked into the side, whether sound is on, when the hour last aired, when the window was last closed, **Transparent window**, and the station's process number and version
-- your week's usage, as the share used at times since the week's limit last reset, at most one reading each quarter of an hour, for the weekly forecast, and when the last storm warning aired. The readings start over when the week resets.
+- your week's usage, as the share used at times since the week's limit last reset, at most one reading each hour, for the weekly forecast, and when the last storm warning aired. The readings start over when the week resets.
 - the station's own log of what its window did, for fixing problems, cut back at 1 MB
 
 Claude Code keeps Pipcast's two settings with your other plugins' options.

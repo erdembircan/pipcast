@@ -19,8 +19,6 @@ import { HOUR_MS } from './timing.ts'
 
 export const WEEK_MS = 7 * 24 * HOUR_MS
 const DAY_MS = 24 * HOUR_MS
-// One stored point per quarter of an hour
-export const QUARTER_MS = 15 * 60_000
 // A gap between readings longer than this is spread by the day's profile
 export const SHORT_GAP_MS = 2 * HOUR_MS
 // Recency weighting of the hourly series
@@ -35,8 +33,10 @@ export const PRIOR_WEIGHT = 2
 export const MIN_ELAPSED_MS = 24 * HOUR_MS
 // The first pass needs this many hours of short-gap coverage
 export const MIN_SHORT_HOURS = 6
-// Also WEATHER_MAX_POINTS in the contract; 7 × 24 × 4 = 672 fit
-export const MAX_POINTS = 700
+// Also WEATHER_MAX_POINTS in the contract and `Constants.weatherMaxPoints` in
+// the station; 7 × 24 = 168 fit, with room for the reset's hour and a
+// daylight-saving one
+export const MAX_POINTS = 200
 // Two reset times this close are the same window
 export const RESET_TOLERANCE_MS = 10 * 60_000
 // The chance of running out from which the outlook is a storm
@@ -47,7 +47,8 @@ export const CLOUDS_END = 70
 export interface WeekHistory {
   // When the week's window resets, ms
   resetsAt: number
-  // [when (ms), percent used 0 to 100], oldest first, at most one per quarter hour
+  // [when (ms), percent used 0 to 100], oldest first, at most one per hour: the
+  // hour's last reading, at its own time
   points: [number, number][]
 }
 
@@ -124,13 +125,30 @@ export function recordReading(history: WeekHistory | null, reading: WeekReading)
     }
     // The share never falls
     percent = Math.max(percent, last[1])
-    // One point a quarter of an hour: a reading in the same slot replaces the last
-    if (Math.floor(reading.at / QUARTER_MS) === Math.floor(last[0] / QUARTER_MS)) {
+    // One point an hour, in the hours the model bins by: a reading in the same
+    // hour replaces the last point
+    if (hourStart(reading.at) === hourStart(last[0])) {
       points = points.slice(0, -1)
     }
   }
   points = [...points, [reading.at, percent]]
   return { resetsAt: history.resetsAt, points: points.slice(-MAX_POINTS) }
+}
+
+// A week's points as the hours hold them: the last point of each local hour.
+// The desk thins a memory it is handed with this, which is how it still reads
+// a week kept at finer times.
+export function hourlyPoints(points: readonly (readonly [number, number])[]): [number, number][] {
+  const out: [number, number][] = []
+  for (const [at, percent] of points) {
+    const last = out[out.length - 1]
+    if (last !== undefined && hourStart(last[0]) === hourStart(at)) {
+      out[out.length - 1] = [at, percent]
+    } else {
+      out.push([at, percent])
+    }
+  }
+  return out
 }
 
 // ln Γ(z), by the Lanczos approximation

@@ -1,9 +1,9 @@
 import { hourStart, STORY_FRESH_MS } from '@pipcast/contract'
-import type { Bed, Snapshot, Sound, Story, WeatherMemory } from '@pipcast/contract'
+import type { Bed, SessionRecord, Snapshot, Sound, Story, WeatherMemory } from '@pipcast/contract'
 import type { Scene } from '@pipcast/design'
 
 import { boardScene, boardTicker } from './board.ts'
-import type { Forecast, WeekHistory } from './forecast.ts'
+import type { Forecast, WeekHistory, WeekReading } from './forecast.ts'
 import { hourReport } from './hour.ts'
 import { movedOn, storySegment } from './story.ts'
 import type { Segment } from './story.ts'
@@ -13,8 +13,16 @@ import { createWeatherDesk, hasOutlook, warningSegment } from './weather.ts'
 
 export interface DirectorOptions {
   reducedMotion?: boolean
-  // Tests count how often the forecast runs; the release passes nothing
+  // Tests count how often the forecast runs, and how often the sessions are
+  // looked through for the week's reading; the release passes nothing
   forecastWeek?: (history: WeekHistory, used: number, now: number) => Forecast | null
+  weekReading?: (sessions: readonly SessionRecord[], now: number) => WeekReading | null
+  // The page's copy of the station's weather.json, handed to a director it
+  // makes after the first (as when reduced motion changes), which would
+  // otherwise start the week's readings over. Left out, the director takes the
+  // memory from the first snapshot that carries one, and takes no readings
+  // until it has one
+  weather?: WeatherMemory | null
 }
 
 export interface Tick {
@@ -53,7 +61,11 @@ interface OnAir {
 
 export function createDirector(options: DirectorOptions = {}): { tick(input: Tick): Program } {
   const reducedMotion = options.reducedMotion === true
-  const desk = createWeatherDesk(options.forecastWeek === undefined ? {} : { forecastWeek: options.forecastWeek })
+  const desk = createWeatherDesk({
+    ...(options.forecastWeek === undefined ? {} : { forecastWeek: options.forecastWeek }),
+    ...(options.weekReading === undefined ? {} : { weekReading: options.weekReading }),
+    ...(options.weather === undefined ? {} : { memory: options.weather }),
+  })
 
   let initialized = false
   const seen = new Set<string>()

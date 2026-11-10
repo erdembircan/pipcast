@@ -16,6 +16,12 @@ final class StationController: NSObject, InteractionDelegate, WKNavigationDelega
     private var prefs: StationPrefs
     /// What the page keeps in weather.json: the week's readings and when STORM WARNING last came due.
     private var weather: WeatherMemory?
+    /// Whether the page has said it has the weather memory since it last said `ready`: until then every snapshot
+    /// carries it.
+    private var weatherHandoff = WeatherHandoff()
+    /// How many times the on-air records have changed. Every snapshot carries it, so the page looks through the
+    /// records for the week's reading only when it moves.
+    private var recordsVersion = 0
     private let startedAt = Date()
     private let startedAtMs = nowMilliseconds()
 
@@ -202,6 +208,7 @@ final class StationController: NSObject, InteractionDelegate, WKNavigationDelega
         let before = onAirRecords.map { $0.json as NSDictionary } as NSArray
         let after = air.map { $0.json as NSDictionary } as NSArray
         let changed = !before.isEqual(after)
+        if changed { recordsVersion += 1 }
         onAirRecords = air
         if air.isEmpty {
             if everOnAir && emptySince == nil { emptySince = Date() }
@@ -284,6 +291,8 @@ final class StationController: NSObject, InteractionDelegate, WKNavigationDelega
         switch message {
         case .ready:
             pageReady = true
+            // A page that has loaded again has no weather memory yet
+            weatherHandoff.pageLoaded()
             // A page that has loaded again has nothing playing yet
             sound?.hush()
             act(.pageReady(hovered: hovered))
@@ -305,6 +314,8 @@ final class StationController: NSObject, InteractionDelegate, WKNavigationDelega
                 weather = memory
                 saveWeather()
             }
+        case .weatherTaken:
+            weatherHandoff.pageTook()
         case let .log(level, text):
             log.write("page \(level) \(text)")
         case let .window(wanted):
@@ -321,15 +332,17 @@ final class StationController: NSObject, InteractionDelegate, WKNavigationDelega
 
     private func sendSnapshot() {
         guard pageReady else { return }
-        let message: [String: Any] = [
+        var message: [String: Any] = [
             "type": "snapshot",
             "now": nowMilliseconds(),
             "visible": isShown ?? false,
             "windowOut": windowOut,
             "sessions": onAirRecords.map { $0.json },
             "lastReportAt": prefs.lastReportAt.map { $0 as Any } ?? NSNull(),
-            "weather": weather?.json ?? NSNull(),
+            "records": recordsVersion,
         ]
+        // Null is no memory; left out, the page has it
+        message.merge(weatherHandoff.snapshotEntries(weather)) { _, entry in entry }
         send(message, to: web) { [weak self] problem in
             // The same failure every second would fill the log.
             guard let self, self.lastSendError != problem else { return }

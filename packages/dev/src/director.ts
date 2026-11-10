@@ -12,6 +12,7 @@
 
 import { hourStart } from '../../contract/src/format.ts'
 import type { SessionRecord, Snapshot, UsageLimit, WeatherMemory } from '../../contract/src/types.ts'
+import { parseWeather } from '../../contract/src/validate.ts'
 import { createDirector } from '../../director/src/director.ts'
 import type { DirectorOptions, Program, Tick } from '../../director/src/director.ts'
 import { GAP_MS, HOUR_MS, IDENT_LEAD_MS } from '../../director/src/timing.ts'
@@ -67,12 +68,21 @@ interface Run {
   // A week made up for the cue, which the real forecast runs on: its readings,
   // and the limit every session reads now; null for the real week
   week: { memory: WeatherMemory; reading: UsageLimit } | null
+  // What the cue's director sees of the records, counted: it raises when the
+  // station's does, when a story lands, and when the made-up week's limit comes
+  // on the sessions, so the desk looks through them then and not on every tick
+  records: number
+  seen: number | undefined
 }
 
 export function createDevDirector(options: DevDirectorOptions): DevDirector {
   const reducedMotion = options.reducedMotion === true
   const { defaults, log } = options
-  const main = createDirector({ reducedMotion })
+  const main = createDirector({ reducedMotion, weather: options.weather })
+  // The weather memory as far as this director knows it, for a cue's director
+  // that is not on a made-up week: handed to the director when the page hands
+  // it, then each memory the station's own director posts
+  let memory: WeatherMemory | null | undefined = options.weather
   const known = new Set<string>()
   let waiting: Waiting[] = []
   let run: Run | null = null
@@ -89,10 +99,24 @@ export function createDevDirector(options: DevDirectorOptions): DevDirector {
     return snapshot === null ? null : { ...snapshot, windowOut: false }
   }
 
+  // The memory, as the snapshot carries it or the station's own director posts it
+  function remember(snapshot: Snapshot | null, program: Program): void {
+    if (program.weather !== null) {
+      memory = program.weather
+    } else if (memory === undefined && snapshot !== null && snapshot.weather !== undefined) {
+      memory = parseWeather(snapshot.weather)
+    }
+  }
+
   // The snapshot as the cue's director sees it. `reading`: whether the made-up
   // week's limit is on each session, which the forecast works from; the week's
   // readings are always in the snapshot, as the station sends them
   function view(current: Run, snapshot: Snapshot, now: number, reading = true): Snapshot {
+    // A snapshot with no counter says nothing of whether the records changed
+    if (snapshot.records === undefined || snapshot.records !== current.seen) {
+      current.seen = snapshot.records
+      current.records += 1
+    }
     let sessions: SessionRecord[] =
       current.sessions ??
       snapshot.sessions.map((session) => ({
@@ -108,14 +132,14 @@ export function createDevDirector(options: DevDirectorOptions): DevDirector {
     }
     const week = current.week
     if (week === null) {
-      return { ...snapshot, sessions }
+      return { ...snapshot, sessions, records: current.records }
     }
     // Every session reads the made-up week's limit besides its own other limits
     sessions = sessions.map((session) => ({
       ...session,
       limits: [...(session.limits ?? []).filter((limit) => limit.kind !== 'week'), ...(reading ? [week.reading] : [])],
     }))
-    return { ...snapshot, sessions, weather: week.memory }
+    return { ...snapshot, sessions, records: current.records }
   }
 
   // One tick of the cue's director: the next story lands, then it ticks
@@ -135,6 +159,7 @@ export function createDevDirector(options: DevDirectorOptions): DevDirector {
         }
       }
       current.landed.push({ on, session: land(current.cue.id, index, next, defaults, now) })
+      current.records += 1
     }
     return current.director.tick({ now, snapshot: view(current, snapshot, now) })
   }
@@ -148,12 +173,15 @@ export function createDevDirector(options: DevDirectorOptions): DevDirector {
           : null
     const current: Run = {
       cue,
-      director: createDirector({ reducedMotion }),
+      // On a made-up week the desk is handed its readings; else the memory the page has
+      director: createDirector({ reducedMotion, weather: week === null ? memory : week.memory }),
       frozen: new Set(snapshot.sessions.flatMap((session) => session.stories.map((story) => story.id))),
       toLand: cue.segment === 'story' ? [...cue.stories] : [],
       landed: [],
       sessions: cue.segment === 'hour' ? hourSessions(cue, defaults, now) : null,
       week,
+      records: 0,
+      seen: snapshot.records,
     }
     // Its first tick, with the window hidden, sees every story there is and
     // queues none. A warning cue's week is not read yet: a storm that came due
@@ -162,6 +190,8 @@ export function createDevDirector(options: DevDirectorOptions): DevDirector {
     // warning, which airs at once. An hour cue's week is read, so no warning
     // follows its report
     current.director.tick({ now, snapshot: { ...view(current, snapshot, now, cue.segment !== 'warning'), visible: false } })
+    // The week's limit comes on the sessions now, for a warning cue
+    current.records += 1
     if (cue.segment === 'hour') {
       // The next hour comes due, as it does five seconds before it: its
       // report joins the queue and waits, the window held to the side. From
@@ -187,6 +217,7 @@ export function createDevDirector(options: DevDirectorOptions): DevDirector {
     const current = run
     if (current !== null) {
       const own = main.tick({ now, snapshot: held(snapshot) })
+      remember(snapshot, own)
       const program = runTick(current, now, snapshot)
       const over =
         snapshot === null ||
@@ -205,6 +236,7 @@ export function createDevDirector(options: DevDirectorOptions): DevDirector {
     }
 
     const program = main.tick({ now, snapshot: now < heldUntil ? held(snapshot) : snapshot })
+    remember(snapshot, program)
     if (program.key !== 'board' || program.wantsWindow) {
       idleSince = null
     } else {

@@ -34,8 +34,12 @@ export interface World {
   visible: boolean
   windowOut?: boolean
   lastReportAt: number | null
-  // The station's weather.json, sent with every snapshot
+  // The station's weather.json, sent with every snapshot: null is no memory,
+  // undefined leaves it out of the snapshots, as the station does once the page has it
   weather?: WeatherMemory | null
+  // The station's counter of changes to the records, when a test sets it itself;
+  // otherwise it rises when the sessions are swapped for others
+  records?: number
 }
 
 export interface Sample {
@@ -51,13 +55,22 @@ export function jingles(program: Program | undefined): Jingle[] {
 // A director with a world it reads from, and a clock that moves in 250 ms ticks
 export function harness(start: number, sessions: SessionRecord[] = [], options: DirectorOptions = {}) {
   const director = createDirector(options)
-  const world: World = { sessions, visible: true, lastReportAt: null }
+  const world: World = { sessions, visible: true, lastReportAt: null, weather: null }
   let now = start - 250
   const history: Sample[] = []
+  // The station raises its counter when the records change; here that is when
+  // the sessions are swapped for others
+  let records = 0
+  let lastSessions = sessions
 
   function tick(): Sample {
+    if (world.sessions !== lastSessions) {
+      lastSessions = world.sessions
+      records += 1
+    }
     const snapshot: Snapshot = {
       now,
+      records: world.records ?? records,
       visible: world.visible,
       ...(world.windowOut === undefined ? {} : { windowOut: world.windowOut }),
       sessions: world.sessions,
@@ -112,6 +125,11 @@ export function harness(start: number, sessions: SessionRecord[] = [], options: 
   }
 }
 
+// What the station was told to keep, with the tick it came on
+export function posts(history: Sample[]) {
+  return history.flatMap((sample) => (sample.program.weather === null ? [] : [{ now: sample.now, memory: sample.program.weather }]))
+}
+
 // The week the weather tests go by resets Mon 16 Nov 2026 at 18:00, local time,
 // so they hold in any time zone
 export const RESET = new Date(2026, 10, 16, 18, 0).getTime()
@@ -121,17 +139,18 @@ export const local = (day: number, hour: number, minute = 0, second = 0): number
   new Date(2026, 10, day, hour, minute, second).getTime()
 
 // A steady week up to `until`: `rate` percent an hour from 09:00 to 21:00
-// local, a point every quarter hour. Its memory, and the week limit a session
-// would read at the last point.
-export function steadyWeek(rate: number, until: number): { memory: WeatherMemory; limit: UsageLimit } {
+// local, a point every hour (the desk keeps one an hour) or, with `step`, at
+// finer times. Its memory, and the week limit a session would read at the last
+// point.
+export function steadyWeek(rate: number, until: number, step = 3_600_000): { memory: WeatherMemory; limit: UsageLimit } {
   const points: [number, number][] = []
   let cum = 0
-  for (let t = WEEK_START; t + 900_000 <= until; t += 900_000) {
+  for (let t = WEEK_START; t + step <= until; t += step) {
     const hour = new Date(t).getHours()
     if (hour >= 9 && hour < 21) {
-      cum += rate / 4
+      cum += (rate * step) / 3_600_000
     }
-    points.push([t + 900_000, Math.round(cum * 10) / 10])
+    points.push([t + step, Math.round(cum * 10) / 10])
   }
   const last = points[points.length - 1] as [number, number]
   return {

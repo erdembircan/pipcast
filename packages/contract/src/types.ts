@@ -115,12 +115,13 @@ export interface SharedOptions {
 }
 
 // weather.json: the week's usage readings the forecast goes by, and when STORM
-// WARNING last aired. The station keeps it for the page, which sends it whole
+// WARNING last aired. The station keeps it for the page, which posts it whole
+// when it changes and gets it back until it has it
 export interface WeatherMemory {
   v: 1
   // When the week the readings belong to resets, in ms; null before the first reading
   resetsAt: number | null
-  // [when, in ms; percent of the week used], oldest first, at most one a quarter hour
+  // [when, in ms; percent of the week used], oldest first, at most one an hour
   points: [number, number][]
   // When STORM WARNING last came due, in ms: when it aired, or when it was skipped while you were in Claude
   warnedAt: number | null
@@ -135,7 +136,14 @@ export interface Snapshot {
   windowOut?: boolean
   sessions: SessionRecord[]
   lastReportAt: number | null
-  // The station's weather.json, sent with every snapshot; the director reads it on its first tick
+  // How many times the on-air records have changed, in who is on air or in what
+  // their records say: the page looks through them for the week's reading only
+  // when it differs from the last time. A snapshot without one says nothing, so
+  // the page looks through them every time: every producer of snapshots sets it
+  records?: number
+  // The station's weather.json, sent in the snapshots after each `ready` until
+  // the page says it has it (`weather-taken`). Absent: not sent. Null: there is
+  // no memory. The page keeps it, and hands it to each director it makes
   weather?: WeatherMemory | null
 }
 
@@ -178,6 +186,8 @@ export type PageMessage =
   | Sound
   | { type: 'reported'; at: number }
   | { type: 'weather'; memory: WeatherMemory }
+  // The page has the weather memory: the station leaves it out of its snapshots
+  | { type: 'weather-taken' }
   | { type: 'window'; wanted: boolean }
   | { type: 'rendered' }
   | { type: 'log'; level: 'info' | 'error'; text: string }

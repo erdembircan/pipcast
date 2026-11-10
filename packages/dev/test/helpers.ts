@@ -1,4 +1,4 @@
-import type { Jingle, SessionRecord, Snapshot, Story } from '../../contract/src/types.ts'
+import type { Jingle, SessionRecord, Snapshot, Story, WeatherMemory } from '../../contract/src/types.ts'
 import type { Program } from '../../director/src/director.ts'
 
 import type { Defaults } from '../src/defaults.ts'
@@ -87,10 +87,16 @@ export function cue(value: unknown): string {
 }
 
 // The dev director with a world it reads from, a clock that moves in 250 ms
-// ticks, and the lines it logs
-export function devHarness(start: number, sessions: SessionRecord[] = [], options: { reducedMotion?: boolean } = {}) {
+// ticks, and the lines it logs. As the page does, it hands the director the
+// weather memory it took (none by default).
+export function devHarness(
+  start: number,
+  sessions: SessionRecord[] = [],
+  options: { reducedMotion?: boolean; weather?: WeatherMemory | null; records?: boolean } = {},
+) {
   const lines: string[] = []
-  const dev = createDevDirector({ ...options, defaults: DEFAULTS, log: (text) => lines.push(text) })
+  const { records: counted = true, ...rest } = options
+  const dev = createDevDirector({ weather: null, ...rest, defaults: DEFAULTS, log: (text) => lines.push(text) })
   const world: { sessions: SessionRecord[]; visible: boolean; windowOut?: boolean; lastReportAt: number | null } = {
     sessions,
     visible: true,
@@ -98,11 +104,21 @@ export function devHarness(start: number, sessions: SessionRecord[] = [], option
   }
   let now = start - 250
   const history: Sample[] = []
+  // The station raises its counter when the records change; here that is when
+  // the sessions are swapped for others
+  let records = 0
+  let lastSessions = sessions
 
   function step(): Sample {
     now += 250
+    if (world.sessions !== lastSessions) {
+      lastSessions = world.sessions
+      records += 1
+    }
     const snapshot: Snapshot = {
       now,
+      // `records: false` leaves the counter out of the snapshots
+      ...(counted ? { records } : {}),
       visible: world.visible,
       ...(world.windowOut === undefined ? {} : { windowOut: world.windowOut }),
       sessions: world.sessions,
