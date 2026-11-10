@@ -24,6 +24,7 @@ import Testing
         let markers: [String: (frames: Int, at: [(Int, Float)])] = [
             "breaking": (48_000, [(0, 0.5)]),
             "hour": (48_000, [(0, 0.5)]),
+            "weather-alert": (48_000, [(0, 0.5)]),
             "breaking-out": (48_000, [(6_000, 0.6)]),
             "hour-out": (48_000, [(6_000, 0.6)]),
             "beat-minor": (turnFrames, (0..<8).map { ($0 * 5_456, $0 == 0 ? 0.4 : 0.2) }),
@@ -95,6 +96,13 @@ import Testing
     @Test func aJingleStartsWhenItIsCued() throws {
         let heard = try Self.render(until: 1_000, [(500, { $0.cue("breaking") })])
         #expect(heard.markers.count == 1)
+        #expect(Self.level(heard.markers, at: 500 + Self.lead) == 0.5)
+    }
+
+    @Test func weatherAlertIsOneOfTheJingles() throws {
+        #expect(SoundDesk.jingles.contains("weather-alert"))
+        #expect(SoundDesk.files(in: Self.folder)["weather-alert"] == Self.folder.appendingPathComponent("weather-alert.m4a"))
+        let heard = try Self.render(until: 1_000, [(500, { $0.cue("weather-alert") })])
         #expect(Self.level(heard.markers, at: 500 + Self.lead) == 0.5)
     }
 

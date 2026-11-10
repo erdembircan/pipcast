@@ -14,6 +14,8 @@ final class StationController: NSObject, InteractionDelegate, WKNavigationDelega
     private let paths: StorePaths
     private let log: StationLog
     private var prefs: StationPrefs
+    /// What the page keeps in weather.json: the week's readings and when STORM WARNING last came due.
+    private var weather: WeatherMemory?
     private let startedAt = Date()
     private let startedAtMs = nowMilliseconds()
 
@@ -75,6 +77,7 @@ final class StationController: NSObject, InteractionDelegate, WKNavigationDelega
         paths = StorePaths(home: options.home)
         log = StationLog(path: paths.log)
         prefs = StationPrefs.load(from: paths.prefs)
+        weather = WeatherMemory.load(from: paths.weather)
         quadrant = prefs.quadrant
         model = MinimizeModel(minimized: prefs.minimized)
         #if PIPCAST_DEV
@@ -271,6 +274,7 @@ final class StationController: NSObject, InteractionDelegate, WKNavigationDelega
         case .hush: log.write("dev: page hush")
         case let .window(wanted): log.write("dev: page window \(wanted ? "wanted" : "let go")")
         case let .reported(at): log.write("dev: page reported \(Int(at))")
+        case .weather: log.write("dev: page weather")
         default: break
         }
         #endif
@@ -292,6 +296,12 @@ final class StationController: NSObject, InteractionDelegate, WKNavigationDelega
         case let .reported(at):
             prefs.lastReportAt = at
             savePrefs()
+        case let .weather(json):
+            // Checked as the message was read, so this is never nil
+            if let memory = WeatherMemory(json: json) {
+                weather = memory
+                saveWeather()
+            }
         case let .log(level, text):
             log.write("page \(level) \(text)")
         case let .window(wanted):
@@ -315,6 +325,7 @@ final class StationController: NSObject, InteractionDelegate, WKNavigationDelega
             "windowOut": windowOut,
             "sessions": onAirRecords.map { $0.json },
             "lastReportAt": prefs.lastReportAt.map { $0 as Any } ?? NSNull(),
+            "weather": weather?.json ?? NSNull(),
         ]
         send(message, to: web) { [weak self] problem in
             // The same failure every second would fill the log.
@@ -948,6 +959,15 @@ final class StationController: NSObject, InteractionDelegate, WKNavigationDelega
         configuration.activates = true
         NSWorkspace.shared.openApplication(at: url, configuration: configuration) { [log] _, error in
             if let error { log.write("error cannot open \(url.path): \(error.localizedDescription)") }
+        }
+    }
+
+    private func saveWeather() {
+        guard let weather else { return }
+        do {
+            try WeatherMemory.save(weather, to: paths.weather)
+        } catch {
+            log.write("error cannot write weather.json: \(error)")
         }
     }
 

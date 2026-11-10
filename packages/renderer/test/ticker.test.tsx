@@ -200,6 +200,37 @@ describe('the ticker on air', () => {
     expect(container.querySelector('.pn-ticker-belt')).toBeNull()
   })
 
+  const forecast: TickerItem = { key: 'forecast', lead: 'FORECAST', text: 'Clouds gathering: the week ends near 86%', sky: 'partly' }
+
+  it('draws the forecast line with the icon of its sky before the lead, in a static frame', () => {
+    render(<Ticker items={[forecast, 'B two']} time="14:32" />)
+    const item = container.querySelector('.pn-ticker-track .pn-ticker-item')
+    expect(item?.classList.contains('pn-wx-tick')).toBe(true)
+    expect(item?.firstElementChild?.tagName.toLowerCase()).toBe('svg')
+    expect(item?.querySelector('span > .pn-ticker-lead')?.textContent).toBe('FORECAST ')
+    expect(item?.textContent).toBe('FORECAST Clouds gathering: the week ends near 86%')
+    expect(container.querySelectorAll('.pn-ticker-item svg')).toHaveLength(1)
+  })
+
+  it('carries the icon on the belt too, in the unit, each icon with gradients of its own', () => {
+    render(
+      <Stage width={480} animate>
+        <Ticker items={[forecast, { ...forecast, key: 'forecast-2' }, ...lines]} time="14:32" animate />
+      </Stage>,
+    )
+    const withIcon = units().filter((unit) => unit.querySelector('svg') !== null)
+    expect(withIcon.length).toBeGreaterThan(0)
+    for (const unit of withIcon) {
+      const item = unit.querySelector('.pn-ticker-item')
+      expect(item?.classList.contains('pn-wx-tick')).toBe(true)
+      expect(item?.firstElementChild?.tagName.toLowerCase()).toBe('svg')
+      expect(unit.textContent).toBe('FORECAST Clouds gathering: the week ends near 86%')
+    }
+    const ids = [...belt().querySelectorAll('[id]')].map((node) => node.id)
+    expect(ids.length).toBeGreaterThan(0)
+    expect(new Set(ids).size).toBe(ids.length)
+  })
+
   it('hands each unit to the compositor on a run of its own', () => {
     renderLines()
     expect(container.querySelector('.pn-ticker-track')).toBeNull()

@@ -451,13 +451,24 @@
     var body = document.createElement('span');
     body.className = 'pn-ticker-item';
     var lead = typeof it === 'string' ? null : it.lead;
+    var sky = typeof it === 'string' ? null : it.sky;
+    /* the words go in the item, or after the sky's icon when it has one */
+    var words = body;
+    if (sky) {
+      body.className += ' pn-wx-tick';
+      var holder = document.createElement('span');
+      holder.innerHTML = weatherIconMarkup(sky, nextWx());
+      body.appendChild(holder.firstChild);
+      words = document.createElement('span');
+      body.appendChild(words);
+    }
     if (lead) {
       var tag = document.createElement('span');
       tag.className = 'pn-ticker-lead';
       tag.textContent = lead + ' ';
-      body.appendChild(tag);
+      words.appendChild(tag);
     }
-    body.appendChild(document.createTextNode(typeof it === 'string' ? it : (it.text || '')));
+    words.appendChild(document.createTextNode(typeof it === 'string' ? it : (it.text || '')));
     var sep = document.createElement('i');
     sep.className = 'pn-ticker-sep';
     unit.appendChild(body);
@@ -641,8 +652,12 @@
       items.forEach(function (it, i) {
         var lead = typeof it === 'string' ? null : it.lead;
         var text = typeof it === 'string' ? it : it.text;
-        out.push(h('span', { key: prefix + 'i' + i, className: 'pn-ticker-item' },
-          lead ? h('span', { className: 'pn-ticker-lead' }, lead + ' ') : null, text));
+        var sky = typeof it === 'string' ? null : it.sky;
+        var leadSpan = lead ? h('span', { className: 'pn-ticker-lead' }, lead + ' ') : null;
+        /* the forecast line carries its sky's icon before its words */
+        out.push(sky
+          ? h('span', { key: prefix + 'i' + i, className: 'pn-ticker-item pn-wx-tick' }, h(WeatherIcon, { sky: sky }), h('span', null, leadSpan, text))
+          : h('span', { key: prefix + 'i' + i, className: 'pn-ticker-item' }, leadSpan, text));
         out.push(h('i', { key: prefix + 's' + i, className: 'pn-ticker-sep' }));
       });
       return out;
@@ -1212,6 +1227,661 @@
       pageTab(view, 'pn-review-tab'));
   }
 
+  /* ------------------------------------------------------------------
+     KLWD WEATHER: the weekly forecast, a 90s local weather segment drawn
+     from a WeatherScene (index.d.ts). CURRENT CONDITIONS and EXTENDED
+     FORECAST are pages of the report on the hour; STORM WARNING is its
+     own segment, WEATHER ALERT's open and STORMTRACKER, a storm on its
+     track in WebGL. The icons are drawn here, in the station's chrome and
+     gold, as markup, so the crawl can carry one too.
+     ------------------------------------------------------------------ */
+  /* The words of the pages, as packages/contract/src/copy.ts has them: a
+     test holds the two together */
+  var WEATHER = {
+    now: 'CURRENT CONDITIONS',
+    days: 'EXTENDED FORECAST',
+    tracker: 'STORMTRACKER',
+    week: 'THE WEEK',
+    arrival: 'TIME OF ARRIVAL',
+    start: 'NOW',
+    out: 'OUT',
+    alert: ['WEATHER', 'ALERT']
+  };
+  /* The outlook on the strap's tag: its words and its colour. READY's green
+     for clear skies, the station's gold for clouds, BREAKING's red for a storm. */
+  var OUTLOOKS = {
+    clear: { word: 'CLEAR SKIES', k: 'pn-k-ready' },
+    clouds: { word: 'CLOUDS GATHERING', k: 'pn-k-working' },
+    storm: { word: 'STORM WARNING', k: 'pn-k-breaking' }
+  };
+  var SKY_WORDS = { sun: 'Sunny', partly: 'Partly cloudy', overcast: 'Overcast', storm: 'Storms' };
+
+  function skyStop(offset, name, hex, opacity) {
+    return '<stop offset="' + offset + '" style="stop-color: var(--' + name + ', ' + hex + ');' + (opacity === undefined ? '' : ' stop-opacity: ' + opacity + ';') + '"></stop>';
+  }
+  /* The gradients an icon is filled with. Each icon has its own, ending in
+     `uid`, so that two icons on a page never share a url(#...) */
+  function skyDefs(uid) {
+    return '<defs>' +
+      '<radialGradient id="pn-wx-sun-g-' + uid + '" cx="0.42" cy="0.38" r="0.7">' + skyStop(0, 'gold-hi', '#ffe08a') + skyStop(0.55, 'gold', '#f2b630') + skyStop(1, 'gold-lo', '#b97d0c') + '</radialGradient>' +
+      '<linearGradient id="pn-wx-ray-g-' + uid + '" x1="0" y1="0" x2="0" y2="1">' + skyStop(0, 'gold-hi', '#ffe08a') + skyStop(1, 'gold', '#f2b630') + '</linearGradient>' +
+      '<linearGradient id="pn-wx-cloud-g-' + uid + '" gradientUnits="userSpaceOnUse" x1="0" y1="22" x2="0" y2="86">' + skyStop(0, 'chrome-hi', '#ffffff') + skyStop(0.55, 'chrome', '#c9d3e3') + skyStop(1, 'chrome-lo', '#7f90b3') + '</linearGradient>' +
+      '<linearGradient id="pn-wx-cloud-d-' + uid + '" gradientUnits="userSpaceOnUse" x1="0" y1="22" x2="0" y2="86">' + skyStop(0, 'chrome-lo', '#7f90b3') + skyStop(1, 'morning-tower', '#4a5878') + '</linearGradient>' +
+      '<linearGradient id="pn-wx-bolt-g-' + uid + '" x1="0" y1="0" x2="0" y2="1">' + skyStop(0, 'gold-hi', '#ffe08a') + skyStop(0.5, 'gold', '#f2b630') + skyStop(1, 'gold-lo', '#b97d0c') + '</linearGradient>' +
+      '</defs>';
+  }
+  function tenth(n) { return Math.round(n * 10) / 10; }
+  /* The sun: ten rays round a disc, with a highlight */
+  function skySun(uid) {
+    var rays = '';
+    for (var k = 0; k < 10; k++) {
+      var a = (k * 36 - 90) * Math.PI / 180;
+      var tip = [60 + 47 * Math.cos(a), 50 + 47 * Math.sin(a)];
+      var n = [Math.cos(a + Math.PI / 2), Math.sin(a + Math.PI / 2)];
+      var base = [60 + 31 * Math.cos(a), 50 + 31 * Math.sin(a)];
+      var p1 = [base[0] + 7 * n[0], base[1] + 7 * n[1]];
+      var p2 = [base[0] - 7 * n[0], base[1] - 7 * n[1]];
+      rays += '<polygon points="' + tenth(tip[0]) + ',' + tenth(tip[1]) + ' ' + tenth(p1[0]) + ',' + tenth(p1[1]) + ' ' + tenth(p2[0]) + ',' + tenth(p2[1]) + '" fill="url(#pn-wx-ray-g-' + uid + ')" style="stroke: var(--gold-lo, #b97d0c); stroke-width: 2; stroke-linejoin: round;"></polygon>';
+    }
+    return rays + '<circle cx="60" cy="50" r="27" fill="url(#pn-wx-sun-g-' + uid + ')" style="stroke: var(--gold-lo, #b97d0c); stroke-width: 2.5;"></circle><ellipse cx="51" cy="39" rx="12" ry="7" style="fill: var(--chrome-hi, #ffffff); opacity: 0.6;"></ellipse>';
+  }
+  /* A cloud: four shapes drawn twice, the rim underneath and the fill over it; the dark one is a storm cloud */
+  function skyCloud(dark, uid) {
+    function shapes(attrs) {
+      return '<circle cx="40" cy="60" r="18" ' + attrs + '></circle><circle cx="62" cy="46" r="25" ' + attrs + '></circle><circle cx="86" cy="60" r="17" ' + attrs + '></circle><rect x="24" y="58" width="80" height="26" rx="13" ' + attrs + '></rect>';
+    }
+    var rim = dark ? 'var(--chrome, #c9d3e3)' : 'var(--chrome-lo, #7f90b3)';
+    return shapes('style="fill: ' + rim + '; stroke: ' + rim + '; stroke-width: 7;"') +
+      shapes('fill="url(#pn-wx-' + (dark ? 'cloud-d' : 'cloud-g') + '-' + uid + ')"') +
+      '<ellipse cx="57" cy="34" rx="15" ry="6" style="fill: var(--chrome-hi, #ffffff); opacity: ' + (dark ? 0.3 : 0.7) + ';"></ellipse>';
+  }
+  function skyBolt(uid) {
+    return '<polygon points="66,52 46,80 59,80 50,102 82,68 67,68 76,52" fill="url(#pn-wx-bolt-g-' + uid + ')" style="stroke: var(--on-gold, #2a1800); stroke-width: 2.5; stroke-linejoin: round;"></polygon>';
+  }
+  /* What an icon draws: the sun, the sun behind a cloud, two clouds, a storm
+     cloud over a bolt. `boltClass` puts the bolt in a group of its own, for
+     WEATHER ALERT's flashes. */
+  function skyShapes(sky, uid, boltClass) {
+    if (sky === 'partly') { return '<g transform="translate(-6 -6) scale(0.8)">' + skySun(uid) + '</g><g transform="translate(16 16) scale(0.84)">' + skyCloud(false, uid) + '</g>'; }
+    if (sky === 'overcast') { return '<g transform="translate(-12 -10) scale(0.86)">' + skyCloud(true, uid) + '</g><g transform="translate(14 12) scale(0.86)">' + skyCloud(false, uid) + '</g>'; }
+    if (sky === 'storm') { return (boltClass ? '<g class="' + boltClass + '">' + skyBolt(uid) + '</g>' : skyBolt(uid)) + '<g transform="translate(0 -12)">' + skyCloud(true, uid) + '</g>'; }
+    return skySun(uid);
+  }
+  var wxSeq = 0;
+  function nextWx() { wxSeq += 1; return wxSeq; }
+  /* An icon as markup, for the crawl: `uid` ends its gradients' ids */
+  function weatherIconMarkup(sky, uid) {
+    var kind = SKY_WORDS[sky] ? sky : 'sun';
+    return '<svg class="pn-wx-icon" viewBox="0 0 120 100" role="img" aria-label="' + SKY_WORDS[kind] + '">' + skyDefs(uid) + skyShapes(kind, uid) + '</svg>';
+  }
+  /* A sky's icon. `size` is its width in px; with none, the page's style
+     sizes it. `bolt` names the group the bolt is drawn in, for WEATHER ALERT. */
+  function WeatherIcon(props) {
+    var uid = useState(nextWx)[0];
+    var sky = SKY_WORDS[props.sky] ? props.sky : 'sun';
+    var size = num(props.size, 0);
+    return h('svg', {
+      className: cx('pn-wx-icon', props.className),
+      viewBox: '0 0 120 100',
+      role: 'img',
+      'aria-label': SKY_WORDS[sky],
+      style: size ? { width: size + 'px', height: (size * 100 / 120) + 'px' } : undefined,
+      dangerouslySetInnerHTML: { __html: skyDefs(uid) + skyShapes(sky, uid, props.bolt) }
+    });
+  }
+
+  /* The weather wall: the wall monitor made big, with its head bar. `k` is
+     the page's colour, gold for the weather and red for a warning. */
+  function weatherWall(k, head, until, content) {
+    return h('div', { className: cx('pn-wx-wall', k) },
+      h.apply(null, ['div', { className: 'pn-wx-screen' },
+        h('div', { className: 'pn-wx-head' }, h('span', null, head), until ? h('small', null, until) : null)].concat(content)));
+  }
+  function noMove() { return undefined; }
+  /* Chrome lettering at rest, as the stinger's words end: the same line, with
+     its glint off to the side */
+  function chromeStill(word, className) {
+    return chromeLine(word, className, 1, function () { return {}; }, function () { return 1; }, noMove);
+  }
+
+  /* CURRENT CONDITIONS: what the weathercaster says "right now" over. The
+     sky, the week's share used as the temperature in chrome lettering, and
+     the outlook in words. */
+  function WeatherNow(props) {
+    var wx = props.weather || SAMPLES['weather-now'].weather;
+    return weatherWall('pn-k-hourly', WEATHER.now, null, [
+      h('div', { key: 'now', className: 'pn-wx-now' },
+        h(WeatherIcon, { sky: wx.sky, className: 'pn-wx-now-sky' }),
+        h('div', { className: 'pn-wx-now-read' },
+          h('span', { className: 'pn-wx-now-cap' }, WEATHER.week),
+          chromeStill(wx.used, 'pn-stinger-line pn-wx-now-temp'),
+          h('span', { className: 'pn-wx-now-word' }, wx.word)))
+    ]);
+  }
+
+  /* EXTENDED FORECAST: a panel a day from today to the reset's day, the sky
+     of the day's high with the high and the low, and under them the verdict
+     on a tag in the outlook's colour. */
+  function WeatherDays(props) {
+    var wx = props.weather || SAMPLES['weather-days'].weather;
+    var days = wx.days || [];
+    var outlook = OUTLOOKS[wx.outlook] || OUTLOOKS.clear;
+    return weatherWall('pn-k-hourly', WEATHER.days, wx.until, [
+      h('div', { key: 'days', className: cx('pn-wx-days', days.length > 5 && 'pn-wx-days--7') },
+        days.map(function (d, i) {
+          return h('div', { key: i, className: cx('pn-wx-day', d.out && 'pn-wx-out') },
+            h('span', { className: 'pn-wx-day-name' }, d.name),
+            h(WeatherIcon, { sky: d.sky }),
+            h('span', { className: 'pn-wx-hi' }, d.high),
+            h('span', { className: 'pn-wx-lo' }, d.low));
+        })),
+      h('div', { key: 'strip', className: 'pn-wx-strip' },
+        h('span', { className: cx('pn-wx-tag', outlook.k) }, h('span', null, wx.word || outlook.word)),
+        h('span', null, wx.strap))
+    ]);
+  }
+
+  /* STORMTRACKER's globe. A 90s station's storm tracker in WebGL (three.js
+     r149, the global THREE), the week's usage as the storm.
+
+     What the period footage shows, and this follows: the earth from orbit,
+     lit, with its atmosphere glowing at the limb and satellite clouds over
+     it; the camera dives down to a low, oblique view of a region where the
+     horizon still curves; satellite clouds drift with their shadows moving
+     on the land and sea; a storm, its clouds standing up in 3D, comes in
+     from the left and grows as it goes, toward the coast it will hit; its
+     track is drawn ahead of it, and a TIME OF ARRIVAL list says when.
+
+     The storm forms over the western Gulf at NOW and moves east, faster as
+     it goes, growing, its core colouring as it strengthens (as a colourised
+     satellite picture shows a storm's tops), leaving its rain behind. The
+     track's marks come up as it passes each day's close the week reaches
+     before it runs out. Landfall on Florida's Gulf coast is where the week
+     runs out: lightning, OUT.
+
+     One timeline, 11 s: 0-2.6 s the dive from orbit, 2.6-9 s the storm on
+     its track, 9-11 s landfall. stormScene(root, options) draws into the
+     canvas in `root`, and places the elements in it that have data-at and
+     data-row from the scene's camera. `options.marks` are the TrackMarks
+     (`at` is how far along the track), `options.textures` the folder of the
+     four pictures, and `options.hold` the moment of the timeline to draw
+     once, or null to run it once from now and keep its last picture. It
+     returns { dispose, ready }, or null when there is no graphics context;
+     `ready` comes once a held moment has been drawn. Colours are read from
+     the station's tokens on `root`. */
+  var stormScene = (function () {
+    var DUR = 11, T_DIVE = 2.6, T_LAND = 9.0;
+    var START = [25.4, -95.4], END = [27.95, -82.75];
+
+    function rad(d) { return d * Math.PI / 180; }
+    function clamp(x, a, b) { return Math.max(a, Math.min(b, x)); }
+    function smooth(x) { x = clamp(x, 0, 1); return x * x * (3 - 2 * x); }
+    function geo(lat, lon, r, out) {
+      var p = rad(lon + 180), t = rad(90 - lat);
+      out = out || new THREE.Vector3();
+      return out.set(-r * Math.sin(t) * Math.cos(p), r * Math.cos(t), r * Math.sin(t) * Math.sin(p));
+    }
+    function trackLatLon(s) {
+      return [START[0] + (END[0] - START[0]) * s + Math.sin(s * Math.PI) * 1.4, START[1] + (END[1] - START[1]) * s];
+    }
+    function trackAt(s, r, out) { var ll = trackLatLon(s); return geo(ll[0], ll[1], r, out); }
+    // The storm's progress along its track at time t: faster as it goes
+    function progress(t) { var u = clamp((t - T_DIVE) / (T_LAND - T_DIVE), 0, 1); return Math.pow(u, 1.6); }
+    function tokens(el) {
+      var cs = getComputedStyle(el);
+      function c(n, f) { var v = cs.getPropertyValue('--' + n).trim(); return new THREE.Color(v || f); }
+      return {
+        breaking: c('breaking', '#c4170e'), breakingHi: c('breaking-hi', '#ff5a4f'), gold: c('gold', '#f2b630'),
+        goldHi: c('gold-hi', '#ffe08a'), ready: c('ready', '#2fb44a'), readyHi: c('ready-hi', '#8af59b'),
+        glow: c('row-hi', '#5b8be8'), edge: c('bar-edge', '#8fb0ff'), deep: c('studio-deep', '#061233'), white: c('chrome-hi', '#ffffff')
+      };
+    }
+
+    /* The storm seen from above: spiral bands round a clear eye, drawn once */
+    function spiralCanvas(size) {
+      var c = document.createElement('canvas');
+      c.width = c.height = size;
+      var g = c.getContext('2d');
+      var cx = size / 2, rnd = seeded(41), S = size / 512;
+      function blob(x, y, s, a) {
+        var gr = g.createRadialGradient(x, y, 0, x, y, s);
+        gr.addColorStop(0, 'rgba(255,255,255,' + a + ')');
+        gr.addColorStop(0.6, 'rgba(255,255,255,' + (a * 0.5) + ')');
+        gr.addColorStop(1, 'rgba(255,255,255,0)');
+        g.fillStyle = gr;
+        g.beginPath(); g.arc(x, y, s, 0, Math.PI * 2); g.fill();
+      }
+      g.globalCompositeOperation = 'lighter';
+      // the central dense overcast round the eye
+      var i, k;
+      for (i = 0; i < 260; i++) {
+        var a0 = rnd() * Math.PI * 2, r0 = (0.07 + Math.pow(rnd(), 1.5) * 0.13) * size;
+        blob(cx + Math.cos(a0) * r0, cx + Math.sin(a0) * r0, (14 + rnd() * 16) * S, 0.22);
+      }
+      // a thin veil of cloud between the bands
+      for (i = 0; i < 160; i++) {
+        var a1 = rnd() * Math.PI * 2, r1 = (0.16 + rnd() * 0.3) * size;
+        blob(cx + Math.cos(a1) * r1, cx + Math.sin(a1) * r1, (22 + rnd() * 26) * S, 0.05);
+      }
+      // four rain bands, each leaving the core and curling out a little over
+      // half a turn, wide where they leave and breaking up at their ends
+      for (k = 0; k < 4; k++) {
+        var off = k * Math.PI / 2 + 0.3;
+        for (i = 0; i < 520; i++) {
+          var t = i / 520;
+          if (rnd() < Math.pow(t, 1.6) * 0.7) { continue; }
+          var ang = off + t * 1.25 * Math.PI;
+          var r = (0.17 + t * 0.32) * size;
+          var w = (1 - t * 0.55) * 34 * S;
+          var jit = (rnd() - 0.5) * w;
+          blob(cx + Math.cos(ang) * (r + jit), cx + Math.sin(ang) * (r + jit), (8 + rnd() * 14) * S * (1 - t * 0.45), 0.13);
+        }
+      }
+      // the eye, clear
+      g.globalCompositeOperation = 'destination-out';
+      var eg = g.createRadialGradient(cx, cx, 0, cx, cx, size * 0.055);
+      eg.addColorStop(0, 'rgba(0,0,0,1)'); eg.addColorStop(0.7, 'rgba(0,0,0,0.9)'); eg.addColorStop(1, 'rgba(0,0,0,0)');
+      g.fillStyle = eg; g.fillRect(0, 0, size, size);
+      return c;
+    }
+    function dotCanvas(size, ring) {
+      var c = document.createElement('canvas');
+      c.width = c.height = size;
+      var g = c.getContext('2d'), h = size / 2;
+      g.fillStyle = '#ffffff';
+      g.strokeStyle = ring ? '#ffffff' : '#061233';
+      g.lineWidth = size * (ring ? 0.16 : 0.12);
+      g.beginPath(); g.arc(h, h, h * 0.55, 0, Math.PI * 2);
+      if (ring) { g.stroke(); } else { g.fill(); g.stroke(); }
+      return c;
+    }
+
+    function stormScene(root, options) {
+      var canvas = root.querySelector('canvas');
+      if (!canvas) { return null; }
+      var W = root.offsetWidth || 840, H = root.offsetHeight || 306;
+      var hold = typeof options.hold === 'number' ? options.hold : null;
+      var marks = options.marks || [];
+      var base = options.textures || 'textures/';
+      var renderer;
+      try {
+        renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true, alpha: false, preserveDrawingBuffer: hold !== null });
+      } catch (e) {
+        return null;
+      }
+      var K = tokens(root);
+      renderer.setPixelRatio(2);
+      renderer.setSize(W, H, false);
+      renderer.outputEncoding = THREE.sRGBEncoding;
+      var scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x01030a);
+      var camera = new THREE.PerspectiveCamera(38, W / H, 0.001, 200);
+
+      var loader = new THREE.TextureLoader();
+      loader.setCrossOrigin('anonymous');
+      var pending = 4;
+      var running = true;
+      var drawn = false;
+      var settle = null;
+      var finished = new Promise(function (resolve) { settle = resolve; });
+      /* A still has no frames to wait for: it draws its moment once the pictures have come, or failed to */
+      function loaded() {
+        pending -= 1;
+        if (hold !== null && pending <= 0 && running) {
+          draw(hold);
+          drawn = true;
+          settle();
+        }
+      }
+      function tex(url, srgb) {
+        var t = loader.load(url, loaded, undefined, loaded);
+        if (srgb) { t.encoding = THREE.sRGBEncoding; }
+        t.anisotropy = 8;
+        return t;
+      }
+      var earthMap = tex(base + 'earth.jpg', true);
+      var cloudMap = tex(base + 'clouds.jpg', false);
+      var topoMap = tex(base + 'topo.jpg', false);
+      var waterMap = tex(base + 'water.jpg', false);
+
+      // Light from the south-east, the afternoon sun over the Atlantic
+      var sunDir = geo(14, -70, 1).normalize().add(new THREE.Vector3(0, 0.25, 0)).normalize();
+      var sun = new THREE.DirectionalLight(0xffffff, 1.35);
+      sun.position.copy(sunDir).multiplyScalar(10);
+      scene.add(sun);
+      scene.add(new THREE.AmbientLight(0x3a4466, 0.6));
+
+      // Stars
+      var starGeo = new THREE.BufferGeometry(), sp = [], rs = seeded(9);
+      for (var i = 0; i < 1800; i++) {
+        var v = new THREE.Vector3(rs() * 2 - 1, rs() * 2 - 1, rs() * 2 - 1).normalize().multiplyScalar(80);
+        sp.push(v.x, v.y, v.z);
+      }
+      starGeo.setAttribute('position', new THREE.Float32BufferAttribute(sp, 3));
+      scene.add(new THREE.Points(starGeo, new THREE.PointsMaterial({ color: 0xc9d3e3, size: 1.3, sizeAttenuation: false })));
+
+      // The earth, its satellite clouds with their shadows, and the air's glow
+      var earth = new THREE.Mesh(new THREE.SphereGeometry(1, 160, 120), new THREE.MeshPhongMaterial({
+        map: earthMap, bumpMap: topoMap, bumpScale: 0.012, specularMap: waterMap, specular: new THREE.Color(0x18202e), shininess: 40
+      }));
+      scene.add(earth);
+      var cloudShadow = new THREE.Mesh(new THREE.SphereGeometry(1.0015, 160, 120), new THREE.MeshBasicMaterial({
+        color: K.deep, alphaMap: cloudMap, transparent: true, opacity: 0.42, depthWrite: false
+      }));
+      scene.add(cloudShadow);
+      var clouds = new THREE.Mesh(new THREE.SphereGeometry(1.007, 160, 120), new THREE.MeshLambertMaterial({
+        color: 0xffffff, alphaMap: cloudMap, transparent: true, opacity: 0.92, depthWrite: false
+      }));
+      scene.add(clouds);
+      var atmos = new THREE.Mesh(new THREE.SphereGeometry(1.045, 96, 72), new THREE.ShaderMaterial({
+        uniforms: { glow: { value: K.glow }, edge: { value: K.edge } },
+        vertexShader: 'varying vec3 vN; varying vec3 vV; void main(){ vec4 mv = modelViewMatrix * vec4(position,1.0); vN = normalize(normalMatrix * normal); vV = normalize(-mv.xyz); gl_Position = projectionMatrix * mv; }',
+        fragmentShader: 'uniform vec3 glow; uniform vec3 edge; varying vec3 vN; varying vec3 vV; void main(){ float f = pow(1.0 - abs(dot(vN, vV)), 3.0); gl_FragColor = vec4(mix(glow, edge, f) * f * 1.6, f); }',
+        side: THREE.BackSide, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false
+      }));
+      scene.add(atmos);
+
+      // The track: dashed ahead, the station's gold behind the storm
+      var N = 160, tp = [];
+      for (i = 0; i <= N; i++) { var p = trackAt(i / N, 1.0022); tp.push(p.x, p.y, p.z); }
+      var trackGeo = new THREE.BufferGeometry();
+      trackGeo.setAttribute('position', new THREE.Float32BufferAttribute(tp, 3));
+      var ahead = new THREE.Line(trackGeo, new THREE.LineDashedMaterial({ color: 0xffffff, dashSize: 0.006, gapSize: 0.004, transparent: true, opacity: 0.9 }));
+      ahead.computeLineDistances();
+      scene.add(ahead);
+      var behind = new THREE.Line(trackGeo.clone(), new THREE.LineBasicMaterial({ color: K.goldHi }));
+      scene.add(behind);
+      function sprite(canvasEl, size) {
+        var s = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(canvasEl), depthWrite: false, sizeAttenuation: true }));
+        s.scale.set(size, size, 1);
+        scene.add(s);
+        return s;
+      }
+      var dotC = dotCanvas(64, false);
+      [0].concat(marks.map(function (m) { return m.at; })).forEach(function (m) { sprite(dotC, 0.016).position.copy(trackAt(m, 1.003)); });
+      var target = sprite(dotCanvas(64, true), 0.03);
+      target.material.color = K.breakingHi;
+      target.position.copy(trackAt(1, 1.003));
+      target.renderOrder = -1;
+
+      // The rain the storm leaves behind it: a swath along the track
+      var SW = 120, swPos = [], swCol = [], swIdx = [];
+      for (i = 0; i <= SW; i++) {
+        var s0 = i / SW, a = trackAt(Math.max(0, s0 - 0.004), 1.0012), b = trackAt(Math.min(1, s0 + 0.004), 1.0012);
+        var c0 = trackAt(s0, 1.0012), n0 = c0.clone().normalize();
+        var side = new THREE.Vector3().subVectors(b, a).cross(n0).normalize().multiplyScalar(0.012 + 0.05 * s0);
+        swPos.push(c0.x + side.x, c0.y + side.y, c0.z + side.z, c0.x - side.x, c0.y - side.y, c0.z - side.z);
+        var col = new THREE.Color().copy(K.ready).lerp(K.goldHi, s0 * 0.7);
+        swCol.push(col.r, col.g, col.b, col.r, col.g, col.b);
+        if (i < SW) { var k = i * 2; swIdx.push(k, k + 1, k + 2, k + 1, k + 3, k + 2); }
+      }
+      var swGeo = new THREE.BufferGeometry();
+      swGeo.setAttribute('position', new THREE.Float32BufferAttribute(swPos, 3));
+      swGeo.setAttribute('color', new THREE.Float32BufferAttribute(swCol, 3));
+      swGeo.setIndex(swIdx);
+      var swath = new THREE.Mesh(swGeo, new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.38, depthWrite: false, side: THREE.DoubleSide }));
+      scene.add(swath);
+
+      // The storm: the spiral from above, its tops coloured as it strengthens,
+      // puffs of cloud standing up from it, its shadow on the sea
+      var spiralTex = new THREE.CanvasTexture(spiralCanvas(512));
+      cloudMap.wrapS = cloudMap.wrapT = THREE.RepeatWrapping;
+      var discMat = new THREE.ShaderMaterial({
+        uniforms: {
+          map: { value: spiralTex }, detail: { value: cloudMap }, uH: { value: 0.09 }, uFlash: { value: 0 }, uAlpha: { value: 1 },
+          uSun: { value: sunDir.clone() }, cLit: { value: K.white }, cShade: { value: new THREE.Color(0x8f9bb6) }
+        },
+        vertexShader: [
+          'uniform sampler2D map; uniform sampler2D detail; uniform float uH;',
+          'varying vec2 vUv; varying float vD; varying vec3 vPos;',
+          'void main(){',
+          '  vUv = uv;',
+          '  float d = clamp(texture2D(map, uv).a * 1.25, 0.0, 1.0);',
+          '  float det = texture2D(detail, uv * 1.6 + vec2(0.31, 0.17)).r;',
+          '  float h = (pow(d, 0.9) * 0.85 + det * 0.25 * d) * uH;',
+          '  vD = d;',
+          '  vec3 p = position + vec3(0.0, 0.0, h);',
+          '  vPos = (modelMatrix * vec4(p, 1.0)).xyz;',
+          '  gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);',
+          '}'
+        ].join('\n'),
+        fragmentShader: [
+          'uniform vec3 uSun; uniform float uFlash; uniform float uAlpha; uniform vec3 cLit; uniform vec3 cShade;',
+          'varying vec2 vUv; varying float vD; varying vec3 vPos;',
+          'void main(){',
+          '  vec3 n = normalize(cross(dFdx(vPos), dFdy(vPos)));',
+          '  if (dot(n, normalize(vPos)) < 0.0) { n = -n; }',
+          '  float lam = clamp(dot(n, normalize(uSun)), 0.0, 1.0);',
+          '  vec3 col = mix(cShade, cLit, 0.25 + 0.75 * lam);',
+          '  col = mix(col, vec3(1.0), uFlash * vD);',
+          '  gl_FragColor = vec4(col, smoothstep(0.05, 0.4, vD) * uAlpha);',
+          '}'
+        ].join('\n'),
+        transparent: true, depthWrite: true, extensions: { derivatives: true }
+      });
+      var storm = new THREE.Group();
+      scene.add(storm);
+      var spin = new THREE.Group();
+      storm.add(spin);
+      var disc = new THREE.Mesh(new THREE.PlaneGeometry(2, 2, 220, 220), discMat);
+      disc.renderOrder = 2;
+      disc.position.z = 0.004;
+      spin.add(disc);
+      var shadowMat = new THREE.MeshBasicMaterial({ color: K.deep, map: null, alphaMap: spiralTex, transparent: true, opacity: 0.55, depthWrite: false });
+      var shadow = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), shadowMat);
+      storm.add(shadow);
+      var bolt = new THREE.PointLight(0xffffff, 0, 0.4);
+      storm.add(bolt);
+      bolt.position.set(0, 0, 0.08);
+
+      var labels = {};
+      Array.prototype.forEach.call(root.querySelectorAll('[data-at]'), function (el) { labels[el.getAttribute('data-at')] = el; });
+      var rows = root.querySelectorAll('[data-row]');
+      var Z = new THREE.Vector3(0, 0, 1);
+      var tmp = new THREE.Vector3(), tmp2 = new THREE.Vector3(), tmp3 = new THREE.Vector3();
+
+      // The camera: from orbit down to a low look north over the Gulf, then
+      // tightening on the storm and its landfall as it comes in
+      function trackPose(s, outCam, outLook) {
+        var ll = trackLatLon(s);
+        var lookLat = ll[0] + (END[0] - ll[0]) * 0.45 + 1.0, lookLon = ll[1] + (END[1] - ll[1]) * 0.45;
+        geo(lookLat - 8.0 + 1.6 * s, lookLon - 0.3, 1.125 - 0.012 * s, outCam);
+        geo(lookLat, lookLon, 1.0, outLook);
+      }
+      var P0 = geo(24, -89, 3.25);
+      var P1 = new THREE.Vector3(), L1 = new THREE.Vector3();
+      trackPose(0, P1, L1);
+      var up0 = new THREE.Vector3(0, 1, 0);
+      var cam = new THREE.Vector3(), look = new THREE.Vector3();
+      function placeCamera(t) {
+        var s = progress(t);
+        trackPose(s, cam, look);
+        if (t < T_DIVE) {
+          // the dive: straight down onto the Gulf, slowing as it nears
+          var f = smooth(t / T_DIVE);
+          var dir = P0.clone().normalize().lerp(P1.clone().normalize(), f).normalize();
+          var r = 3.25 + (P1.length() - 3.25) * (1 - Math.pow(1 - f, 2.6));
+          cam.copy(dir).multiplyScalar(r);
+          look.set(0, 0, 0).lerp(L1, smooth(t / (T_DIVE * 0.7)));
+          camera.up.copy(up0).lerp(P1.clone().normalize(), f).normalize();
+        } else {
+          camera.up.copy(cam).normalize();
+        }
+        camera.position.copy(cam);
+        camera.lookAt(look);
+      }
+      function placeStorm(t) {
+        var s = progress(t);
+        var k = 0.026 + 0.042 * Math.pow(s, 0.85);
+        var pos = trackAt(s, 1.0, tmp);
+        var n = pos.clone().normalize();
+        storm.position.copy(n).multiplyScalar(1.0008);
+        storm.quaternion.setFromUnitVectors(Z, n);
+        storm.scale.set(k, k, k);
+        spin.rotation.z = t * 0.5;
+        var formed = smooth((t - T_DIVE + 0.5) / 1.0);
+        discMat.uniforms.uAlpha.value = formed;
+        // the shadow falls away from the sun across the sea
+        var away = sunDir.clone().projectOnPlane(n).normalize().multiplyScalar(-0.42);
+        shadow.position.copy(away.applyQuaternion(storm.quaternion.clone().invert()));
+        shadow.position.z = 0.0005;
+        shadow.rotation.z = t * 0.5;
+        shadowMat.opacity = 0.55 * formed;
+        // landfall: lightning
+        var lt = t - T_LAND;
+        var flash = lt > 0 ? Math.max(0, Math.sin(lt * 23) * Math.sin(lt * 7.3)) * (lt < 1.8 ? 1 : 0) : 0;
+        discMat.uniforms.uFlash.value = flash * 0.8;
+        bolt.intensity = flash * 3;
+        // the swath and the gold track behind it
+        var drawn = Math.floor(s * SW);
+        swath.geometry.setDrawRange(0, drawn * 6);
+        swath.material.opacity = 0.24 * formed;
+        behind.geometry.setDrawRange(0, Math.floor(s * N) + 1);
+        target.scale.setScalar(0.03 * (1 + (lt > 0 ? 0.25 * Math.abs(Math.sin(lt * 5)) : 0)));
+        return s;
+      }
+      function screenOf(v) {
+        tmp.copy(v).project(camera);
+        var facing = v.clone().normalize().dot(tmp2.copy(camera.position).sub(v).normalize()) > 0;
+        return { x: (tmp.x + 1) / 2 * W, y: (1 - tmp.y) / 2 * H, on: tmp.z < 1 && facing };
+      }
+      function label(name, at, show) {
+        var el = labels[name];
+        if (!el) { return; }
+        var sc = screenOf(at);
+        el.style.transform = 'translate(' + sc.x.toFixed(1) + 'px,' + sc.y.toFixed(1) + 'px)';
+        el.classList.toggle('pn-wx-on', !!(show && sc.on));
+      }
+      function draw(t) {
+        placeCamera(t);
+        clouds.rotation.y = t * 0.006;
+        cloudShadow.rotation.y = t * 0.006 - 0.003;
+        var s = placeStorm(t);
+        var ready = t > T_DIVE + 0.3;
+        label('now', trackAt(0, 1.006), ready);
+        marks.forEach(function (m, i) {
+          label('m' + i, trackAt(m.at, 1.006), ready && s >= m.at);
+          if (rows[i]) { rows[i].classList.toggle('pn-wx-on', s >= m.at); }
+        });
+        label('end', geo(END[0] + 2.2, END[1] + 4.6, 1.004, tmp3), t >= T_LAND + 0.15);
+        if (rows[marks.length]) { rows[marks.length].classList.toggle('pn-wx-on', t >= T_LAND); }
+        root.classList.toggle('pn-wx-st3-tracking', ready);
+        renderer.render(scene, camera);
+      }
+      var start = performance.now();
+      function frame() {
+        if (!running) { return; }
+        if (!root.isConnected) { dispose(); return; }
+        // the page may reset the canvas's size attributes when it redraws its markup
+        if (canvas.width !== W * 2 || canvas.height !== H * 2) { renderer.setSize(W, H, false); }
+        // one run from mount, then the last picture stays
+        draw(Math.min(DUR, (performance.now() - start) / 1000));
+        requestAnimationFrame(frame);
+      }
+      /* Gives back everything the scene holds on the graphics card: the pictures
+         are large, and a new scene comes with each warning and report */
+      function dispose() {
+        if (!running) { return; }
+        running = false;
+        function free(value) { if (value && value.isTexture) { value.dispose(); } }
+        scene.traverse(function (item) {
+          if (item.geometry) { item.geometry.dispose(); }
+          var materials = item.material ? [].concat(item.material) : [];
+          materials.forEach(function (m) {
+            Object.keys(m).forEach(function (key) { free(m[key]); });
+            Object.keys(m.uniforms || {}).forEach(function (key) { free(m.uniforms[key].value); });
+            m.dispose();
+          });
+        });
+        [earthMap, cloudMap, topoMap, waterMap, spiralTex].forEach(free);
+        renderer.dispose();
+        renderer.forceContextLoss();
+      }
+      if (hold === null) { requestAnimationFrame(frame); }
+      // `ready` comes once a held moment has been drawn, so a still can wait for it
+      return { dispose: dispose, ready: hold === null ? Promise.resolve() : finished, drawn: function () { return drawn; } };
+    }
+    return stormScene;
+  })();
+
+  /* The held pictures not yet drawn: a still waits for them (PipNews.drawn) */
+  var HELD = [];
+  function holdUntilDrawn(promise) {
+    HELD.push(promise);
+    promise.then(function () { HELD.splice(HELD.indexOf(promise), 1); });
+  }
+  function drawn() { return Promise.all(HELD.slice()); }
+  function hasWebGL() { return !!(window.THREE && window.WebGLRenderingContext); }
+
+  /* STORMTRACKER: the globe on the weather wall in BREAKING's red, with its
+     labels over it and TIME OF ARRIVAL listing the marks and the hour the
+     week runs out. Drawn only where three.js and a graphics context are:
+     without them the globe stays dark, and the list and the OUT tag show at
+     their resting places with every row lit. With `animate` it runs 11 s;
+     without it, or with reduced motion, it holds the last moment. */
+  function Stormtracker(props) {
+    var wx = props.weather || SAMPLES.stormtracker.weather;
+    var track = wx.track || { marks: [], out: '' };
+    var marks = track.marks || [];
+    var animate = bool(props.animate, false);
+    var hold = animate && !reducedMotion() ? null : 10.4;
+    var ref = useRef(null);
+    var failed = useState(false);
+    var plain = failed[0] || !hasWebGL();
+    var marksKey = JSON.stringify(marks);
+    useEffect(function () {
+      var root = ref.current;
+      if (!root || !hasWebGL()) { return undefined; }
+      var scene = stormScene(root, { textures: props.textures, marks: marks, hold: hold });
+      if (!scene) { failed[1](true); return undefined; }
+      if (hold !== null) { holdUntilDrawn(scene.ready); }
+      return function () { scene.dispose(); };
+    }, [hold, marksKey, props.textures]);
+    var said = marks.map(function (m) { return m.share + ' by ' + m.when + ', '; }).join('');
+    return weatherWall('pn-k-breaking', WEATHER.tracker, wx.until, [
+      h('div', { key: 'box', className: 'pn-wx-st3-box' },
+        h('div', {
+          ref: ref,
+          className: cx('pn-wx-st3', plain && 'pn-wx-st3-plain'),
+          role: 'img',
+          'aria-label': 'STORMTRACKER: a storm forms at now and grows as it crosses the Gulf, ' + said + 'and the week runs out at ' + track.out
+        },
+        h('canvas', { width: 1680, height: 612 }),
+        h('i', { className: 'pn-wx-st3-flare', 'aria-hidden': 'true' }),
+        h('div', { className: 'pn-wx-st3-label pn-wx-st3-now', 'data-at': 'now' }, h('span', null, WEATHER.start)),
+        marks.map(function (m, i) {
+          return h('div', { key: 'm' + i, className: 'pn-wx-st3-label pn-wx-st3-mark', 'data-at': 'm' + i }, h('span', null, m.share));
+        }),
+        h('div', { className: 'pn-wx-st3-label pn-wx-st3-out', 'data-at': 'end' }, h('span', null, WEATHER.out + ' · ' + track.out)),
+        h('div', { className: 'pn-wx-st3-toa' },
+          h('b', null, WEATHER.arrival),
+          marks.map(function (m, i) { return h('span', { key: 'r' + i, 'data-row': i }, m.when + '   ' + m.share); }),
+          h('span', { 'data-row': 'end', className: 'pn-wx-st3-hit' }, track.out + '   ' + WEATHER.out))))
+    ]);
+  }
+
+  /* WEATHER ALERT, the open of STORM WARNING. Built as ON THE HOUR is: the
+     station clock's bezel and glossy face on the left holding the storm,
+     the words in chrome on the right, on BREAKING NEWS's glass wall in red.
+     Its motion is the stylesheet's (the bolt flashes, WEATHER and ALERT
+     slam in, the frame flashes white as the thunder breaks), under
+     `.pn-anim`; `progress` is the glass wall's. `outro` runs it out over
+     1.4 s, as the hour's outro runs out the ident: no flash, and the open
+     fades to the board underneath. */
+  function AlertOpen(props) {
+    var outro = bool(props.outro, false);
+    function line(word) { return chromeStill(word, 'pn-stinger-line pn-ident-line pn-wx-alert-line'); }
+    return h('div', {
+      className: cx('pn-wx-alert', outro && 'pn-wx-alert-out', 'pn-k-breaking'),
+      style: { position: 'absolute', left: 0, top: 0, width: STAGE_W + 'px', height: STAGE_H + 'px' }
+    },
+      h(Stinger, { words: [], outro: outro, progress: props.progress, animate: bool(props.animate, false) }),
+      h('div', { className: 'pn-wx-alert-dial' },
+        h('div', { className: 'pn-dial' }, h('div', { className: 'pn-dial-face' }, h(WeatherIcon, { sky: 'storm', bolt: 'pn-wx-alert-bolt' })))),
+      h('div', { className: 'pn-ident-words' }, WEATHER.alert.map(line)),
+      outro ? null : h('i', { className: 'pn-wx-flash', 'aria-hidden': 'true' }));
+  }
+
   /* The studio: a dusk skyline through the studio window, drawn on the same
      pixel grid as Clawd, and the anchor desk in front of it. The desk is one
      solid piece that overlaps itself, so nothing behind it shows through at
@@ -1436,26 +2106,37 @@
       parts.push(h('div', { key: 'under', className: 'pn-board-under', style: { position: 'absolute', left: 0, top: 0, width: STAGE_W + 'px', height: STAGE_H + 'px', zIndex: 0 } },
         h(Backdrop, { animate: animate }),
         h(SessionBoard, { sessions: back.sessions, limits: back.limits }),
-        h(Ticker, { items: back.ticker, time: back.clock, animate: animate })));
-      parts.push(scene.open === 'hour'
-        ? h(Ident, { key: 'id-out', outro: true, hour: scene.hour, progress: scene.progress, animate: animate })
-        : h(Stinger, { key: 'st', outro: true, progress: scene.progress, animate: animate }));
+        h(Ticker, { items: back.ticker, time: back.clock, label: back.tickerLabel, animate: animate })));
+      if (scene.open === 'hour') {
+        parts.push(h(Ident, { key: 'id-out', outro: true, hour: scene.hour, progress: scene.progress, animate: animate }));
+      } else if (scene.open === 'alert') {
+        parts.push(h(AlertOpen, { key: 'alert-out', outro: true, progress: scene.progress, animate: animate }));
+      } else {
+        parts.push(h(Stinger, { key: 'st', outro: true, progress: scene.progress, animate: animate }));
+      }
     } else if (mode === 'ident') {
       parts.push(h(Ident, { key: 'id', hour: scene.hour, progress: scene.progress, animate: animate }));
     } else if (mode === 'review') {
       parts.push(h(Backdrop, { key: 'backdrop', animate: animate }));
       parts.push(h(HourReview, { key: 'rv', rows: scene.rows, span: scene.span, label: scene.label, animate: animate }));
+    } else if (mode === 'weather-now' || mode === 'weather-days' || mode === 'stormtracker') {
+      parts.push(h(Backdrop, { key: 'backdrop', animate: animate }));
+      parts.push(mode === 'weather-now' ? h(WeatherNow, { key: 'wx', weather: scene.weather })
+        : mode === 'weather-days' ? h(WeatherDays, { key: 'wx', weather: scene.weather })
+        : h(Stormtracker, { key: 'wx', weather: scene.weather, animate: animate }));
+    } else if (mode === 'alert') {
+      parts.push(h(AlertOpen, { key: 'alert', progress: scene.progress, animate: animate }));
     } else {
       parts.push(h(Backdrop, { key: 'backdrop', animate: animate }));
       parts.push(h(SessionBoard, { key: 'board', sessions: scene.sessions, limits: scene.limits, animate: animate }));
     }
     parts.push(h(TopBand, { key: 'top' }));
-    if (mode !== 'stinger' && mode !== 'outro' && mode !== 'ident') {
+    if (mode !== 'stinger' && mode !== 'outro' && mode !== 'ident' && mode !== 'alert') {
       parts.push(h(Ticker, { key: 'tick', items: scene.ticker, time: scene.clock, label: scene.tickerLabel, offset: scene.tickerOffset, animate: animate }));
     }
     return h('div', {
       key: live ? 'scene-' + live.step : 'scene',
-      className: cx('pn-broadcast', 'pn-mode-' + mode, (mode === 'stinger' || (mode === 'outro' && scene.open !== 'hour')) && 'pn-k-breaking'),
+      className: cx('pn-broadcast', 'pn-mode-' + mode, (mode === 'stinger' || mode === 'alert' || (mode === 'outro' && scene.open !== 'hour')) && 'pn-k-breaking'),
       style: { position: 'absolute', left: 0, top: 0, width: STAGE_W + 'px', height: STAGE_H + 'px' }
     }, parts);
   }
@@ -1957,6 +2638,70 @@
   SAMPLES['hour-outro-1'] = outroOf(SAMPLES['hour-return'], 0.4, 'hour', '15:00');
   SAMPLES['hour-outro-2'] = outroOf(SAMPLES['hour-return'], 0.8, 'hour', '15:00');
 
+  /* KLWD WEATHER: the week on Friday at four, 94 hours in, forecast from its
+     pace so far. At 48% used the clouds gather and it ends near 86%; at 72%
+     it is a storm, which runs out on Sunday at 05:00, passing Friday's close
+     at 78% and Saturday's at 96%. */
+  var WX_SESSIONS = [
+    { id: 'forecast', name: 'Weekly limit forecast (#143)', project: 'pipcast', state: 'working' },
+    { id: 'changelog', name: 'Changelog for 1.3.0', project: 'pipcast', state: 'ready' },
+    { id: 'sync', name: 'Calendar sync retries', project: 'mamatime', state: 'needs-input' }
+  ];
+  var WX_ACTIVITY = 'pipcast: editing packages/director/src/forecast.ts';
+  var WX_HOUR = { lead: 'ON THE HOUR', text: '2 stories since 15:00' };
+  var WX_CLOUDS = {
+    outlook: 'clouds',
+    used: '48%',
+    sky: 'partly',
+    word: 'CLOUDS GATHERING',
+    strap: 'The week ends near 86%',
+    until: 'TO MON 18:00',
+    days: [
+      { name: 'FRI', sky: 'sun', high: '52%', low: '48%' },
+      { name: 'SAT', sky: 'sun', high: '64%', low: '52%' },
+      { name: 'SUN', sky: 'partly', high: '77%', low: '64%' },
+      { name: 'MON', sky: 'partly', high: '86%', low: '77%' }
+    ]
+  };
+  var WX_STORM = {
+    outlook: 'storm',
+    used: '72%',
+    sky: 'storm',
+    word: 'STORM WARNING',
+    strap: 'The week runs out Sun around 05:00',
+    until: 'TO MON 18:00',
+    days: [
+      { name: 'FRI', sky: 'partly', high: '78%', low: '72%' },
+      { name: 'SAT', sky: 'overcast', high: '97%', low: '78%' },
+      { name: 'SUN', sky: 'storm', high: 'OUT', low: '97%', out: true },
+      { name: 'MON', sky: 'storm', high: 'OUT', low: '\u2014', out: true }
+    ],
+    track: { marks: [{ when: 'SAT 00:00', share: '78%', at: 0.23 }, { when: 'SUN 00:00', share: '96%', at: 0.86 }], out: 'SUN 05:00' }
+  };
+  var WX_CLOUDS_LINE = { lead: 'FORECAST', text: 'Clouds gathering: the week ends near 86%, resets Mon 18:00' };
+  var WX_STORM_LINE = { lead: 'FORECAST', text: 'Storm warning: the week runs out Sun around 05:00, resets Mon 18:00' };
+  var WX_WARNING_LINE = { lead: 'STORM WARNING', text: 'in effect until Mon 18:00: at this pace the week runs out Sun around 05:00' };
+  SAMPLES['weather-now'] = { mode: 'weather-now', clock: '16:00', weather: WX_CLOUDS, ticker: [WX_HOUR, WX_CLOUDS_LINE] };
+  SAMPLES['weather-now-storm'] = { mode: 'weather-now', clock: '16:00', weather: WX_STORM, ticker: [WX_HOUR, WX_STORM_LINE] };
+  SAMPLES['weather-days'] = { mode: 'weather-days', clock: '16:00', weather: WX_CLOUDS, ticker: [WX_HOUR, WX_CLOUDS_LINE] };
+  SAMPLES['weather-days-storm'] = { mode: 'weather-days', clock: '16:00', weather: WX_STORM, ticker: [WX_HOUR, WX_STORM_LINE] };
+  /* STORMTRACKER and the board while the warning holds: the crawl's tab reads WARNING and the warning leads it */
+  SAMPLES.stormtracker = { mode: 'stormtracker', clock: '15:12', tickerLabel: 'WARNING', weather: WX_STORM, ticker: [WX_WARNING_LINE, WX_ACTIVITY] };
+  SAMPLES.alert = { mode: 'alert', clock: '15:12', progress: 1 };
+  SAMPLES['board-warning'] = {
+    mode: 'board',
+    clock: '15:31',
+    tickerLabel: 'WARNING',
+    sessions: WX_SESSIONS,
+    limits: [{ kind: 'session', percent: 58 }, { kind: 'week', percent: 72 }],
+    ticker: [WX_WARNING_LINE, WX_ACTIVITY]
+  };
+  SAMPLES['alert-outro-1'] = outroOf(SAMPLES['board-warning'], 0.4, 'alert');
+  /* KLWD WEATHER's pages as the report on the hour airs them, at 15:00 */
+  function inReport(scene) {
+    return Object.assign({}, scene, { clock: '15:00', ticker: TICK_HOUR.slice(0, 1) });
+  }
+
   /* The account's usage limits under the listing: well inside both on the
      board of every state; past each step on the board of two pages, beside
      its page tab; and on the board under an outro */
@@ -2016,6 +2761,26 @@
       { scene: SAMPLES['hour-review'], dur: 10 },
       { scene: outroOf(SAMPLES['hour-return'], 1, 'hour', '15:00'), dur: 1.6 },
       { scene: SAMPLES['hour-return'], dur: 5 }
+    ],
+    /* The same report with a storm in the forecast: KLWD WEATHER follows the review, CURRENT CONDITIONS, EXTENDED FORECAST and STORMTRACKER */
+    'hour-weather': [
+      { scene: SAMPLES['hour-board'], dur: 2 },
+      { scene: SAMPLES['hour-ident-2'], dur: 7.5 },
+      { scene: SAMPLES['hour-desk'], dur: 10 },
+      { scene: SAMPLES['hour-review'], dur: 10 },
+      { scene: inReport(SAMPLES['weather-now-storm']), dur: 10 },
+      { scene: inReport(SAMPLES['weather-days-storm']), dur: 10 },
+      { scene: inReport(SAMPLES.stormtracker), dur: 11 },
+      { scene: outroOf(SAMPLES['hour-return'], 1, 'hour', '15:00'), dur: 1.6 },
+      { scene: SAMPLES['hour-return'], dur: 5 }
+    ],
+    /* STORM WARNING as it airs: WEATHER ALERT, STORMTRACKER, the outro, and back to the board, where the warning holds */
+    warning: [
+      { scene: SAMPLES['board-warning'], dur: 2 },
+      { scene: SAMPLES.alert, dur: 1.9 },
+      { scene: SAMPLES.stormtracker, dur: 11 },
+      { scene: outroOf(SAMPLES['board-warning'], 1, 'alert'), dur: 1.4 },
+      { scene: SAMPLES['board-warning'], dur: 8 }
     ],
     /* A quiet hour: the ident, the desk and the outro, no review */
     'quiet-hour': [
@@ -2366,6 +3131,109 @@
     tremolo(m, end, HZ.D4, 1.8, 0.02);
   }
 
+  /* More of the scale for the alert */
+  HZ.Bb2 = 116.54; HZ.E3 = 164.81; HZ.Cs4 = 277.18; HZ.G4 = 392.0; HZ.E5 = 659.26; HZ.Cs5 = 554.37;
+
+  /* An alert tone: a square tone, clipped short and bright, the way a 90s
+     weather bulletin's attention tones cut through a broadcast */
+  function alertTone(m, t, f, dur, vel) {
+    var ctx = m.ctx;
+    var out = voice(m, 1, 0.2);
+    var o = ctx.createOscillator();
+    o.type = 'square';
+    o.frequency.value = f;
+    var lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.value = 2600;
+    var g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(vel, t + 0.005);
+    g.gain.setValueAtTime(vel, t + dur - 0.015);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(lp);
+    lp.connect(g);
+    g.connect(out);
+    o.start(t);
+    o.stop(t + dur + 0.02);
+  }
+  /* Thunder: a crack of bright noise, then the rumble, low noise that
+     swells once more as it rolls away */
+  function thunder(m, t, dur, vel) {
+    var ctx = m.ctx;
+    var out = voice(m, 1, 0.7);
+    var crackSrc = ctx.createBufferSource();
+    crackSrc.buffer = m.white;
+    var hp = ctx.createBiquadFilter();
+    hp.type = 'highpass';
+    hp.frequency.value = 1800;
+    var cg = ctx.createGain();
+    cg.gain.setValueAtTime(0.0001, t);
+    cg.gain.exponentialRampToValueAtTime(vel * 0.7, t + 0.004);
+    cg.gain.exponentialRampToValueAtTime(0.0001, t + 0.22);
+    crackSrc.connect(hp);
+    hp.connect(cg);
+    cg.connect(out);
+    crackSrc.start(t);
+    crackSrc.stop(t + 0.25);
+    var rumbleSrc = ctx.createBufferSource();
+    rumbleSrc.buffer = m.white;
+    rumbleSrc.loop = true;
+    var lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.Q.value = 0.7;
+    lp.frequency.setValueAtTime(420, t);
+    lp.frequency.exponentialRampToValueAtTime(110, t + dur);
+    var rg = ctx.createGain();
+    rg.gain.setValueAtTime(0.0001, t);
+    rg.gain.exponentialRampToValueAtTime(vel, t + 0.05);
+    rg.gain.exponentialRampToValueAtTime(vel * 0.35, t + dur * 0.3);
+    rg.gain.exponentialRampToValueAtTime(vel * 0.6, t + dur * 0.45);
+    rg.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    rumbleSrc.connect(lp);
+    lp.connect(rg);
+    rg.connect(out);
+    rumbleSrc.start(t);
+    rumbleSrc.stop(t + dur + 0.05);
+  }
+
+  /* WEATHER ALERT, 5.2 s, cut to the open's marks (1.6 s). Three pairs of
+     alert tones, high and low on the logo's top notes (D6, A5), as the bolt
+     flashes (0, 0.3, 0.6 s); a timpani roll and a riser (0.6-0.95 s); the
+     logo's four notes on four hits, as BREAKING NEWS has them, but walking
+     into the storm: D minor as WEATHER slams in, B flat as ALERT does, G
+     minor, and the last on A, the dominant, with its seventh: the chord
+     that doesn't come home, as the warning holds until it lifts. Thunder
+     breaks on it with the boom and the crash and rolls away into the map,
+     where the beat comes in under it. */
+  function scoreWeatherAlert(m, t0) {
+    [0, 0.3, 0.6].forEach(function (x) {
+      alertTone(m, t0 + x, HZ.D6, 0.12, 0.09);
+      alertTone(m, t0 + x + 0.14, HZ.A5, 0.12, 0.09);
+    });
+    var roll = [0.6, 0.66, 0.71, 0.755, 0.795, 0.83, 0.86, 0.885, 0.91, 0.93];
+    riser(m, t0 + 0.6, 0.35, 0.12);
+    roll.forEach(function (x, i) { timpani(m, t0 + x, HZ.D2, 0.06 + 0.24 * i / (roll.length - 1), 0.3); });
+    var hits = [
+      { at: 0.95, logo: HZ.A4, chord: [HZ.D3, HZ.F3, HZ.A3, HZ.D4], drum: HZ.D2, dur: 0.12 },
+      { at: 1.15, logo: HZ.D5, chord: [HZ.F3, HZ.Bb3, HZ.D4], drum: HZ.Bb2, dur: 0.12 },
+      { at: 1.35, logo: HZ.A5, chord: [HZ.G3, HZ.Bb3, HZ.D4, HZ.G4], drum: HZ.G2, dur: 0.14 },
+      { at: 1.6, logo: HZ.D6, chord: [HZ.A2, HZ.E3, HZ.A3, HZ.Cs4, HZ.G4], drum: HZ.A2, dur: 1.3 }
+    ];
+    hits.forEach(function (x, i) {
+      var last = i === hits.length - 1;
+      x.chord.forEach(function (f) { brass(m, t0 + x.at, f, x.dur, last ? 0.15 : 0.065, last ? 1.2 : 0.28); });
+      timpani(m, t0 + x.at, x.drum, last ? 1 : 0.35, last ? 1.4 : 0.6);
+      bell(m, t0 + x.at, x.logo, last ? 1.8 : 0.55, last ? 0.28 : 0.17);
+    });
+    boom(m, t0 + 0.95, 0.2);
+    boom(m, t0 + 1.6, 1);
+    crash(m, t0 + 1.6, 0.45);
+    thunder(m, t0 + 1.6, 3.4, 0.5);
+    brass(m, t0 + 1.6, HZ.A2, 1.3, 0.1, 1.2);
+    tremolo(m, t0 + 1.6, HZ.Cs5, 2.2, 0.045);
+    tremolo(m, t0 + 1.6, HZ.E5, 2.2, 0.035);
+  }
+
   /* The station's time signal: a short pure tone on the logo's top note */
   function pip(m, t, dur, vel) {
     var ctx = m.ctx;
@@ -2483,7 +3351,8 @@
     breaking: { duration: 5.8, score: scoreBreaking },
     'breaking-out': { duration: 3.4, score: scoreBreakingOut },
     hour: { duration: 9.6, score: scoreHour },
-    'hour-out': { duration: 3.6, score: scoreHourOut }
+    'hour-out': { duration: 3.6, score: scoreHourOut },
+    'weather-alert': { duration: 5.2, score: scoreWeatherAlert }
   };
 
   /* Plays a jingle now (or at `when`, on the context's clock). Returns a
@@ -2589,7 +3458,8 @@
         var t = ctx.currentTime + at;
         if (mode === 'stinger') { list.push({ name: 'breaking', at: t }); key = 'beat-minor'; }
         if (mode === 'ident') { list.push({ name: 'hour', at: t }); key = 'beat-major'; }
-        if ((mode === 'desk' || mode === 'review') && key && !bed) { bed = { bed: key, at: t }; }
+        if (mode === 'alert') { list.push({ name: 'weather-alert', at: t }); key = 'beat-minor'; }
+        if ((mode === 'desk' || mode === 'review' || mode === 'weather-now' || mode === 'weather-days' || mode === 'stormtracker') && key && !bed) { bed = { bed: key, at: t }; }
         if (mode === 'outro') {
           list.push({ name: step.scene.open === 'hour' ? 'hour-out' : 'breaking-out', at: t });
           if (bed) { bed.until = t; list.push(bed); }
@@ -2696,12 +3566,21 @@
     NewsDesk: NewsDesk,
     OTSBox: OTSBox,
     HourReview: HourReview,
+    WeatherIcon: WeatherIcon,
+    WeatherNow: WeatherNow,
+    WeatherDays: WeatherDays,
+    Stormtracker: Stormtracker,
+    AlertOpen: AlertOpen,
     Clawd: Clawd,
     Mark: Mark,
     Stage: Stage,
     crawlStep: crawlStep,
     crawlRun: crawlRun,
     crawlSpeed: CRAWL_SPEED,
+    weatherIconMarkup: weatherIconMarkup,
+    drawn: drawn,
+    WEATHER: WEATHER,
+    OUTLOOKS: OUTLOOKS,
     EVENTS: EVENTS,
     STATES: STATES,
     CLAWD_SOURCE: CLAWD_SOURCE,

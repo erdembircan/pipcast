@@ -1,4 +1,4 @@
-// Renders the design system's sounds into plugin/station/sounds: the four
+// Renders the design system's sounds into plugin/station/sounds: the five
 // jingles as AAC (.m4a), and each bed's loop, one turn of the beat, as Apple
 // Lossless in CAF (.caf), since a loop has to come round to the frame. A
 // small local server hands headless Chrome a page that renders each score
@@ -15,7 +15,7 @@ import { fileURLToPath } from 'node:url'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const chrome = process.env.CHROME_BIN ?? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
-const jingles = ['breaking', 'breaking-out', 'hour', 'hour-out']
+const jingles = ['breaking', 'breaking-out', 'hour', 'hour-out', 'weather-alert']
 const beds = ['beat-minor', 'beat-major']
 const names = [...jingles, ...beds]
 const sampleRate = 48000

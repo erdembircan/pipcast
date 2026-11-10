@@ -5,7 +5,7 @@ import { createDirector } from '@pipcast/director'
 import type { Scene } from '@pipcast/design'
 
 import { post, subscribe } from './bridge.ts'
-import { Broadcast, Stage } from './design.ts'
+import { Broadcast, drawn, Stage } from './design.ts'
 
 const STEP_MS = 250
 // How long to wait after the fonts are ready before the picture counts as drawn
@@ -44,11 +44,13 @@ export function stillScene(input: StillInput): Scene {
   return program.scene
 }
 
-// A timer, not animation frames: a page the system counts as hidden gets none
+// A timer, not animation frames: a page the system counts as hidden gets none.
+// STORMTRACKER's globe draws once its pictures have loaded, so the still waits
+// for that as well as for the fonts.
 function settled(): Promise<void> {
   const fonts = (document as { fonts?: { ready: Promise<unknown> } }).fonts
   const ready = fonts === undefined ? Promise.resolve() : fonts.ready.then(() => undefined)
-  return ready.then(() => new Promise<void>((done) => window.setTimeout(done, SETTLE_MS)))
+  return ready.then(drawn).then(() => new Promise<void>((done) => window.setTimeout(done, SETTLE_MS)))
 }
 
 export function Still({ input }: { input: StillInput | null }) {

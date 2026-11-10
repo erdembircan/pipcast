@@ -107,6 +107,17 @@ describe('the live page', () => {
     expect(postMessage).toHaveBeenCalledWith({ type: 'cue', jingle: 'breaking' })
   })
 
+  it('tells the station the weather desk’s memory when the director has some to keep', () => {
+    const memory = { v: 1 as const, resetsAt: 1_800_000_000_000, points: [[1_799_000_000_000, 41.5]] as [number, number][], warnedAt: null }
+    const program: Program = { scene: { mode: 'board' }, key: 'board', sounds: [], reported: null, wantsWindow: false, weather: memory }
+    act(() => root.render(<App reducedMotion={false} createSource={() => ({ tick: () => program })} />))
+    act(() => receive(snapshot([record({})])))
+    act(() => {
+      vi.advanceTimersByTime(250)
+    })
+    expect(postMessage).toHaveBeenCalledWith({ type: 'weather', memory })
+  })
+
   it('does not air a story that landed while the window was hidden, when the window shows before the timer ticks', () => {
     act(() => root.render(<App reducedMotion={false} />))
     const story = { id: 'a:1', kind: 'needs-input', at: Date.now(), command: 'npm install', quote: 'Install dependencies' }

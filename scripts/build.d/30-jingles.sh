@@ -11,7 +11,7 @@ cd "$root"
 
 sounds="plugin/station/sounds"
 stamp="scripts/build.d/jingles.SOURCE"
-files=(breaking.m4a breaking-out.m4a hour.m4a hour-out.m4a beat-minor.caf beat-major.caf)
+files=(breaking.m4a breaking-out.m4a hour.m4a hour-out.m4a weather-alert.m4a beat-minor.caf beat-major.caf)
 
 stale=0
 for file in "${files[@]}"; do

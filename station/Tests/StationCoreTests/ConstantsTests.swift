@@ -46,6 +46,7 @@ import Testing
             "BED_OUT_MS": String(Int(Constants.bedOutMs)),
             "HUSH_MS": String(Int(Constants.hushMs)),
             "MIN_SCALE": String(Constants.minScale),
+            "WEATHER_MAX_POINTS": String(Constants.weatherMaxPoints),
             "STORE_FOLDER": Constants.storeFolder,
             "CLAUDE_BUNDLE_ID": Constants.claudeBundleID,
         ]

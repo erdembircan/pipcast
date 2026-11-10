@@ -24,6 +24,8 @@ export interface PipNewsHandle {
   crawlSpeed: number
   // The design system's example scenes, by name
   samples: Record<string, Scene>
+  // Comes once every STORMTRACKER still on the page has drawn its picture
+  drawn: () => Promise<unknown>
 }
 
 export const PipNews = (window as unknown as { PipNews?: PipNewsHandle }).PipNews as PipNewsHandle
@@ -32,4 +34,4 @@ if (PipNews === undefined) {
   throw new Error('the design system did not load: window.React was missing when its bundle ran')
 }
 
-export const { Broadcast, Stage, Ticker, crawlStep, crawlRun, crawlSpeed, samples } = PipNews
+export const { Broadcast, Stage, Ticker, crawlStep, crawlRun, crawlSpeed, samples, drawn } = PipNews

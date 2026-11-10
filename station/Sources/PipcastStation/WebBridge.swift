@@ -1,4 +1,5 @@
 import AppKit
+import StationCore
 import StationSound
 import WebKit
 
@@ -12,6 +13,8 @@ enum PageMessage {
     case hush
     case reported(at: Double)
     case window(wanted: Bool)
+    /// The weather desk's memory, as the page sends it: a JSON object `WeatherMemory(json:)` accepts.
+    case weather([String: Any])
     case rendered
     case log(level: String, text: String)
 
@@ -36,6 +39,9 @@ enum PageMessage {
         case "window":
             guard let wanted = object["wanted"] as? Bool else { return nil }
             self = .window(wanted: wanted)
+        case "weather":
+            guard let memory = object["memory"] as? [String: Any], WeatherMemory(json: memory) != nil else { return nil }
+            self = .weather(memory)
         case "rendered":
             self = .rendered
         case "log":
@@ -75,6 +81,10 @@ func makeStationWebView(bridge: PageBridge) -> StationWebView {
     let configuration = WKWebViewConfiguration()
     configuration.userContentController.add(bridge, name: "pipcast")
     configuration.preferences.isTextInteractionEnabled = false
+    // STORMTRACKER's globe draws on the pictures of the Earth beside the page, and WebKit refuses a WebGL texture drawn
+    // from a file URL ("The operation is insecure") unless the page may read other files. Tested off screen: without
+    // this `texImage2D` throws a SecurityError, with it the picture uploads.
+    configuration.preferences.setValue(true, forKey: "allowFileAccessFromFileURLs")
     let web = StationWebView(frame: .zero, configuration: configuration)
     web.autoresizingMask = [.width, .height]
     // Nothing flashes white before the page paints.

@@ -1,12 +1,15 @@
 // Builds the page the station shows into plugin/station/web/: index.html,
-// station.js, station.css, fonts/ and vendor/. Nothing is minified, since
-// Anthropic's plugin directory holds code it can't read for a reviewer:
+// station.js, station.css, fonts/, textures/ and vendor/. Nothing is minified,
+// since Anthropic's plugin directory holds code it can't read for a reviewer:
 // station.js is the page's own code, bundled as written, and React comes as its
 // own production files in vendor/, from its npm package with its license.
 // React's is copied unchanged, and React DOM's with two minified names renamed
-// (scripts/lib/react-dom-names.mjs says why). index.html loads them first, and
-// station.js takes React and ReactDOM from the globals they set. The output
-// folder is emptied first, so the build is reproducible.
+// (scripts/lib/react-dom-names.mjs says why). three.js, which STORMTRACKER draws
+// its globe with, comes the same way, its own file unchanged, and the pictures
+// of the Earth it draws on are copied from design/textures into textures/.
+// index.html loads the libraries first, and station.js takes React, ReactDOM and
+// THREE from the globals they set. The output folder is emptied first, so the
+// build is reproducible.
 // With --dev it builds the development build's page instead, from
 // packages/dev/src/main.tsx into .dev/web, for scripts/build-dev.sh: never into
 // plugin/.
@@ -21,6 +24,8 @@ const VENDOR = [
   ['node_modules/react/umd/react.production.min.js', 'vendor/react.production.min.js'],
   ['node_modules/react-dom/umd/react-dom.production.min.js', 'vendor/react-dom.production.min.js'],
   ['node_modules/react/LICENSE', 'vendor/LICENSE-react.txt'],
+  ['node_modules/three/build/three.js', 'vendor/three.js'],
+  ['node_modules/three/LICENSE', 'vendor/LICENSE-three.txt'],
 ]
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
@@ -94,6 +99,7 @@ if (/@import/i.test(styles.code) || /https?:/i.test(styles.code)) {
 writeFileSync(join(out, 'station.css'), styles.code)
 
 cpSync(join(root, 'assets/fonts'), join(out, 'fonts'), { recursive: true })
+cpSync(join(root, 'design/textures'), join(out, 'textures'), { recursive: true })
 cpSync(join(renderer, 'index.html'), join(out, 'index.html'))
 
 mkdirSync(join(out, 'vendor'), { recursive: true })
