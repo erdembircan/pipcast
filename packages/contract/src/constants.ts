@@ -40,7 +40,7 @@ export const STORE_FOLDER = 'Pipcast'
 export const CLAUDE_BUNDLE_ID = 'com.anthropic.claudefordesktop'
 
 // How many readings of the week's usage the forecast keeps: one an hour, so a
-// week is 168, with room for the reset's hour and a daylight-saving one
+// week is 168 or 169, with room to spare (MAX_POINTS in the director says more)
 export const WEATHER_MAX_POINTS = 200
 
 // Text limits

@@ -34,8 +34,10 @@ export const MIN_ELAPSED_MS = 24 * HOUR_MS
 // The first pass needs this many hours of short-gap coverage
 export const MIN_SHORT_HOURS = 6
 // Also WEATHER_MAX_POINTS in the contract and `Constants.weatherMaxPoints` in
-// the station; 7 × 24 = 168 fit, with room for the reset's hour and a
-// daylight-saving one
+// the station. A week's window is 7 × 24 = 168 hours, 169 slots when both of
+// its end hours hold a point; 200 leaves room. At the autumn change of
+// daylight-saving time two real hours share one slot, so that week holds one
+// point fewer; at the spring change the missing hour has no slot at all.
 export const MAX_POINTS = 200
 // Two reset times this close are the same window
 export const RESET_TOLERANCE_MS = 10 * 60_000
