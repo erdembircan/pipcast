@@ -58,6 +58,7 @@
 
   // packages/contract/src/constants.ts
   var STORY_FRESH_MS = 12e4;
+  var WEATHER_MAX_POINTS = 700;
 
   // packages/contract/src/format.ts
   var MINUS = "\u2212";
@@ -124,6 +125,17 @@
     const hours = Math.floor(minutes / 60);
     return rest === 0 ? `${hours} h` : `${hours} h ${rest} min`;
   }
+  var DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  function dayTime(ms) {
+    return `${DAYS[new Date(ms).getDay()]} ${clock(ms)}`;
+  }
+  function aroundTime(ms) {
+    const hour = hourStart(ms + 30 * 6e4);
+    return `${DAYS[new Date(hour).getDay()]} around ${hourLabel(hour)}`;
+  }
+  function dayName(ms) {
+    return (DAYS[new Date(ms).getDay()] ?? "").toUpperCase();
+  }
 
   // packages/contract/src/copy.ts
   var OPTION_WORDS = {
@@ -145,7 +157,9 @@
     stillWaiting: "STILL WAITING",
     ready: "READY",
     onTheHour: "ON THE HOUR",
-    onTheDesk: "ON THE DESK"
+    onTheDesk: "ON THE DESK",
+    forecast: "FORECAST",
+    stormWarning: "STORM WARNING"
   };
   function storyLine(kind, title) {
     switch (kind) {
@@ -268,6 +282,45 @@
         return row.added + row.removed > 0 ? figure(row.added, row.removed) : "No changes this hour";
     }
   }
+  var OUTLOOK_WORDS = {
+    clear: "CLEAR SKIES",
+    clouds: "CLOUDS GATHERING",
+    storm: "STORM WARNING"
+  };
+  var WEATHER = {
+    // The crawl's tab while a storm warning holds
+    warningLabel: "WARNING",
+    // KLWD WEATHER's pages
+    now: "CURRENT CONDITIONS",
+    days: "EXTENDED FORECAST",
+    tracker: "STORMTRACKER",
+    // Over CURRENT CONDITIONS's figure
+    week: "THE WEEK",
+    // STORMTRACKER's list, and the pin where the storm forms
+    arrival: "TIME OF ARRIVAL",
+    start: "NOW",
+    // A day the week has run out by, and a low on a day after it
+    out: "OUT",
+    none: "\u2014",
+    // WEATHER ALERT's open
+    alert: ["WEATHER", "ALERT"]
+  };
+  function forecastLine(outlook, end, resets) {
+    const sky = outlook === "clear" ? "Clear skies" : "Clouds gathering";
+    return `${sky}: the week ends near ${end}%, resets ${resets}`;
+  }
+  function forecastStartsLine(starts) {
+    return `The week\u2019s outlook starts ${starts}`;
+  }
+  function warningLine(runsOut, resets) {
+    return `in effect until ${resets}: at this pace the week runs out ${runsOut}`;
+  }
+  function weatherStrap(outlook, end, runsOut) {
+    return outlook === "storm" ? `The week runs out ${runsOut}` : `The week ends near ${end}%`;
+  }
+  function untilTab(resets) {
+    return `TO ${resets.toUpperCase()}`;
+  }
 
   // packages/contract/src/validate.ts
   var LIMIT_KINDS = ["session", "week"];
@@ -284,11 +337,11 @@
     if (!isObject(value)) {
       return null;
     }
-    const { kind, percentUsed, resetsAt, at } = value;
-    if (!isLimitKind(kind) || !isNumber(percentUsed) || !isNumber(at)) {
+    const { kind, percentUsed, resetsAt, at: at2 } = value;
+    if (!isLimitKind(kind) || !isNumber(percentUsed) || !isNumber(at2)) {
       return null;
     }
-    return { kind, percentUsed, resetsAt: isNumber(resetsAt) ? resetsAt : null, at };
+    return { kind, percentUsed, resetsAt: isNumber(resetsAt) ? resetsAt : null, at: at2 };
   }
   function parseList(value, parseItem) {
     if (!Array.isArray(value)) {
@@ -306,6 +359,34 @@
   function parseLimits(value) {
     return parseList(value, parseLimit);
   }
+  function parseWeather(value) {
+    if (!isObject(value) || value.v !== 1) {
+      return null;
+    }
+    const points = [];
+    if (Array.isArray(value.points)) {
+      for (const entry of value.points) {
+        if (!Array.isArray(entry) || entry.length !== 2) {
+          continue;
+        }
+        const [at2, percent] = entry;
+        if (!isNumber(at2) || !isNumber(percent)) {
+          continue;
+        }
+        const last = points[points.length - 1];
+        if (last !== void 0 && at2 <= last[0]) {
+          continue;
+        }
+        points.push([at2, Math.min(100, Math.max(0, percent))]);
+      }
+    }
+    return {
+      v: 1,
+      resetsAt: isNumber(value.resetsAt) ? value.resetsAt : null,
+      points: points.slice(-WEATHER_MAX_POINTS),
+      warnedAt: isNumber(value.warnedAt) ? value.warnedAt : null
+    };
+  }
 
   // packages/director/src/timing.ts
   var STINGER_MS = 1900;
@@ -315,6 +396,10 @@
   var REVIEW_MS = 1e4;
   var REVIEW_ROWS = 4;
   var HOUR_OUTRO_MS = 1600;
+  var WEATHER_PAGE_MS = 1e4;
+  var STORMTRACKER_MS = 11e3;
+  var ALERT_MS = 1900;
+  var ALERT_OUTRO_MS = 1400;
   var REDUCED_OPENER_MS = 1e3;
   var GAP_MS = 2e3;
   var IDENT_LEAD_MS = 5e3;
@@ -322,6 +407,8 @@
   var AFTER_REPORT_MS = 10 * 6e4;
   var LAST_REPORT_KEEP_MS = 24 * 60 * 6e4;
   var HOUR_MS = 60 * 6e4;
+  var FORECAST_EVERY_MS = 15 * 6e4;
+  var WARNING_EVERY_MS = 60 * 6e4;
 
   // packages/director/src/story.ts
   function newest(stories, kind) {
@@ -472,6 +559,20 @@
     }
     return meters;
   }
+  function newestWeekReading(sessions, now) {
+    let newest2;
+    for (const session of sessions) {
+      for (const limit of parseLimits(session.limits)) {
+        if (limit.kind === "week" && (newest2 === void 0 || limit.at > newest2.at)) {
+          newest2 = limit;
+        }
+      }
+    }
+    if (newest2 === void 0 || newest2.resetsAt === null || newest2.resetsAt <= now) {
+      return null;
+    }
+    return { percent: Math.min(100, Math.max(0, newest2.percentUsed)), resetsAt: newest2.resetsAt, at: newest2.at };
+  }
 
   // packages/director/src/listing.ts
   var STATE_ORDER = {
@@ -481,13 +582,13 @@
     working: 3
   };
   function waitingSince(session) {
-    let at;
+    let at2;
     for (const story of session.stories) {
-      if (story.kind === session.state && (at === void 0 || story.at >= at)) {
-        at = story.at;
+      if (story.kind === session.state && (at2 === void 0 || story.at >= at2)) {
+        at2 = story.at;
       }
     }
-    return at ?? session.stateAt;
+    return at2 ?? session.stateAt;
   }
   function inListingOrder(sessions) {
     return [...sessions].sort((a, b) => {
@@ -499,6 +600,515 @@
       }
       return b.stateAt - a.stateAt;
     });
+  }
+
+  // packages/director/src/forecast.ts
+  var WEEK_MS = 7 * 24 * HOUR_MS;
+  var DAY_MS = 24 * HOUR_MS;
+  var QUARTER_MS = 15 * 6e4;
+  var SHORT_GAP_MS = 2 * HOUR_MS;
+  var HALF_LIFE_MS = 72 * HOUR_MS;
+  var PROFILE_PRIOR_HOURS = 1;
+  var PRIOR_CV = 0.6;
+  var PRIOR_WEIGHT = 2;
+  var MIN_ELAPSED_MS = 24 * HOUR_MS;
+  var MIN_SHORT_HOURS = 6;
+  var MAX_POINTS = 700;
+  var RESET_TOLERANCE_MS = 10 * 6e4;
+  var STORM_CHANCE = 0.5;
+  var CLOUDS_END = 70;
+  function clamp(value, low, high) {
+    return Math.min(high, Math.max(low, value));
+  }
+  function at(array, index) {
+    return array[index] ?? 0;
+  }
+  function recordReading(history, reading) {
+    if (reading.at < reading.resetsAt - WEEK_MS || reading.at > reading.resetsAt) {
+      return history;
+    }
+    let percent = clamp(reading.percent, 0, 100);
+    const last = history === null ? void 0 : history.points[history.points.length - 1];
+    if (history === null || Math.abs(reading.resetsAt - history.resetsAt) > RESET_TOLERANCE_MS || last !== void 0 && last[1] > percent + 0.5) {
+      return { resetsAt: reading.resetsAt, points: [[reading.at, percent]] };
+    }
+    let points = history.points;
+    if (last !== void 0) {
+      if (reading.at <= last[0]) {
+        return history;
+      }
+      percent = Math.max(percent, last[1]);
+      if (Math.floor(reading.at / QUARTER_MS) === Math.floor(last[0] / QUARTER_MS)) {
+        points = points.slice(0, -1);
+      }
+    }
+    points = [...points, [reading.at, percent]];
+    return { resetsAt: history.resetsAt, points: points.slice(-MAX_POINTS) };
+  }
+  function lnGamma(z) {
+    const c = [
+      0.9999999999998099,
+      676.5203681218851,
+      -1259.1392167224028,
+      771.3234287776531,
+      -176.6150291621406,
+      12.507343278686905,
+      -0.13857109526572012,
+      9984369578019572e-21,
+      15056327351493116e-23
+    ];
+    if (z < 0.5) {
+      return Math.log(Math.PI / Math.sin(Math.PI * z)) - lnGamma(1 - z);
+    }
+    const x0 = z - 1;
+    let sum = at(c, 0);
+    for (let i = 1; i < 9; i += 1) {
+      sum += at(c, i) / (x0 + i);
+    }
+    const t = x0 + 7.5;
+    return 0.5 * Math.log(2 * Math.PI) + (x0 + 0.5) * Math.log(t) - t + Math.log(sum);
+  }
+  function gammaP(a, x) {
+    if (x <= 0) {
+      return 0;
+    }
+    if (x < a + 1) {
+      let sum = 1 / a;
+      let term = sum;
+      let ap = a;
+      for (let n = 0; n < 500; n += 1) {
+        ap += 1;
+        term *= x / ap;
+        sum += term;
+        if (Math.abs(term) < Math.abs(sum) * 1e-12) {
+          break;
+        }
+      }
+      return sum * Math.exp(-x + a * Math.log(x) - lnGamma(a));
+    }
+    let b = x + 1 - a;
+    let c = 1 / 1e-300;
+    let d = 1 / b;
+    let h = d;
+    for (let i = 1; i < 500; i += 1) {
+      const an = -i * (i - a);
+      b += 2;
+      d = an * d + b;
+      if (Math.abs(d) < 1e-300) {
+        d = 1e-300;
+      }
+      c = b + an / c;
+      if (Math.abs(c) < 1e-300) {
+        c = 1e-300;
+      }
+      d = 1 / d;
+      const delta = d * c;
+      h *= delta;
+      if (Math.abs(delta - 1) < 1e-12) {
+        break;
+      }
+    }
+    return 1 - Math.exp(-x + a * Math.log(x) - lnGamma(a)) * h;
+  }
+  function gammaMedian(shape, scale) {
+    const mean = shape * scale;
+    let low = 0;
+    let high = mean + 12 * Math.sqrt(shape) * scale;
+    for (let step = 0; step < 60; step += 1) {
+      const middle = (low + high) / 2;
+      if (gammaP(shape, middle / scale) < 0.5) {
+        low = middle;
+      } else {
+        high = middle;
+      }
+    }
+    return (low + high) / 2;
+  }
+  function closesBetween(now, resetsAt) {
+    const closes = [];
+    for (let date = new Date(now); ; ) {
+      date = new Date(date.getFullYear(), date.getMonth(), date.getDate() + 1);
+      if (date.getTime() >= resetsAt) {
+        break;
+      }
+      closes.push(date.getTime());
+    }
+    closes.push(resetsAt);
+    return closes.slice(0, 7);
+  }
+  function profile(x, e, hods, binStarts, now, weighted) {
+    const sums = new Array(24).fill(0);
+    const exposures = new Array(24).fill(0);
+    let total = 0;
+    let observed = 0;
+    for (let j = 0; j < x.length; j += 1) {
+      const exposure = at(e, j);
+      if (!(exposure > 0)) {
+        continue;
+      }
+      const k = at(hods, j);
+      const weight = weighted ? Math.pow(0.5, (now - (at(binStarts, j) + HOUR_MS / 2)) / HALF_LIFE_MS) : 1;
+      sums[k] = at(sums, k) + weight * at(x, j);
+      exposures[k] = at(exposures, k) + weight * exposure;
+      total += weight * at(x, j);
+      observed += weight * exposure;
+    }
+    const overall = observed > 0 ? total / observed : 0;
+    const rates = sums.map((sum, k) => (sum + PROFILE_PRIOR_HOURS * overall) / (at(exposures, k) + PROFILE_PRIOR_HOURS));
+    return rates.map((rate, k) => 0.25 * at(rates, (k + 23) % 24) + 0.5 * rate + 0.25 * at(rates, (k + 1) % 24));
+  }
+  function forecastWeek(history, usedNow, now) {
+    const reset = history.resetsAt;
+    const start = reset - WEEK_MS;
+    if (now >= reset) {
+      return null;
+    }
+    const used = clamp(usedNow, 0, 100);
+    const base = { computedAt: now, resetsAt: reset, used };
+    if (now - start < MIN_ELAPSED_MS) {
+      return { ...base, outlook: "early", startsAt: start + MIN_ELAPSED_MS, end: used, chance: 0, runsOutAt: null, days: [] };
+    }
+    const closes = closesBetween(now, reset);
+    if (used >= 100) {
+      return {
+        ...base,
+        outlook: "storm",
+        startsAt: null,
+        end: used,
+        chance: 1,
+        runsOutAt: now,
+        days: closes.map((closesAt) => ({ closesAt, low: used, high: used }))
+      };
+    }
+    const points = history.points.filter(([when]) => when >= start && when <= now);
+    const lastAt = points.length > 0 ? points[points.length - 1][0] : now;
+    const origin = hourStart(start);
+    const bins = Math.max(0, Math.ceil((lastAt - origin) / HOUR_MS));
+    const binStarts = [];
+    const hods = [];
+    const exposure = [];
+    for (let j = 0; j < bins; j += 1) {
+      const binStart = origin + j * HOUR_MS;
+      binStarts.push(binStart);
+      hods.push(new Date(binStart).getHours());
+      exposure.push(Math.max(0, (Math.min(lastAt, binStart + HOUR_MS) - Math.max(start, binStart)) / HOUR_MS));
+    }
+    function spread(into, from, to, amount, weightOf) {
+      if (amount <= 0 || to <= from) {
+        return;
+      }
+      const first2 = Math.floor((from - origin) / HOUR_MS);
+      const last = Math.ceil((to - origin) / HOUR_MS) - 1;
+      const parts = [];
+      let total = 0;
+      for (let j = first2; j <= last; j += 1) {
+        const overlap = (Math.min(to, at(binStarts, j) + HOUR_MS) - Math.max(from, at(binStarts, j))) / HOUR_MS;
+        if (overlap > 0) {
+          const weight = overlap * weightOf(at(hods, j));
+          parts.push([j, weight]);
+          total += weight;
+        }
+      }
+      if (total <= 0) {
+        total = 0;
+        for (const part of parts) {
+          const j = part[0];
+          part[1] = (Math.min(to, at(binStarts, j) + HOUR_MS) - Math.max(from, at(binStarts, j))) / HOUR_MS;
+          total += part[1];
+        }
+      }
+      for (const [j, weight] of parts) {
+        into[j] = at(into, j) + amount * weight / total;
+      }
+    }
+    const intervals = [];
+    let previous = [start, 0];
+    for (const point of points) {
+      intervals.push([previous[0], point[0], Math.max(0, point[1] - previous[1])]);
+      previous = point;
+    }
+    const short = new Array(bins).fill(0);
+    const shortExposure = new Array(bins).fill(0);
+    for (const [from, to, amount] of intervals) {
+      if (to - from > SHORT_GAP_MS) {
+        continue;
+      }
+      spread(short, from, to, amount, () => 1);
+      for (let j = Math.floor((from - origin) / HOUR_MS); j <= Math.ceil((to - origin) / HOUR_MS) - 1; j += 1) {
+        const overlap = (Math.min(to, at(binStarts, j) + HOUR_MS) - Math.max(from, at(binStarts, j))) / HOUR_MS;
+        if (overlap > 0) {
+          shortExposure[j] = at(shortExposure, j) + overlap;
+        }
+      }
+    }
+    const covered = shortExposure.reduce((sum, hours) => sum + hours, 0);
+    const first = covered >= MIN_SHORT_HOURS ? profile(short, shortExposure, hods, binStarts, now, false) : null;
+    const hourly = new Array(bins).fill(0);
+    for (const [from, to, amount] of intervals) {
+      const byProfile = to - from > SHORT_GAP_MS && first !== null;
+      spread(hourly, from, to, amount, byProfile ? (hod) => at(first, hod) : () => 1);
+    }
+    const rates = profile(hourly, exposure, hods, binStarts, now, true);
+    const daily = rates.reduce((sum, rate) => sum + rate, 0);
+    const expected = [];
+    let cum = used;
+    let closeIndex = 0;
+    for (let t = hourStart(now); t < reset; t += HOUR_MS) {
+      const lo = Math.max(now, t);
+      const hi = Math.min(reset, t + HOUR_MS);
+      if (hi <= lo) {
+        continue;
+      }
+      const rate = at(rates, new Date(t).getHours());
+      while (closeIndex < closes.length && at(closes, closeIndex) <= hi) {
+        expected.push(cum + rate * (at(closes, closeIndex) - lo) / HOUR_MS);
+        closeIndex += 1;
+      }
+      cum += rate * (hi - lo) / HOUR_MS;
+    }
+    const remaining = cum - used;
+    const wholeDays = Math.floor((lastAt - start) / DAY_MS);
+    const totals = [];
+    for (let i = 0; i < wholeDays; i += 1) {
+      let total = 0;
+      for (let j = 0; j < bins; j += 1) {
+        const middle = at(binStarts, j) + HOUR_MS / 2;
+        if (middle > lastAt - (i + 1) * DAY_MS && middle <= lastAt - i * DAY_MS) {
+          total += at(hourly, j);
+        }
+      }
+      totals.push(total);
+    }
+    const dayMean = totals.length > 0 ? totals.reduce((sum, value) => sum + value, 0) / totals.length : daily;
+    const dayVariance = totals.length >= 2 ? totals.reduce((sum, value) => sum + (value - dayMean) ** 2, 0) / (totals.length - 1) : 0;
+    const prior = (PRIOR_CV * Math.max(daily, dayMean)) ** 2;
+    const degrees = Math.max(0, wholeDays - 1);
+    const variance = (degrees * dayVariance + PRIOR_WEIGHT * prior) / (degrees + PRIOR_WEIGHT);
+    const daysLeft = (reset - now) / DAY_MS;
+    const spreadOfRemaining = daysLeft * variance + daysLeft * daysLeft * variance / Math.max(1, wholeDays);
+    const need = 100 - used;
+    let chance;
+    let median;
+    if (remaining <= 0) {
+      chance = 0;
+      median = 0;
+    } else if (spreadOfRemaining <= 0) {
+      chance = remaining >= need ? 1 : 0;
+      median = remaining;
+    } else {
+      const shape = remaining * remaining / spreadOfRemaining;
+      const scale2 = spreadOfRemaining / remaining;
+      chance = 1 - gammaP(shape, need / scale2);
+      median = gammaMedian(shape, scale2);
+    }
+    const scale = remaining > 0 ? median / remaining : 0;
+    const days = [];
+    let low = used;
+    closes.forEach((closesAt, i) => {
+      const high = used + (at(expected, i) - used) * scale;
+      days.push({ closesAt, low, high });
+      low = high;
+    });
+    const end = used + median;
+    let runsOutAt = null;
+    let central = used;
+    for (let t = hourStart(now); t < reset && runsOutAt === null; t += HOUR_MS) {
+      const lo = Math.max(now, t);
+      const hi = Math.min(reset, t + HOUR_MS);
+      if (hi <= lo) {
+        continue;
+      }
+      const rate = at(rates, new Date(t).getHours()) * scale;
+      const add = rate * (hi - lo) / HOUR_MS;
+      if (central < 100 && central + add >= 100) {
+        runsOutAt = lo + (100 - central) / rate * HOUR_MS;
+      }
+      central += add;
+    }
+    const outlook = chance >= STORM_CHANCE ? "storm" : end >= CLOUDS_END ? "clouds" : "clear";
+    if (outlook !== "storm") {
+      runsOutAt = null;
+    } else if (runsOutAt === null) {
+      runsOutAt = reset;
+    }
+    return { ...base, outlook, startsAt: null, end, chance, runsOutAt, days };
+  }
+
+  // packages/director/src/weather.ts
+  function createWeatherDesk(options = {}) {
+    const forecastFn = options.forecastWeek ?? forecastWeek;
+    let loaded = false;
+    let history = null;
+    let warnedAt = null;
+    let dirty = false;
+    let reading = null;
+    let cached = null;
+    let computedAt = 0;
+    let computedReadingAt = null;
+    function compute(now) {
+      if (reading === null || history === null) {
+        cached = null;
+        computedReadingAt = null;
+        return;
+      }
+      cached = forecastFn(history, reading.percent, now);
+      computedAt = now;
+      computedReadingAt = reading.at;
+    }
+    function stormy() {
+      return cached !== null && cached.outlook === "storm";
+    }
+    function keep(next) {
+      if (next === history) {
+        return;
+      }
+      const before = history;
+      history = next;
+      if (next === null || before === null) {
+        dirty = true;
+        return;
+      }
+      const last = next.points[next.points.length - 1];
+      const was = before.points[before.points.length - 1];
+      if (next.points.length !== before.points.length || next.resetsAt !== before.resetsAt || last !== void 0 && was !== void 0 && last[1] < was[1]) {
+        dirty = true;
+      }
+    }
+    function tick(snapshot, now) {
+      if (!loaded) {
+        loaded = true;
+        const memory = parseWeather(snapshot.weather);
+        if (memory !== null) {
+          history = memory.resetsAt === null ? null : { resetsAt: memory.resetsAt, points: memory.points };
+          warnedAt = memory.warnedAt;
+        }
+      }
+      reading = newestWeekReading(snapshot.sessions, now);
+      if (reading === null) {
+        cached = null;
+        computedReadingAt = null;
+        return;
+      }
+      keep(recordReading(history, reading));
+      if (history === null) {
+        cached = null;
+        return;
+      }
+      const held = cached;
+      if (computedReadingAt === null) {
+        compute(now);
+      } else if (held !== null && Math.abs(held.resetsAt - reading.resetsAt) > RESET_TOLERANCE_MS) {
+        compute(now);
+      } else if (reading.at > computedReadingAt && (held === null || now - computedAt >= FORECAST_EVERY_MS || reading.percent - held.used >= 1)) {
+        compute(now);
+      } else if (held !== null && held.outlook === "early" && held.startsAt !== null && now >= held.startsAt) {
+        compute(now);
+      } else if (held !== null && now >= held.resetsAt) {
+        cached = null;
+      }
+    }
+    return {
+      tick,
+      forecast: () => cached,
+      refresh(now) {
+        compute(now);
+        return cached;
+      },
+      due(now, busy) {
+        if (busy || warnedAt !== null && now - warnedAt < WARNING_EVERY_MS || !stormy()) {
+          return false;
+        }
+        if (warnedAt !== null && cached !== null && cached.computedAt < warnedAt + WARNING_EVERY_MS) {
+          compute(now);
+          return stormy();
+        }
+        return true;
+      },
+      markDue(now) {
+        warnedAt = now;
+        dirty = true;
+      },
+      memory() {
+        if (!dirty) {
+          return null;
+        }
+        dirty = false;
+        return { v: 1, resetsAt: history?.resetsAt ?? null, points: history?.points ?? [], warnedAt };
+      }
+    };
+  }
+  function skyFor(share2) {
+    if (share2 >= 100) {
+      return "storm";
+    }
+    if (share2 >= 90) {
+      return "overcast";
+    }
+    return share2 >= 70 ? "partly" : "sun";
+  }
+  function hasOutlook(forecast) {
+    return forecast !== null && forecast.outlook !== "early";
+  }
+  function share(value) {
+    return `${Math.min(99, Math.round(value))}%`;
+  }
+  function weatherScene(forecast, now) {
+    const { outlook, end, runsOutAt } = forecast;
+    const runsOut = runsOutAt === null ? "" : aroundTime(runsOutAt);
+    const scene = {
+      outlook,
+      used: `${Math.round(forecast.used)}%`,
+      sky: outlook === "storm" ? "storm" : skyFor(end),
+      word: OUTLOOK_WORDS[outlook],
+      strap: weatherStrap(outlook, Math.min(99, Math.round(end)), runsOut),
+      until: untilTab(dayTime(forecast.resetsAt)),
+      days: forecast.days.map((day) => {
+        const out = day.high >= 100;
+        return {
+          // The day that closes, which for the reset's own day is the day before the reset
+          name: dayName(day.closesAt - 1),
+          sky: skyFor(day.high),
+          high: out ? WEATHER.out : share(day.high),
+          low: day.low >= 100 ? WEATHER.none : share(day.low),
+          ...out ? { out } : {}
+        };
+      })
+    };
+    if (outlook === "storm" && runsOutAt !== null) {
+      const marks = forecast.days.filter((day) => day.closesAt > now && day.closesAt < runsOutAt).slice(-2).map((day) => ({
+        when: dayTime(day.closesAt).toUpperCase(),
+        share: share(day.high),
+        at: (day.closesAt - now) / (runsOutAt - now)
+      }));
+      scene.track = { marks, out: dayTime(hourStart(runsOutAt + 30 * 6e4)).toUpperCase() };
+    }
+    return scene;
+  }
+  function warningSegment(forecast, now, reducedMotion) {
+    const weather = weatherScene(forecast, now);
+    const opener = {
+      role: "opener",
+      length: reducedMotion ? REDUCED_OPENER_MS : ALERT_MS,
+      cue: "weather-alert",
+      scene: ({ now: at2 }) => ({ mode: "alert", clock: clock(at2), progress: 1 })
+    };
+    const tracker = {
+      role: "weather",
+      length: STORMTRACKER_MS,
+      bed: "beat-minor",
+      scene: ({ now: at2, ticker }) => ({ mode: "stormtracker", clock: clock(at2), ticker, weather })
+    };
+    const outro = {
+      role: "outro",
+      length: ALERT_OUTRO_MS,
+      cue: "breaking-out",
+      scene: ({ now: at2, board }) => ({ mode: "outro", open: "alert", clock: clock(at2), progress: 1, board })
+    };
+    const id = `warning:${now}`;
+    if (reducedMotion) {
+      return { id, steps: [opener, tracker], endCue: "breaking-out" };
+    }
+    return { id, steps: [opener, tracker, outro] };
   }
 
   // packages/director/src/board.ts
@@ -526,6 +1136,20 @@
   function titleOf(snapshot, sessionId) {
     return snapshot.sessions.find((session) => session.id === sessionId)?.title;
   }
+  function forecastItem(forecast) {
+    if (forecast.outlook === "early") {
+      return forecast.startsAt === null ? void 0 : { lead: LEAD.forecast, text: forecastStartsLine(dayTime(forecast.startsAt)), key: "forecast" };
+    }
+    if (!hasOutlook(forecast) || forecast.outlook === "storm") {
+      return void 0;
+    }
+    return {
+      lead: LEAD.forecast,
+      text: forecastLine(forecast.outlook, Math.min(99, Math.round(forecast.end)), dayTime(forecast.resetsAt)),
+      key: "forecast",
+      sky: skyFor(forecast.end)
+    };
+  }
   function boardTicker(now, snapshot, state, extra = {}) {
     const leads = extra.lead === void 0 ? [] : [extra.lead];
     let comingUp = 0;
@@ -536,7 +1160,7 @@
       if (item.kind === "hour") {
         leads.push({ lead: LEAD.comingUp, text: reportComingUp(hourLabel(item.hour)), key: `coming:hour:${item.hour}` });
         comingUp += 1;
-      } else if (!movedOn(snapshot, item.sessionId, item.story)) {
+      } else if (item.kind === "story" && !movedOn(snapshot, item.sessionId, item.story)) {
         const title = titleOf(snapshot, item.sessionId);
         if (title !== void 0) {
           leads.push({ lead: LEAD.comingUp, text: storyLine(item.story.kind, title), key: `coming:${item.story.id}` });
@@ -560,12 +1184,12 @@
     for (const session of snapshot.sessions) {
       if (session.id !== extra.skipWaitingFor && (session.state === "needs-input" || session.state === "error")) {
         const newest2 = newestOfKind(session, session.state);
-        const at = waitingSince(session);
+        const at2 = waitingSince(session);
         waiting.push({
-          at,
+          at: at2,
           item: {
             lead: LEAD.stillWaiting,
-            text: stillWaitingLine(session.state, session.title, wholeMinutes(now - at)),
+            text: stillWaitingLine(session.state, session.title, wholeMinutes(now - at2)),
             key: `waiting:${newest2?.id ?? session.id}`
           }
         });
@@ -608,8 +1232,20 @@
     }
     const onAir = snapshot.sessions.length;
     const working = snapshot.sessions.filter((session) => session.state === "working");
-    const items = leads.slice(0, MAX_TICKER - 1);
+    const { forecast } = state;
+    const outlook = forecast === null ? void 0 : forecastItem(forecast);
+    if (forecast !== null && forecast.outlook === "storm" && forecast.runsOutAt !== null) {
+      leads.unshift({
+        lead: LEAD.stormWarning,
+        text: warningLine(aroundTime(forecast.runsOutAt), dayTime(forecast.resetsAt)),
+        key: "warning"
+      });
+    }
+    const items = leads.slice(0, MAX_TICKER - (outlook === void 0 ? 1 : 2));
     items.push({ lead: LEAD.onTheDesk, text: deskLine(working.length, onAir), key: "desk" });
+    if (outlook !== void 0) {
+      items.push(outlook);
+    }
     const activity = working.flatMap((session) => {
       const latest = session.activity[session.activity.length - 1];
       return latest === void 0 ? [] : [
@@ -638,13 +1274,16 @@
       state: session.state
     }));
     const scene = { mode: "board", clock: clock(now), sessions, ticker: boardTicker(now, snapshot, state) };
+    if (state.forecast !== null && state.forecast.outlook === "storm") {
+      scene.tickerLabel = WEATHER.warningLabel;
+    }
     const limits = limitMeters(snapshot.sessions, now);
     return limits.length === 0 ? scene : { ...scene, limits };
   }
 
   // packages/director/src/hour.ts
-  function inWindow(at, from, hour) {
-    return at >= from && at < hour;
+  function inWindow(at2, from, hour) {
+    return at2 >= from && at2 < hour;
   }
   function newestKindIn(session, from, hour) {
     let found;
@@ -695,7 +1334,7 @@
     }
     return row;
   }
-  function hourReport(hour, from, snapshot, now, reducedMotion) {
+  function hourReport(hour, from, snapshot, now, reducedMotion, forecast = null) {
     const sessions = snapshot.sessions;
     const counts = { needsInput: 0, ready: 0, complete: 0, error: 0 };
     let stories = 0;
@@ -718,16 +1357,16 @@
       role: "opener",
       length: reducedMotion ? REDUCED_OPENER_MS : IDENT_MS,
       cue: "hour",
-      scene: ({ now: at }) => ({ mode: "ident", clock: clock(at), hour: label, progress: 1 })
+      scene: ({ now: at2 }) => ({ mode: "ident", clock: clock(at2), hour: label, progress: 1 })
     };
     const desk = {
       role: "desk",
       length: DESK_MS,
       // The beat, in D major, comes in with the desk and plays on under the review
       bed: "beat-major",
-      scene: ({ now: at, ticker: ticker2 }) => ({
+      scene: ({ now: at2, ticker: ticker2 }) => ({
         mode: "desk",
-        clock: clock(at),
+        clock: clock(at2),
         act: "talk",
         event: {
           kind: "hourly",
@@ -745,29 +1384,43 @@
       // A desk's 10 s for each page of four rows
       length: REVIEW_MS * Math.max(1, Math.ceil(rows.length / REVIEW_ROWS)),
       bed: "beat-major",
-      scene: ({ now: at, ticker: ticker2 }) => ({
+      scene: ({ now: at2, ticker: ticker2 }) => ({
         mode: "review",
-        clock: clock(at),
+        clock: clock(at2),
         span: reviewSpan(clock(from), label),
         rows,
         ticker: ticker2
       })
     };
+    const weatherSteps = [];
+    if (hasOutlook(forecast)) {
+      const weather = weatherScene(forecast, now);
+      const page = (mode, length) => ({
+        role: "weather",
+        length,
+        bed: "beat-major",
+        scene: ({ now: at2, ticker: ticker2 }) => ({ mode, clock: clock(at2), ticker: ticker2, weather })
+      });
+      weatherSteps.push(page("weather-now", WEATHER_PAGE_MS), page("weather-days", WEATHER_PAGE_MS));
+      if (forecast.outlook === "storm") {
+        weatherSteps.push(page("stormtracker", STORMTRACKER_MS));
+      }
+    }
     const outro = {
       role: "outro",
       length: HOUR_OUTRO_MS,
       cue: "hour-out",
-      scene: ({ now: at, board }) => ({
+      scene: ({ now: at2, board }) => ({
         mode: "outro",
         open: "hour",
         hour: label,
-        clock: clock(at),
+        clock: clock(at2),
         progress: 1,
         board
       })
     };
     const id = `hour:${hour}`;
-    const shown = stories > 0 ? [ident, desk, review] : [ident, desk];
+    const shown = [...stories > 0 ? [ident, desk, review] : [ident, desk], ...weatherSteps];
     const ticker = (live) => ({
       lead: {
         lead: LEAD.onTheHour,
@@ -789,6 +1442,7 @@
   // packages/director/src/director.ts
   function createDirector(options = {}) {
     const reducedMotion = options.reducedMotion === true;
+    const desk = createWeatherDesk(options.forecastWeek === void 0 ? {} : { forecastWeek: options.forecastWeek });
     let initialized = false;
     const seen = /* @__PURE__ */ new Set();
     const queue = [];
@@ -805,15 +1459,20 @@
         carried,
         onAirStoryId: story === null ? null : story.id,
         lastReport,
-        reportEndedAt
+        reportEndedAt,
+        forecast: desk.forecast()
       };
     }
     function dropWaitingStories() {
+      let warning = false;
       for (let index = queue.length - 1; index >= 0; index -= 1) {
-        if (queue[index]?.kind === "story") {
+        const kind = queue[index]?.kind;
+        if (kind === "story" || kind === "warning") {
+          warning = warning || kind === "warning";
           queue.splice(index, 1);
         }
       }
+      return warning;
     }
     function dropMovedOnStories(snapshot) {
       for (let index = queue.length - 1; index >= 0; index -= 1) {
@@ -834,15 +1493,15 @@
     function tick({ now, snapshot }) {
       const sounds = [];
       let reported = null;
-      function end(at, normally) {
+      function end(at2, normally) {
         if (onAir === null) {
           return;
         }
         const { item, segment, bed } = onAir;
         if (item.kind === "story") {
-          carried.set(item.story.id, { endedAt: at, kind: item.story.kind, sessionId: item.sessionId });
-        } else {
-          reportEndedAt = at;
+          carried.set(item.story.id, { endedAt: at2, kind: item.story.kind, sessionId: item.sessionId });
+        } else if (item.kind === "hour") {
+          reportEndedAt = at2;
         }
         if (!normally) {
           sounds.push({ type: "hush" });
@@ -855,14 +1514,14 @@
           }
         }
         onAir = null;
-        lastEnded = at;
+        lastEnded = at2;
       }
-      function enter(index, at) {
+      function enter(index, at2) {
         if (onAir === null) {
           return;
         }
         onAir.index = index;
-        onAir.stepStartedAt = at;
+        onAir.stepStartedAt = at2;
         const step2 = onAir.segment.steps[index];
         if (step2?.cue !== void 0) {
           sounds.push({ type: "cue", jingle: step2.cue });
@@ -915,10 +1574,21 @@
           queue.push({ kind: "hour", hour: next });
           scheduledHour = next;
         }
+        desk.tick(snapshot, now);
+        const warningWaits = queue.some((item) => item.kind === "warning") || onAir?.item.kind === "warning";
+        if (desk.due(now, warningWaits)) {
+          if (visible) {
+            queue.push({ kind: "warning" });
+          } else {
+            desk.markDue(now);
+          }
+        }
       }
       if (!visible) {
         end(now, false);
-        dropWaitingStories();
+        if (dropWaitingStories()) {
+          desk.markDue(now);
+        }
       } else if (!windowOut) {
         end(now, false);
         dropMovedOnStories(snapshot);
@@ -960,12 +1630,19 @@
                 continue;
               }
               onAir = { item, segment: storySegment(item.sessionId, item.story, snapshot, reducedMotion), index: 0, stepStartedAt: now, bed: void 0 };
+            } else if (item.kind === "warning") {
+              const forecast = desk.forecast();
+              if (!hasOutlook(forecast) || forecast.outlook !== "storm") {
+                continue;
+              }
+              onAir = { item, segment: warningSegment(forecast, now, reducedMotion), index: 0, stepStartedAt: now, bed: void 0 };
+              desk.markDue(now);
             } else {
               if (snapshot === null) {
                 continue;
               }
               const from = lastReport !== null && lastReport.hour < item.hour ? lastReport.hour : item.hour - HOUR_MS;
-              const report = hourReport(item.hour, from, snapshot, now, reducedMotion);
+              const report = hourReport(item.hour, from, snapshot, now, reducedMotion, desk.refresh(now));
               onAir = { item, segment: report.segment, index: 0, stepStartedAt: now, bed: void 0 };
               lastReport = { hour: item.hour, stories: report.stories };
               reportEndedAt = null;
@@ -977,17 +1654,19 @@
       }
       const due = queue.length > 0 && (lastEnded === null || now - lastEnded >= GAP_MS);
       const wantsWindow = visible && (onAir !== null || due || windowOut && queue.length > 0);
+      const weather = desk.memory();
       const board = boardScene(now, snapshot, boardState());
       const current = onAir;
       const step = current?.segment.steps[current.index];
       if (current === null || step === void 0) {
-        return { scene: board, key: "board", sounds, reported, wantsWindow };
+        return { scene: board, key: "board", sounds, reported, wantsWindow, weather };
       }
       const extra = current.segment.ticker;
-      const atDesk = step.role === "desk" || step.role === "review";
+      const atDesk = step.role === "desk" || step.role === "review" || step.role === "weather";
       const ticker = atDesk && snapshot !== null && extra !== void 0 ? boardTicker(now, snapshot, boardState(), extra(snapshot)) : board.ticker ?? [];
-      const scene = step.scene({ now, ticker, board });
-      return { scene, key: `${current.segment.id}:${current.index}`, sounds, reported, wantsWindow };
+      const made = step.scene({ now, ticker, board });
+      const scene = board.tickerLabel !== void 0 && made.tickerLabel === void 0 ? { ...made, tickerLabel: board.tickerLabel } : made;
+      return { scene, key: `${current.segment.id}:${current.index}`, sounds, reported, wantsWindow, weather };
     }
     return { tick };
   }
@@ -1495,13 +2174,23 @@
       var body = document.createElement("span");
       body.className = "pn-ticker-item";
       var lead = typeof it === "string" ? null : it.lead;
+      var sky = typeof it === "string" ? null : it.sky;
+      var words = body;
+      if (sky) {
+        body.className += " pn-wx-tick";
+        var holder = document.createElement("span");
+        holder.innerHTML = weatherIconMarkup(sky, nextWx());
+        body.appendChild(holder.firstChild);
+        words = document.createElement("span");
+        body.appendChild(words);
+      }
       if (lead) {
         var tag = document.createElement("span");
         tag.className = "pn-ticker-lead";
         tag.textContent = lead + " ";
-        body.appendChild(tag);
+        words.appendChild(tag);
       }
-      body.appendChild(document.createTextNode(typeof it === "string" ? it : it.text || ""));
+      words.appendChild(document.createTextNode(typeof it === "string" ? it : it.text || ""));
       var sep = document.createElement("i");
       sep.className = "pn-ticker-sep";
       unit.appendChild(body);
@@ -1679,12 +2368,9 @@
         items.forEach(function(it, i) {
           var lead = typeof it === "string" ? null : it.lead;
           var text = typeof it === "string" ? it : it.text;
-          out.push(h(
-            "span",
-            { key: prefix + "i" + i, className: "pn-ticker-item" },
-            lead ? h("span", { className: "pn-ticker-lead" }, lead + " ") : null,
-            text
-          ));
+          var sky = typeof it === "string" ? null : it.sky;
+          var leadSpan = lead ? h("span", { className: "pn-ticker-lead" }, lead + " ") : null;
+          out.push(sky ? h("span", { key: prefix + "i" + i, className: "pn-ticker-item pn-wx-tick" }, h(WeatherIcon, { sky }), h("span", null, leadSpan, text)) : h("span", { key: prefix + "i" + i, className: "pn-ticker-item" }, leadSpan, text));
           out.push(h("i", { key: prefix + "s" + i, className: "pn-ticker-sep" }));
         });
         return out;
@@ -1949,11 +2635,11 @@
       });
       return out;
     }
-    function motionFrames(at2, dur) {
+    function motionFrames(at3, dur) {
       var n = Math.max(1, Math.round(dur * MOTION_RATE));
       var frames = [];
       for (var i = 0; i <= n; i++) {
-        var style = at2(i / n);
+        var style = at3(i / n);
         var frame = { offset: i / n };
         for (var name in style) {
           if (Object.prototype.hasOwnProperty.call(style, name)) {
@@ -2008,9 +2694,9 @@
         }
         var running = [];
         pieces.forEach(function(el) {
-          var at2 = latest.current[el.getAttribute("data-pn-move")];
-          if (at2) {
-            running.push(el.animate(motionFrames(at2, dur), { duration: dur * 1e3, fill: "both" }));
+          var at3 = latest.current[el.getAttribute("data-pn-move")];
+          if (at3) {
+            running.push(el.animate(motionFrames(at3, dur), { duration: dur * 1e3, fill: "both" }));
           }
         });
         return function() {
@@ -2021,8 +2707,8 @@
       }, [animate, dur, run]);
       return {
         ref,
-        move: function(id, at2) {
-          moves[id] = at2;
+        move: function(id, at3) {
+          moves[id] = at3;
           return id;
         }
       };
@@ -2033,13 +2719,13 @@
           "div",
           { key: "wall", className: "pn-stinger-wall", "aria-hidden": "true" },
           PANES.map(function(g, i) {
-            var at2 = function(x) {
+            var at3 = function(x) {
               var front = back ? 1450 - 1700 * wave(x) : -250 + 1700 * wave(x);
               var lit = clamp01(1 - Math.abs(g.d - front) / 260);
               var settled2 = g.d < front ? 0.08 + 0.3 * g.v : 0.04;
               return { opacity: round4(Math.max(0.75 * lit, settled2)) };
             };
-            return h("div", { key: i, className: "pn-stinger-pane", "data-pn-move": move("pane-" + i, at2), style: { left: g.x + "px", top: g.y + "px", opacity: at2(p).opacity } });
+            return h("div", { key: i, className: "pn-stinger-pane", "data-pn-move": move("pane-" + i, at3), style: { left: g.x + "px", top: g.y + "px", opacity: at3(p).opacity } });
           })
         ),
         h("div", { key: "glass", className: "pn-stinger-glass" })
@@ -2175,8 +2861,8 @@
       for (var i = 0; i < 60; i++) {
         marks.push(h("i", { key: i, className: i % 5 === 0 ? "pn-dial-hour" : "pn-dial-min", style: { transform: "rotate(" + i * 6 + "deg)" } }));
       }
-      function piece(cls, id, at2) {
-        return h("i", { className: cls, "data-pn-move": c.move(id, at2), style: at2(c.x) });
+      function piece(cls, id, at3) {
+        return h("i", { className: cls, "data-pn-move": c.move(id, at3), style: at3(c.x) });
       }
       return h(
         "div",
@@ -2284,6 +2970,713 @@
           ];
         })),
         pageTab(view, "pn-review-tab")
+      );
+    }
+    var WEATHER2 = {
+      now: "CURRENT CONDITIONS",
+      days: "EXTENDED FORECAST",
+      tracker: "STORMTRACKER",
+      week: "THE WEEK",
+      arrival: "TIME OF ARRIVAL",
+      start: "NOW",
+      out: "OUT",
+      alert: ["WEATHER", "ALERT"]
+    };
+    var OUTLOOKS = {
+      clear: { word: "CLEAR SKIES", k: "pn-k-ready" },
+      clouds: { word: "CLOUDS GATHERING", k: "pn-k-working" },
+      storm: { word: "STORM WARNING", k: "pn-k-breaking" }
+    };
+    var SKY_WORDS = { sun: "Sunny", partly: "Partly cloudy", overcast: "Overcast", storm: "Storms" };
+    function skyStop(offset, name, hex, opacity) {
+      return '<stop offset="' + offset + '" style="stop-color: var(--' + name + ", " + hex + ");" + (opacity === void 0 ? "" : " stop-opacity: " + opacity + ";") + '"></stop>';
+    }
+    function skyDefs(uid) {
+      return '<defs><radialGradient id="pn-wx-sun-g-' + uid + '" cx="0.42" cy="0.38" r="0.7">' + skyStop(0, "gold-hi", "#ffe08a") + skyStop(0.55, "gold", "#f2b630") + skyStop(1, "gold-lo", "#b97d0c") + '</radialGradient><linearGradient id="pn-wx-ray-g-' + uid + '" x1="0" y1="0" x2="0" y2="1">' + skyStop(0, "gold-hi", "#ffe08a") + skyStop(1, "gold", "#f2b630") + '</linearGradient><linearGradient id="pn-wx-cloud-g-' + uid + '" gradientUnits="userSpaceOnUse" x1="0" y1="22" x2="0" y2="86">' + skyStop(0, "chrome-hi", "#ffffff") + skyStop(0.55, "chrome", "#c9d3e3") + skyStop(1, "chrome-lo", "#7f90b3") + '</linearGradient><linearGradient id="pn-wx-cloud-d-' + uid + '" gradientUnits="userSpaceOnUse" x1="0" y1="22" x2="0" y2="86">' + skyStop(0, "chrome-lo", "#7f90b3") + skyStop(1, "morning-tower", "#4a5878") + '</linearGradient><linearGradient id="pn-wx-bolt-g-' + uid + '" x1="0" y1="0" x2="0" y2="1">' + skyStop(0, "gold-hi", "#ffe08a") + skyStop(0.5, "gold", "#f2b630") + skyStop(1, "gold-lo", "#b97d0c") + "</linearGradient></defs>";
+    }
+    function tenth(n) {
+      return Math.round(n * 10) / 10;
+    }
+    function skySun(uid) {
+      var rays = "";
+      for (var k = 0; k < 10; k++) {
+        var a = (k * 36 - 90) * Math.PI / 180;
+        var tip = [60 + 47 * Math.cos(a), 50 + 47 * Math.sin(a)];
+        var n = [Math.cos(a + Math.PI / 2), Math.sin(a + Math.PI / 2)];
+        var base = [60 + 31 * Math.cos(a), 50 + 31 * Math.sin(a)];
+        var p1 = [base[0] + 7 * n[0], base[1] + 7 * n[1]];
+        var p2 = [base[0] - 7 * n[0], base[1] - 7 * n[1]];
+        rays += '<polygon points="' + tenth(tip[0]) + "," + tenth(tip[1]) + " " + tenth(p1[0]) + "," + tenth(p1[1]) + " " + tenth(p2[0]) + "," + tenth(p2[1]) + '" fill="url(#pn-wx-ray-g-' + uid + ')" style="stroke: var(--gold-lo, #b97d0c); stroke-width: 2; stroke-linejoin: round;"></polygon>';
+      }
+      return rays + '<circle cx="60" cy="50" r="27" fill="url(#pn-wx-sun-g-' + uid + ')" style="stroke: var(--gold-lo, #b97d0c); stroke-width: 2.5;"></circle><ellipse cx="51" cy="39" rx="12" ry="7" style="fill: var(--chrome-hi, #ffffff); opacity: 0.6;"></ellipse>';
+    }
+    function skyCloud(dark, uid) {
+      function shapes(attrs) {
+        return '<circle cx="40" cy="60" r="18" ' + attrs + '></circle><circle cx="62" cy="46" r="25" ' + attrs + '></circle><circle cx="86" cy="60" r="17" ' + attrs + '></circle><rect x="24" y="58" width="80" height="26" rx="13" ' + attrs + "></rect>";
+      }
+      var rim = dark ? "var(--chrome, #c9d3e3)" : "var(--chrome-lo, #7f90b3)";
+      return shapes('style="fill: ' + rim + "; stroke: " + rim + '; stroke-width: 7;"') + shapes('fill="url(#pn-wx-' + (dark ? "cloud-d" : "cloud-g") + "-" + uid + ')"') + '<ellipse cx="57" cy="34" rx="15" ry="6" style="fill: var(--chrome-hi, #ffffff); opacity: ' + (dark ? 0.3 : 0.7) + ';"></ellipse>';
+    }
+    function skyBolt(uid) {
+      return '<polygon points="66,52 46,80 59,80 50,102 82,68 67,68 76,52" fill="url(#pn-wx-bolt-g-' + uid + ')" style="stroke: var(--on-gold, #2a1800); stroke-width: 2.5; stroke-linejoin: round;"></polygon>';
+    }
+    function skyShapes(sky, uid, boltClass) {
+      if (sky === "partly") {
+        return '<g transform="translate(-6 -6) scale(0.8)">' + skySun(uid) + '</g><g transform="translate(16 16) scale(0.84)">' + skyCloud(false, uid) + "</g>";
+      }
+      if (sky === "overcast") {
+        return '<g transform="translate(-12 -10) scale(0.86)">' + skyCloud(true, uid) + '</g><g transform="translate(14 12) scale(0.86)">' + skyCloud(false, uid) + "</g>";
+      }
+      if (sky === "storm") {
+        return (boltClass ? '<g class="' + boltClass + '">' + skyBolt(uid) + "</g>" : skyBolt(uid)) + '<g transform="translate(0 -12)">' + skyCloud(true, uid) + "</g>";
+      }
+      return skySun(uid);
+    }
+    var wxSeq = 0;
+    function nextWx() {
+      wxSeq += 1;
+      return wxSeq;
+    }
+    function weatherIconMarkup(sky, uid) {
+      var kind = SKY_WORDS[sky] ? sky : "sun";
+      return '<svg class="pn-wx-icon" viewBox="0 0 120 100" role="img" aria-label="' + SKY_WORDS[kind] + '">' + skyDefs(uid) + skyShapes(kind, uid) + "</svg>";
+    }
+    function WeatherIcon(props) {
+      var uid = useState3(nextWx)[0];
+      var sky = SKY_WORDS[props.sky] ? props.sky : "sun";
+      var size = num(props.size, 0);
+      return h("svg", {
+        className: cx("pn-wx-icon", props.className),
+        viewBox: "0 0 120 100",
+        role: "img",
+        "aria-label": SKY_WORDS[sky],
+        style: size ? { width: size + "px", height: size * 100 / 120 + "px" } : void 0,
+        dangerouslySetInnerHTML: { __html: skyDefs(uid) + skyShapes(sky, uid, props.bolt) }
+      });
+    }
+    function weatherWall(k, head, until, content) {
+      return h(
+        "div",
+        { className: cx("pn-wx-wall", k) },
+        h.apply(null, [
+          "div",
+          { className: "pn-wx-screen" },
+          h("div", { className: "pn-wx-head" }, h("span", null, head), until ? h("small", null, until) : null)
+        ].concat(content))
+      );
+    }
+    function noMove() {
+      return void 0;
+    }
+    function chromeStill(word, className) {
+      return chromeLine(word, className, 1, function() {
+        return {};
+      }, function() {
+        return 1;
+      }, noMove);
+    }
+    function WeatherNow(props) {
+      var wx = props.weather || SAMPLES["weather-now"].weather;
+      return weatherWall("pn-k-hourly", WEATHER2.now, null, [
+        h(
+          "div",
+          { key: "now", className: "pn-wx-now" },
+          h(WeatherIcon, { sky: wx.sky, className: "pn-wx-now-sky" }),
+          h(
+            "div",
+            { className: "pn-wx-now-read" },
+            h("span", { className: "pn-wx-now-cap" }, WEATHER2.week),
+            chromeStill(wx.used, "pn-stinger-line pn-wx-now-temp"),
+            h("span", { className: "pn-wx-now-word" }, wx.word)
+          )
+        )
+      ]);
+    }
+    function WeatherDays(props) {
+      var wx = props.weather || SAMPLES["weather-days"].weather;
+      var days = wx.days || [];
+      var outlook = OUTLOOKS[wx.outlook] || OUTLOOKS.clear;
+      return weatherWall("pn-k-hourly", WEATHER2.days, wx.until, [
+        h(
+          "div",
+          { key: "days", className: cx("pn-wx-days", days.length > 5 && "pn-wx-days--7") },
+          days.map(function(d, i) {
+            return h(
+              "div",
+              { key: i, className: cx("pn-wx-day", d.out && "pn-wx-out") },
+              h("span", { className: "pn-wx-day-name" }, d.name),
+              h(WeatherIcon, { sky: d.sky }),
+              h("span", { className: "pn-wx-hi" }, d.high),
+              h("span", { className: "pn-wx-lo" }, d.low)
+            );
+          })
+        ),
+        h(
+          "div",
+          { key: "strip", className: "pn-wx-strip" },
+          h("span", { className: cx("pn-wx-tag", outlook.k) }, h("span", null, wx.word || outlook.word)),
+          h("span", null, wx.strap)
+        )
+      ]);
+    }
+    var stormScene = /* @__PURE__ */ (function() {
+      var DUR = 11, T_DIVE = 2.6, T_LAND = 9;
+      var START = [25.4, -95.4], END = [27.95, -82.75];
+      function rad(d) {
+        return d * Math.PI / 180;
+      }
+      function clamp2(x, a, b) {
+        return Math.max(a, Math.min(b, x));
+      }
+      function smooth(x) {
+        x = clamp2(x, 0, 1);
+        return x * x * (3 - 2 * x);
+      }
+      function geo(lat, lon, r, out) {
+        var p = rad(lon + 180), t = rad(90 - lat);
+        out = out || new THREE.Vector3();
+        return out.set(-r * Math.sin(t) * Math.cos(p), r * Math.cos(t), r * Math.sin(t) * Math.sin(p));
+      }
+      function trackLatLon(s) {
+        return [START[0] + (END[0] - START[0]) * s + Math.sin(s * Math.PI) * 1.4, START[1] + (END[1] - START[1]) * s];
+      }
+      function trackAt(s, r, out) {
+        var ll = trackLatLon(s);
+        return geo(ll[0], ll[1], r, out);
+      }
+      function progress(t) {
+        var u = clamp2((t - T_DIVE) / (T_LAND - T_DIVE), 0, 1);
+        return Math.pow(u, 1.6);
+      }
+      function tokens(el) {
+        var cs = getComputedStyle(el);
+        function c(n, f) {
+          var v = cs.getPropertyValue("--" + n).trim();
+          return new THREE.Color(v || f);
+        }
+        return {
+          breaking: c("breaking", "#c4170e"),
+          breakingHi: c("breaking-hi", "#ff5a4f"),
+          gold: c("gold", "#f2b630"),
+          goldHi: c("gold-hi", "#ffe08a"),
+          ready: c("ready", "#2fb44a"),
+          readyHi: c("ready-hi", "#8af59b"),
+          glow: c("row-hi", "#5b8be8"),
+          edge: c("bar-edge", "#8fb0ff"),
+          deep: c("studio-deep", "#061233"),
+          white: c("chrome-hi", "#ffffff")
+        };
+      }
+      function spiralCanvas(size) {
+        var c = document.createElement("canvas");
+        c.width = c.height = size;
+        var g = c.getContext("2d");
+        var cx2 = size / 2, rnd = seeded(41), S2 = size / 512;
+        function blob(x, y, s, a) {
+          var gr = g.createRadialGradient(x, y, 0, x, y, s);
+          gr.addColorStop(0, "rgba(255,255,255," + a + ")");
+          gr.addColorStop(0.6, "rgba(255,255,255," + a * 0.5 + ")");
+          gr.addColorStop(1, "rgba(255,255,255,0)");
+          g.fillStyle = gr;
+          g.beginPath();
+          g.arc(x, y, s, 0, Math.PI * 2);
+          g.fill();
+        }
+        g.globalCompositeOperation = "lighter";
+        var i, k;
+        for (i = 0; i < 260; i++) {
+          var a0 = rnd() * Math.PI * 2, r0 = (0.07 + Math.pow(rnd(), 1.5) * 0.13) * size;
+          blob(cx2 + Math.cos(a0) * r0, cx2 + Math.sin(a0) * r0, (14 + rnd() * 16) * S2, 0.22);
+        }
+        for (i = 0; i < 160; i++) {
+          var a1 = rnd() * Math.PI * 2, r1 = (0.16 + rnd() * 0.3) * size;
+          blob(cx2 + Math.cos(a1) * r1, cx2 + Math.sin(a1) * r1, (22 + rnd() * 26) * S2, 0.05);
+        }
+        for (k = 0; k < 4; k++) {
+          var off = k * Math.PI / 2 + 0.3;
+          for (i = 0; i < 520; i++) {
+            var t = i / 520;
+            if (rnd() < Math.pow(t, 1.6) * 0.7) {
+              continue;
+            }
+            var ang = off + t * 1.25 * Math.PI;
+            var r = (0.17 + t * 0.32) * size;
+            var w = (1 - t * 0.55) * 34 * S2;
+            var jit = (rnd() - 0.5) * w;
+            blob(cx2 + Math.cos(ang) * (r + jit), cx2 + Math.sin(ang) * (r + jit), (8 + rnd() * 14) * S2 * (1 - t * 0.45), 0.13);
+          }
+        }
+        g.globalCompositeOperation = "destination-out";
+        var eg = g.createRadialGradient(cx2, cx2, 0, cx2, cx2, size * 0.055);
+        eg.addColorStop(0, "rgba(0,0,0,1)");
+        eg.addColorStop(0.7, "rgba(0,0,0,0.9)");
+        eg.addColorStop(1, "rgba(0,0,0,0)");
+        g.fillStyle = eg;
+        g.fillRect(0, 0, size, size);
+        return c;
+      }
+      function dotCanvas(size, ring) {
+        var c = document.createElement("canvas");
+        c.width = c.height = size;
+        var g = c.getContext("2d"), h2 = size / 2;
+        g.fillStyle = "#ffffff";
+        g.strokeStyle = ring ? "#ffffff" : "#061233";
+        g.lineWidth = size * (ring ? 0.16 : 0.12);
+        g.beginPath();
+        g.arc(h2, h2, h2 * 0.55, 0, Math.PI * 2);
+        if (ring) {
+          g.stroke();
+        } else {
+          g.fill();
+          g.stroke();
+        }
+        return c;
+      }
+      function stormScene2(root, options) {
+        var canvas = root.querySelector("canvas");
+        if (!canvas) {
+          return null;
+        }
+        var W = root.offsetWidth || 840, H = root.offsetHeight || 306;
+        var hold = typeof options.hold === "number" ? options.hold : null;
+        var marks = options.marks || [];
+        var base = options.textures || "textures/";
+        var renderer;
+        try {
+          renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false, preserveDrawingBuffer: hold !== null });
+        } catch (e) {
+          return null;
+        }
+        var K = tokens(root);
+        renderer.setPixelRatio(2);
+        renderer.setSize(W, H, false);
+        renderer.outputEncoding = THREE.sRGBEncoding;
+        var scene = new THREE.Scene();
+        scene.background = new THREE.Color(66314);
+        var camera = new THREE.PerspectiveCamera(38, W / H, 1e-3, 200);
+        var loader = new THREE.TextureLoader();
+        loader.setCrossOrigin("anonymous");
+        var pending = 4;
+        var running = true;
+        var drawn3 = false;
+        var settle = null;
+        var finished = new Promise(function(resolve) {
+          settle = resolve;
+        });
+        function loaded() {
+          pending -= 1;
+          if (hold !== null && pending <= 0 && running) {
+            draw(hold);
+            drawn3 = true;
+            settle();
+          }
+        }
+        function tex(url, srgb) {
+          var t = loader.load(url, loaded, void 0, loaded);
+          if (srgb) {
+            t.encoding = THREE.sRGBEncoding;
+          }
+          t.anisotropy = 8;
+          return t;
+        }
+        var earthMap = tex(base + "earth.jpg", true);
+        var cloudMap = tex(base + "clouds.jpg", false);
+        var topoMap = tex(base + "topo.jpg", false);
+        var waterMap = tex(base + "water.jpg", false);
+        var sunDir = geo(14, -70, 1).normalize().add(new THREE.Vector3(0, 0.25, 0)).normalize();
+        var sun = new THREE.DirectionalLight(16777215, 1.35);
+        sun.position.copy(sunDir).multiplyScalar(10);
+        scene.add(sun);
+        scene.add(new THREE.AmbientLight(3818598, 0.6));
+        var starGeo = new THREE.BufferGeometry(), sp = [], rs = seeded(9);
+        for (var i = 0; i < 1800; i++) {
+          var v = new THREE.Vector3(rs() * 2 - 1, rs() * 2 - 1, rs() * 2 - 1).normalize().multiplyScalar(80);
+          sp.push(v.x, v.y, v.z);
+        }
+        starGeo.setAttribute("position", new THREE.Float32BufferAttribute(sp, 3));
+        scene.add(new THREE.Points(starGeo, new THREE.PointsMaterial({ color: 13226979, size: 1.3, sizeAttenuation: false })));
+        var earth = new THREE.Mesh(new THREE.SphereGeometry(1, 160, 120), new THREE.MeshPhongMaterial({
+          map: earthMap,
+          bumpMap: topoMap,
+          bumpScale: 0.012,
+          specularMap: waterMap,
+          specular: new THREE.Color(1581102),
+          shininess: 40
+        }));
+        scene.add(earth);
+        var cloudShadow = new THREE.Mesh(new THREE.SphereGeometry(1.0015, 160, 120), new THREE.MeshBasicMaterial({
+          color: K.deep,
+          alphaMap: cloudMap,
+          transparent: true,
+          opacity: 0.42,
+          depthWrite: false
+        }));
+        scene.add(cloudShadow);
+        var clouds = new THREE.Mesh(new THREE.SphereGeometry(1.007, 160, 120), new THREE.MeshLambertMaterial({
+          color: 16777215,
+          alphaMap: cloudMap,
+          transparent: true,
+          opacity: 0.92,
+          depthWrite: false
+        }));
+        scene.add(clouds);
+        var atmos = new THREE.Mesh(new THREE.SphereGeometry(1.045, 96, 72), new THREE.ShaderMaterial({
+          uniforms: { glow: { value: K.glow }, edge: { value: K.edge } },
+          vertexShader: "varying vec3 vN; varying vec3 vV; void main(){ vec4 mv = modelViewMatrix * vec4(position,1.0); vN = normalize(normalMatrix * normal); vV = normalize(-mv.xyz); gl_Position = projectionMatrix * mv; }",
+          fragmentShader: "uniform vec3 glow; uniform vec3 edge; varying vec3 vN; varying vec3 vV; void main(){ float f = pow(1.0 - abs(dot(vN, vV)), 3.0); gl_FragColor = vec4(mix(glow, edge, f) * f * 1.6, f); }",
+          side: THREE.BackSide,
+          blending: THREE.AdditiveBlending,
+          transparent: true,
+          depthWrite: false
+        }));
+        scene.add(atmos);
+        var N = 160, tp = [];
+        for (i = 0; i <= N; i++) {
+          var p = trackAt(i / N, 1.0022);
+          tp.push(p.x, p.y, p.z);
+        }
+        var trackGeo = new THREE.BufferGeometry();
+        trackGeo.setAttribute("position", new THREE.Float32BufferAttribute(tp, 3));
+        var ahead = new THREE.Line(trackGeo, new THREE.LineDashedMaterial({ color: 16777215, dashSize: 6e-3, gapSize: 4e-3, transparent: true, opacity: 0.9 }));
+        ahead.computeLineDistances();
+        scene.add(ahead);
+        var behind = new THREE.Line(trackGeo.clone(), new THREE.LineBasicMaterial({ color: K.goldHi }));
+        scene.add(behind);
+        function sprite(canvasEl, size) {
+          var s = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(canvasEl), depthWrite: false, sizeAttenuation: true }));
+          s.scale.set(size, size, 1);
+          scene.add(s);
+          return s;
+        }
+        var dotC = dotCanvas(64, false);
+        [0].concat(marks.map(function(m) {
+          return m.at;
+        })).forEach(function(m) {
+          sprite(dotC, 0.016).position.copy(trackAt(m, 1.003));
+        });
+        var target = sprite(dotCanvas(64, true), 0.03);
+        target.material.color = K.breakingHi;
+        target.position.copy(trackAt(1, 1.003));
+        target.renderOrder = -1;
+        var SW = 120, swPos = [], swCol = [], swIdx = [];
+        for (i = 0; i <= SW; i++) {
+          var s0 = i / SW, a = trackAt(Math.max(0, s0 - 4e-3), 1.0012), b = trackAt(Math.min(1, s0 + 4e-3), 1.0012);
+          var c0 = trackAt(s0, 1.0012), n0 = c0.clone().normalize();
+          var side = new THREE.Vector3().subVectors(b, a).cross(n0).normalize().multiplyScalar(0.012 + 0.05 * s0);
+          swPos.push(c0.x + side.x, c0.y + side.y, c0.z + side.z, c0.x - side.x, c0.y - side.y, c0.z - side.z);
+          var col = new THREE.Color().copy(K.ready).lerp(K.goldHi, s0 * 0.7);
+          swCol.push(col.r, col.g, col.b, col.r, col.g, col.b);
+          if (i < SW) {
+            var k = i * 2;
+            swIdx.push(k, k + 1, k + 2, k + 1, k + 3, k + 2);
+          }
+        }
+        var swGeo = new THREE.BufferGeometry();
+        swGeo.setAttribute("position", new THREE.Float32BufferAttribute(swPos, 3));
+        swGeo.setAttribute("color", new THREE.Float32BufferAttribute(swCol, 3));
+        swGeo.setIndex(swIdx);
+        var swath = new THREE.Mesh(swGeo, new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.38, depthWrite: false, side: THREE.DoubleSide }));
+        scene.add(swath);
+        var spiralTex = new THREE.CanvasTexture(spiralCanvas(512));
+        cloudMap.wrapS = cloudMap.wrapT = THREE.RepeatWrapping;
+        var discMat = new THREE.ShaderMaterial({
+          uniforms: {
+            map: { value: spiralTex },
+            detail: { value: cloudMap },
+            uH: { value: 0.09 },
+            uFlash: { value: 0 },
+            uAlpha: { value: 1 },
+            uSun: { value: sunDir.clone() },
+            cLit: { value: K.white },
+            cShade: { value: new THREE.Color(9411510) }
+          },
+          vertexShader: [
+            "uniform sampler2D map; uniform sampler2D detail; uniform float uH;",
+            "varying vec2 vUv; varying float vD; varying vec3 vPos;",
+            "void main(){",
+            "  vUv = uv;",
+            "  float d = clamp(texture2D(map, uv).a * 1.25, 0.0, 1.0);",
+            "  float det = texture2D(detail, uv * 1.6 + vec2(0.31, 0.17)).r;",
+            "  float h = (pow(d, 0.9) * 0.85 + det * 0.25 * d) * uH;",
+            "  vD = d;",
+            "  vec3 p = position + vec3(0.0, 0.0, h);",
+            "  vPos = (modelMatrix * vec4(p, 1.0)).xyz;",
+            "  gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);",
+            "}"
+          ].join("\n"),
+          fragmentShader: [
+            "uniform vec3 uSun; uniform float uFlash; uniform float uAlpha; uniform vec3 cLit; uniform vec3 cShade;",
+            "varying vec2 vUv; varying float vD; varying vec3 vPos;",
+            "void main(){",
+            "  vec3 n = normalize(cross(dFdx(vPos), dFdy(vPos)));",
+            "  if (dot(n, normalize(vPos)) < 0.0) { n = -n; }",
+            "  float lam = clamp(dot(n, normalize(uSun)), 0.0, 1.0);",
+            "  vec3 col = mix(cShade, cLit, 0.25 + 0.75 * lam);",
+            "  col = mix(col, vec3(1.0), uFlash * vD);",
+            "  gl_FragColor = vec4(col, smoothstep(0.05, 0.4, vD) * uAlpha);",
+            "}"
+          ].join("\n"),
+          transparent: true,
+          depthWrite: true,
+          extensions: { derivatives: true }
+        });
+        var storm = new THREE.Group();
+        scene.add(storm);
+        var spin = new THREE.Group();
+        storm.add(spin);
+        var disc = new THREE.Mesh(new THREE.PlaneGeometry(2, 2, 220, 220), discMat);
+        disc.renderOrder = 2;
+        disc.position.z = 4e-3;
+        spin.add(disc);
+        var shadowMat = new THREE.MeshBasicMaterial({ color: K.deep, map: null, alphaMap: spiralTex, transparent: true, opacity: 0.55, depthWrite: false });
+        var shadow = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), shadowMat);
+        storm.add(shadow);
+        var bolt = new THREE.PointLight(16777215, 0, 0.4);
+        storm.add(bolt);
+        bolt.position.set(0, 0, 0.08);
+        var labels = {};
+        Array.prototype.forEach.call(root.querySelectorAll("[data-at]"), function(el) {
+          labels[el.getAttribute("data-at")] = el;
+        });
+        var rows = root.querySelectorAll("[data-row]");
+        var Z = new THREE.Vector3(0, 0, 1);
+        var tmp = new THREE.Vector3(), tmp2 = new THREE.Vector3(), tmp3 = new THREE.Vector3();
+        function trackPose(s, outCam, outLook) {
+          var ll = trackLatLon(s);
+          var lookLat = ll[0] + (END[0] - ll[0]) * 0.45 + 1, lookLon = ll[1] + (END[1] - ll[1]) * 0.45;
+          geo(lookLat - 8 + 1.6 * s, lookLon - 0.3, 1.125 - 0.012 * s, outCam);
+          geo(lookLat, lookLon, 1, outLook);
+        }
+        var P0 = geo(24, -89, 3.25);
+        var P1 = new THREE.Vector3(), L1 = new THREE.Vector3();
+        trackPose(0, P1, L1);
+        var up0 = new THREE.Vector3(0, 1, 0);
+        var cam = new THREE.Vector3(), look = new THREE.Vector3();
+        function placeCamera(t) {
+          var s = progress(t);
+          trackPose(s, cam, look);
+          if (t < T_DIVE) {
+            var f = smooth(t / T_DIVE);
+            var dir = P0.clone().normalize().lerp(P1.clone().normalize(), f).normalize();
+            var r = 3.25 + (P1.length() - 3.25) * (1 - Math.pow(1 - f, 2.6));
+            cam.copy(dir).multiplyScalar(r);
+            look.set(0, 0, 0).lerp(L1, smooth(t / (T_DIVE * 0.7)));
+            camera.up.copy(up0).lerp(P1.clone().normalize(), f).normalize();
+          } else {
+            camera.up.copy(cam).normalize();
+          }
+          camera.position.copy(cam);
+          camera.lookAt(look);
+        }
+        function placeStorm(t) {
+          var s = progress(t);
+          var k2 = 0.026 + 0.042 * Math.pow(s, 0.85);
+          var pos = trackAt(s, 1, tmp);
+          var n = pos.clone().normalize();
+          storm.position.copy(n).multiplyScalar(1.0008);
+          storm.quaternion.setFromUnitVectors(Z, n);
+          storm.scale.set(k2, k2, k2);
+          spin.rotation.z = t * 0.5;
+          var formed = smooth((t - T_DIVE + 0.5) / 1);
+          discMat.uniforms.uAlpha.value = formed;
+          var away = sunDir.clone().projectOnPlane(n).normalize().multiplyScalar(-0.42);
+          shadow.position.copy(away.applyQuaternion(storm.quaternion.clone().invert()));
+          shadow.position.z = 5e-4;
+          shadow.rotation.z = t * 0.5;
+          shadowMat.opacity = 0.55 * formed;
+          var lt = t - T_LAND;
+          var flash = lt > 0 ? Math.max(0, Math.sin(lt * 23) * Math.sin(lt * 7.3)) * (lt < 1.8 ? 1 : 0) : 0;
+          discMat.uniforms.uFlash.value = flash * 0.8;
+          bolt.intensity = flash * 3;
+          var drawn4 = Math.floor(s * SW);
+          swath.geometry.setDrawRange(0, drawn4 * 6);
+          swath.material.opacity = 0.24 * formed;
+          behind.geometry.setDrawRange(0, Math.floor(s * N) + 1);
+          target.scale.setScalar(0.03 * (1 + (lt > 0 ? 0.25 * Math.abs(Math.sin(lt * 5)) : 0)));
+          return s;
+        }
+        function screenOf(v2) {
+          tmp.copy(v2).project(camera);
+          var facing = v2.clone().normalize().dot(tmp2.copy(camera.position).sub(v2).normalize()) > 0;
+          return { x: (tmp.x + 1) / 2 * W, y: (1 - tmp.y) / 2 * H, on: tmp.z < 1 && facing };
+        }
+        function label(name, at3, show) {
+          var el = labels[name];
+          if (!el) {
+            return;
+          }
+          var sc = screenOf(at3);
+          el.style.transform = "translate(" + sc.x.toFixed(1) + "px," + sc.y.toFixed(1) + "px)";
+          el.classList.toggle("pn-wx-on", !!(show && sc.on));
+        }
+        function draw(t) {
+          placeCamera(t);
+          camera.updateMatrixWorld();
+          clouds.rotation.y = t * 6e-3;
+          cloudShadow.rotation.y = t * 6e-3 - 3e-3;
+          var s = placeStorm(t);
+          var ready = t > T_DIVE + 0.3;
+          label("now", trackAt(0, 1.006), ready);
+          marks.forEach(function(m, i2) {
+            label("m" + i2, trackAt(m.at, 1.006), ready && s >= m.at);
+            if (rows[i2]) {
+              rows[i2].classList.toggle("pn-wx-on", s >= m.at);
+            }
+          });
+          label("end", geo(END[0] + 2.2, END[1] + 4.6, 1.004, tmp3), t >= T_LAND + 0.15);
+          if (rows[marks.length]) {
+            rows[marks.length].classList.toggle("pn-wx-on", t >= T_LAND);
+          }
+          root.classList.toggle("pn-wx-st3-tracking", ready);
+          renderer.render(scene, camera);
+        }
+        var start = performance.now();
+        function frame() {
+          if (!running) {
+            return;
+          }
+          if (!root.isConnected) {
+            dispose();
+            return;
+          }
+          if (canvas.width !== W * 2 || canvas.height !== H * 2) {
+            renderer.setSize(W, H, false);
+          }
+          draw(Math.min(DUR, (performance.now() - start) / 1e3));
+          requestAnimationFrame(frame);
+        }
+        function dispose() {
+          if (!running) {
+            return;
+          }
+          running = false;
+          function free(value) {
+            if (value && value.isTexture) {
+              value.dispose();
+            }
+          }
+          scene.traverse(function(item) {
+            if (item.geometry) {
+              item.geometry.dispose();
+            }
+            var materials = item.material ? [].concat(item.material) : [];
+            materials.forEach(function(m) {
+              Object.keys(m).forEach(function(key) {
+                free(m[key]);
+              });
+              Object.keys(m.uniforms || {}).forEach(function(key) {
+                free(m.uniforms[key].value);
+              });
+              m.dispose();
+            });
+          });
+          [earthMap, cloudMap, topoMap, waterMap, spiralTex].forEach(free);
+          renderer.dispose();
+          renderer.forceContextLoss();
+        }
+        if (hold === null) {
+          requestAnimationFrame(frame);
+        }
+        return { dispose, ready: hold === null ? Promise.resolve() : finished, drawn: function() {
+          return drawn3;
+        } };
+      }
+      return stormScene2;
+    })();
+    var HELD = [];
+    function holdUntilDrawn(promise) {
+      HELD.push(promise);
+      promise.then(function() {
+        HELD.splice(HELD.indexOf(promise), 1);
+      });
+    }
+    function drawn2() {
+      return Promise.all(HELD.slice());
+    }
+    function hasWebGL() {
+      return !!(window.THREE && window.WebGLRenderingContext);
+    }
+    function Stormtracker(props) {
+      var wx = props.weather || SAMPLES.stormtracker.weather;
+      var track = wx.track || { marks: [], out: "" };
+      var marks = track.marks || [];
+      var animate = bool(props.animate, false);
+      var hold = animate && !reducedMotion() ? null : 10.4;
+      var ref = useRef2(null);
+      var failed = useState3(false);
+      var plain = failed[0] || !hasWebGL();
+      var marksKey = JSON.stringify(marks);
+      useEffect3(function() {
+        var root = ref.current;
+        if (!root || !hasWebGL()) {
+          return void 0;
+        }
+        var scene = stormScene(root, { textures: props.textures, marks, hold });
+        if (!scene) {
+          failed[1](true);
+          return void 0;
+        }
+        if (hold !== null) {
+          holdUntilDrawn(scene.ready);
+        }
+        return function() {
+          scene.dispose();
+        };
+      }, [hold, marksKey, props.textures]);
+      var said = marks.map(function(m) {
+        return m.share + " by " + m.when + ", ";
+      }).join("");
+      return weatherWall("pn-k-breaking", WEATHER2.tracker, wx.until, [
+        h(
+          "div",
+          { key: "box", className: "pn-wx-st3-box" },
+          h(
+            "div",
+            {
+              ref,
+              className: cx("pn-wx-st3", plain && "pn-wx-st3-plain"),
+              role: "img",
+              "aria-label": "STORMTRACKER: a storm forms at now and grows as it crosses the Gulf, " + said + "and the week runs out at " + track.out
+            },
+            h("canvas", { width: 1680, height: 612 }),
+            h("i", { className: "pn-wx-st3-flare", "aria-hidden": "true" }),
+            h("div", { className: "pn-wx-st3-label pn-wx-st3-now", "data-at": "now" }, h("span", null, WEATHER2.start)),
+            marks.map(function(m, i) {
+              return h("div", { key: "m" + i, className: "pn-wx-st3-label pn-wx-st3-mark", "data-at": "m" + i }, h("span", null, m.share));
+            }),
+            h("div", { className: "pn-wx-st3-label pn-wx-st3-out", "data-at": "end" }, h("span", null, WEATHER2.out + " \xB7 " + track.out)),
+            h(
+              "div",
+              { className: "pn-wx-st3-toa" },
+              h("b", null, WEATHER2.arrival),
+              marks.map(function(m, i) {
+                return h("span", { key: "r" + i, "data-row": i }, m.when + "   " + m.share);
+              }),
+              h("span", { "data-row": "end", className: "pn-wx-st3-hit" }, track.out + "   " + WEATHER2.out)
+            )
+          )
+        )
+      ]);
+    }
+    function AlertOpen(props) {
+      var outro = bool(props.outro, false);
+      function line(word) {
+        return chromeStill(word, "pn-stinger-line pn-ident-line pn-wx-alert-line");
+      }
+      return h(
+        "div",
+        {
+          className: cx("pn-wx-alert", outro && "pn-wx-alert-out", "pn-k-breaking"),
+          style: { position: "absolute", left: 0, top: 0, width: STAGE_W + "px", height: STAGE_H + "px" }
+        },
+        h(Stinger, { words: [], outro, progress: props.progress, animate: bool(props.animate, false) }),
+        h(
+          "div",
+          { className: "pn-wx-alert-dial" },
+          h("div", { className: "pn-dial" }, h("div", { className: "pn-dial-face" }, h(WeatherIcon, { sky: "storm", bolt: "pn-wx-alert-bolt" })))
+        ),
+        h("div", { className: "pn-ident-words" }, WEATHER2.alert.map(line)),
+        outro ? null : h("i", { className: "pn-wx-flash", "aria-hidden": "true" })
       );
     }
     function seeded(a) {
@@ -2481,12 +3874,12 @@
     }
     var SIGNAL = { period: 9e3, waves: 3 };
     function Signal() {
-      var at2 = useState3(function() {
+      var at3 = useState3(function() {
         return Date.now();
       })[0];
       var waves = [];
       for (var i = 0; i < SIGNAL.waves; i++) {
-        var lead = (at2 + i * SIGNAL.period / SIGNAL.waves) % SIGNAL.period;
+        var lead = (at3 + i * SIGNAL.period / SIGNAL.waves) % SIGNAL.period;
         waves.push(h("i", { key: i, style: { animationDelay: -lead + "ms" } }));
       }
       return h("div", { className: "pn-signal" }, waves);
@@ -2528,25 +3921,36 @@
           { key: "under", className: "pn-board-under", style: { position: "absolute", left: 0, top: 0, width: STAGE_W + "px", height: STAGE_H + "px", zIndex: 0 } },
           h(Backdrop, { animate }),
           h(SessionBoard, { sessions: back.sessions, limits: back.limits }),
-          h(Ticker2, { items: back.ticker, time: back.clock, animate })
+          h(Ticker2, { items: back.ticker, time: back.clock, label: back.tickerLabel, animate })
         ));
-        parts.push(scene.open === "hour" ? h(Ident, { key: "id-out", outro: true, hour: scene.hour, progress: scene.progress, animate }) : h(Stinger, { key: "st", outro: true, progress: scene.progress, animate }));
+        if (scene.open === "hour") {
+          parts.push(h(Ident, { key: "id-out", outro: true, hour: scene.hour, progress: scene.progress, animate }));
+        } else if (scene.open === "alert") {
+          parts.push(h(AlertOpen, { key: "alert-out", outro: true, progress: scene.progress, animate }));
+        } else {
+          parts.push(h(Stinger, { key: "st", outro: true, progress: scene.progress, animate }));
+        }
       } else if (mode === "ident") {
         parts.push(h(Ident, { key: "id", hour: scene.hour, progress: scene.progress, animate }));
       } else if (mode === "review") {
         parts.push(h(Backdrop, { key: "backdrop", animate }));
         parts.push(h(HourReview, { key: "rv", rows: scene.rows, span: scene.span, label: scene.label, animate }));
+      } else if (mode === "weather-now" || mode === "weather-days" || mode === "stormtracker") {
+        parts.push(h(Backdrop, { key: "backdrop", animate }));
+        parts.push(mode === "weather-now" ? h(WeatherNow, { key: "wx", weather: scene.weather }) : mode === "weather-days" ? h(WeatherDays, { key: "wx", weather: scene.weather }) : h(Stormtracker, { key: "wx", weather: scene.weather, animate }));
+      } else if (mode === "alert") {
+        parts.push(h(AlertOpen, { key: "alert", progress: scene.progress, animate }));
       } else {
         parts.push(h(Backdrop, { key: "backdrop", animate }));
         parts.push(h(SessionBoard, { key: "board", sessions: scene.sessions, limits: scene.limits, animate }));
       }
       parts.push(h(TopBand, { key: "top" }));
-      if (mode !== "stinger" && mode !== "outro" && mode !== "ident") {
+      if (mode !== "stinger" && mode !== "outro" && mode !== "ident" && mode !== "alert") {
         parts.push(h(Ticker2, { key: "tick", items: scene.ticker, time: scene.clock, label: scene.tickerLabel, offset: scene.tickerOffset, animate }));
       }
       return h("div", {
         key: live ? "scene-" + live.step : "scene",
-        className: cx("pn-broadcast", "pn-mode-" + mode, (mode === "stinger" || mode === "outro" && scene.open !== "hour") && "pn-k-breaking"),
+        className: cx("pn-broadcast", "pn-mode-" + mode, (mode === "stinger" || mode === "alert" || mode === "outro" && scene.open !== "hour") && "pn-k-breaking"),
         style: { position: "absolute", left: 0, top: 0, width: STAGE_W + "px", height: STAGE_H + "px" }
       }, parts);
     }
@@ -2713,7 +4117,7 @@
       search: { id: "search", name: "Speed up product search", project: "search-api" },
       runners: { id: "runners", name: "Move CI to the new runners", project: "ci-config" }
     };
-    function at(base, state) {
+    function at2(base, state) {
       return { id: base.id, name: base.name, project: base.project, state };
     }
     var EV_ASK = { kind: "needs-input", session: S.checkout.name, project: S.checkout.project, command: "npm install", quote: "Install dependencies", foot: "Waiting 0:12" };
@@ -2758,43 +4162,43 @@
       "board-one": {
         mode: "board",
         clock: "14:32",
-        sessions: [at(S.auth, "working")],
+        sessions: [at2(S.auth, "working")],
         ticker: [{ lead: "ON THE DESK", text: "1 session working" }, TICK_WORKING[0]]
       },
       "board-two": {
         mode: "board",
         clock: "14:32",
-        sessions: [at(S.auth, "working"), at(S.checkout, "working")],
+        sessions: [at2(S.auth, "working"), at2(S.checkout, "working")],
         ticker: [{ lead: "ON THE DESK", text: "2 sessions working" }, TICK_WORKING[0], TICK_WORKING[1]]
       },
       "board-three": {
         mode: "board",
         clock: "14:32",
-        sessions: [at(S.auth, "working"), at(S.checkout, "working"), at(S.notes, "working")],
+        sessions: [at2(S.auth, "working"), at2(S.checkout, "working"), at2(S.notes, "working")],
         ticker: [{ lead: "ON THE DESK", text: "3 sessions working" }, TICK_WORKING[0], TICK_WORKING[1], TICK_WORKING[2]]
       },
       "run-board": {
         mode: "board",
         clock: "14:32",
-        sessions: [at(S.auth, "working"), at(S.checkout, "working"), at(S.notes, "working"), at(S.sqlite, "working")],
+        sessions: [at2(S.auth, "working"), at2(S.checkout, "working"), at2(S.notes, "working"), at2(S.sqlite, "working")],
         ticker: [{ lead: "ON THE DESK", text: "4 sessions working" }, TICK_WORKING[0], TICK_WORKING[1], TICK_WORKING[2]]
       },
       "board-needs-you": {
         mode: "board",
         clock: "14:34",
-        sessions: [at(S.auth, "working"), at(S.checkout, "needs-input"), at(S.notes, "working"), at(S.sqlite, "working")],
+        sessions: [at2(S.auth, "working"), at2(S.checkout, "needs-input"), at2(S.notes, "working"), at2(S.sqlite, "working")],
         ticker: [{ lead: "STILL WAITING", text: "Fix flaky checkout test needs your input \xB7 1 min" }, TICK_WORKING[0], TICK_WORKING[2]]
       },
       "board-ready": {
         mode: "board",
         clock: "14:37",
-        sessions: [at(S.auth, "working"), at(S.checkout, "working"), at(S.notes, "ready"), at(S.sqlite, "working")],
+        sessions: [at2(S.auth, "working"), at2(S.checkout, "working"), at2(S.notes, "ready"), at2(S.sqlite, "working")],
         ticker: [{ lead: "BREAKING", text: "Release notes for 2.4 ready for review" }, TICK_WORKING[0], TICK_WORKING[1]]
       },
       "run-return": {
         mode: "board",
         clock: "14:38",
-        sessions: [at(S.auth, "working"), at(S.checkout, "needs-input"), at(S.notes, "ready"), at(S.sqlite, "working")],
+        sessions: [at2(S.auth, "working"), at2(S.checkout, "needs-input"), at2(S.notes, "ready"), at2(S.sqlite, "working")],
         ticker: [
           { lead: "STILL WAITING", text: "Fix flaky checkout test needs your input \xB7 5 min" },
           { lead: "READY", text: "Release notes for 2.4 waiting for review" }
@@ -2804,7 +4208,7 @@
       "board-seven": {
         mode: "board",
         clock: "14:38",
-        sessions: [at(S.checkout, "needs-input"), at(S.notes, "ready"), at(S.auth, "working"), at(S.sqlite, "working"), at(S.crash, "working"), at(S.search, "working"), at(S.runners, "working")],
+        sessions: [at2(S.checkout, "needs-input"), at2(S.notes, "ready"), at2(S.auth, "working"), at2(S.sqlite, "working"), at2(S.crash, "working"), at2(S.search, "working"), at2(S.runners, "working")],
         ticker: [
           { lead: "STILL WAITING", text: "Fix flaky checkout test needs your input \xB7 5 min" },
           { lead: "READY", text: "Release notes for 2.4 waiting for review" },
@@ -2839,7 +4243,7 @@
       "ready-board": {
         mode: "board",
         clock: "14:36",
-        sessions: [at(S.auth, "working"), at(S.checkout, "working"), at(S.notes, "working"), at(S.sqlite, "working")],
+        sessions: [at2(S.auth, "working"), at2(S.checkout, "working"), at2(S.notes, "working"), at2(S.sqlite, "working")],
         ticker: [{ lead: "ON THE DESK", text: "4 sessions working" }, TICK_WORKING[0], TICK_WORKING[1], TICK_WORKING[2]]
       },
       "ready-desk": {
@@ -2861,7 +4265,7 @@
       "complete-board": {
         mode: "board",
         clock: "14:44",
-        sessions: [at(S.auth, "working"), at(S.checkout, "working"), at(S.crash, "working"), at(S.sqlite, "working")],
+        sessions: [at2(S.auth, "working"), at2(S.checkout, "working"), at2(S.crash, "working"), at2(S.sqlite, "working")],
         ticker: [{ lead: "ON THE DESK", text: "4 sessions working" }, TICK_WORKING[0], TICK_WORKING[1], "mobile-app: reading the crash reports"]
       },
       "complete-desk": {
@@ -2874,14 +4278,14 @@
       "complete-return": {
         mode: "board",
         clock: "14:44",
-        sessions: [at(S.auth, "working"), at(S.checkout, "working"), at(S.crash, "ready"), at(S.sqlite, "working")],
+        sessions: [at2(S.auth, "working"), at2(S.checkout, "working"), at2(S.crash, "ready"), at2(S.sqlite, "working")],
         ticker: [{ lead: "BREAKING", text: "Last night\u2019s crash reports checked: nothing to fix" }, TICK_WORKING[0], TICK_WORKING[1]]
       },
       /* Stopped on an error: the turn died on an API error */
       "error-board": {
         mode: "board",
         clock: "14:47",
-        sessions: [at(S.auth, "working"), at(S.checkout, "working"), at(S.notes, "working"), at(S.sqlite, "working")],
+        sessions: [at2(S.auth, "working"), at2(S.checkout, "working"), at2(S.notes, "working"), at2(S.sqlite, "working")],
         ticker: [{ lead: "ON THE DESK", text: "4 sessions working" }, TICK_WORKING[0], TICK_WORKING[1], TICK_WORKING[3]]
       },
       "error-desk": {
@@ -2894,14 +4298,14 @@
       "error-return": {
         mode: "board",
         clock: "14:47",
-        sessions: [at(S.auth, "working"), at(S.checkout, "working"), at(S.notes, "working"), at(S.sqlite, "error")],
+        sessions: [at2(S.auth, "working"), at2(S.checkout, "working"), at2(S.notes, "working"), at2(S.sqlite, "error")],
         ticker: [{ lead: "STILL WAITING", text: "Migrate settings to SQLite stopped on an error" }, TICK_WORKING[0], TICK_WORKING[1]]
       },
       /* Every pill on the board at once, sorted: INPUT, ERROR, READY, LIVE */
       "board-every-state": {
         mode: "board",
         clock: "14:52",
-        sessions: [at(S.auth, "working"), at(S.checkout, "needs-input"), at(S.notes, "ready"), at(S.sqlite, "error")],
+        sessions: [at2(S.auth, "working"), at2(S.checkout, "needs-input"), at2(S.notes, "ready"), at2(S.sqlite, "error")],
         ticker: [
           { lead: "STILL WAITING", text: "Fix flaky checkout test needs your input \xB7 19 min" },
           { lead: "STILL WAITING", text: "Migrate settings to SQLite stopped on an error \xB7 5 min" },
@@ -2928,7 +4332,7 @@
       "queue-return": {
         mode: "board",
         clock: "14:36",
-        sessions: [at(S.auth, "working"), at(S.checkout, "needs-input"), at(S.notes, "ready"), at(S.sqlite, "working")],
+        sessions: [at2(S.auth, "working"), at2(S.checkout, "needs-input"), at2(S.notes, "ready"), at2(S.sqlite, "working")],
         ticker: [{ lead: "STILL WAITING", text: "Fix flaky checkout test needs your input" }, { lead: "BREAKING", text: "Release notes for 2.4 ready for review" }, TICK_WORKING[0]]
       },
       /* On the hour: the 15:00 report on the same four sessions, and a quiet
@@ -2936,7 +4340,7 @@
       "hour-board": {
         mode: "board",
         clock: "14:59",
-        sessions: [at(S.auth, "working"), at(S.checkout, "needs-input"), at(S.notes, "ready"), at(S.sqlite, "working")],
+        sessions: [at2(S.auth, "working"), at2(S.checkout, "needs-input"), at2(S.notes, "ready"), at2(S.sqlite, "working")],
         ticker: [
           { lead: "STILL WAITING", text: "Fix flaky checkout test needs your input \xB7 26 min" },
           { lead: "READY", text: "Release notes for 2.4 waiting for review" },
@@ -2984,7 +4388,7 @@
       "hour-return": {
         mode: "board",
         clock: "15:01",
-        sessions: [at(S.auth, "working"), at(S.checkout, "needs-input"), at(S.notes, "ready"), at(S.sqlite, "working")],
+        sessions: [at2(S.auth, "working"), at2(S.checkout, "needs-input"), at2(S.notes, "ready"), at2(S.sqlite, "working")],
         ticker: [
           { lead: "ON THE HOUR", text: "2 stories at 15:00 \xB7 next report 16:00" },
           { lead: "STILL WAITING", text: "Fix flaky checkout test needs your input \xB7 28 min" }
@@ -3002,14 +4406,14 @@
       "quiet-board": {
         mode: "board",
         clock: "10:59",
-        sessions: [at(S.auth, "working"), at(S.checkout, "working"), at(S.notes, "working"), at(S.sqlite, "working")],
+        sessions: [at2(S.auth, "working"), at2(S.checkout, "working"), at2(S.notes, "working"), at2(S.sqlite, "working")],
         ticker: [{ lead: "ON THE DESK", text: "4 sessions working" }, TICK_WORKING[0], TICK_WORKING[1], TICK_WORKING[2]]
       },
       "quiet-ident": { mode: "ident", clock: "11:00", hour: "11:00", progress: 1 },
       "quiet-return": {
         mode: "board",
         clock: "11:00",
-        sessions: [at(S.auth, "working"), at(S.checkout, "working"), at(S.notes, "working"), at(S.sqlite, "working")],
+        sessions: [at2(S.auth, "working"), at2(S.checkout, "working"), at2(S.notes, "working"), at2(S.sqlite, "working")],
         ticker: [{ lead: "ON THE HOUR", text: "A quiet hour \xB7 next report 12:00" }, TICK_WORKING[0], TICK_WORKING[2]]
       },
       /* first come, first served: a question on air at the hour holds the report
@@ -3038,6 +4442,63 @@
     SAMPLES["brk-outro-2"] = outroOf(SAMPLES["board-needs-you"], 0.8);
     SAMPLES["hour-outro-1"] = outroOf(SAMPLES["hour-return"], 0.4, "hour", "15:00");
     SAMPLES["hour-outro-2"] = outroOf(SAMPLES["hour-return"], 0.8, "hour", "15:00");
+    var WX_SESSIONS = [
+      { id: "forecast", name: "Weekly limit forecast (#143)", project: "pipcast", state: "working" },
+      { id: "changelog", name: "Changelog for 1.3.0", project: "pipcast", state: "ready" },
+      { id: "sync", name: "Calendar sync retries", project: "mamatime", state: "needs-input" }
+    ];
+    var WX_ACTIVITY = "pipcast: editing packages/director/src/forecast.ts";
+    var WX_HOUR = { lead: "ON THE HOUR", text: "2 stories since 15:00" };
+    var WX_CLOUDS = {
+      outlook: "clouds",
+      used: "48%",
+      sky: "partly",
+      word: "CLOUDS GATHERING",
+      strap: "The week ends near 86%",
+      until: "TO MON 18:00",
+      days: [
+        { name: "FRI", sky: "sun", high: "52%", low: "48%" },
+        { name: "SAT", sky: "sun", high: "64%", low: "52%" },
+        { name: "SUN", sky: "partly", high: "77%", low: "64%" },
+        { name: "MON", sky: "partly", high: "86%", low: "77%" }
+      ]
+    };
+    var WX_STORM = {
+      outlook: "storm",
+      used: "72%",
+      sky: "storm",
+      word: "STORM WARNING",
+      strap: "The week runs out Sun around 05:00",
+      until: "TO MON 18:00",
+      days: [
+        { name: "FRI", sky: "partly", high: "78%", low: "72%" },
+        { name: "SAT", sky: "overcast", high: "97%", low: "78%" },
+        { name: "SUN", sky: "storm", high: "OUT", low: "97%", out: true },
+        { name: "MON", sky: "storm", high: "OUT", low: "\u2014", out: true }
+      ],
+      track: { marks: [{ when: "SAT 00:00", share: "78%", at: 0.23 }, { when: "SUN 00:00", share: "96%", at: 0.86 }], out: "SUN 05:00" }
+    };
+    var WX_CLOUDS_LINE = { lead: "FORECAST", text: "Clouds gathering: the week ends near 86%, resets Mon 18:00" };
+    var WX_STORM_LINE = { lead: "FORECAST", text: "Storm warning: the week runs out Sun around 05:00, resets Mon 18:00" };
+    var WX_WARNING_LINE = { lead: "STORM WARNING", text: "in effect until Mon 18:00: at this pace the week runs out Sun around 05:00" };
+    SAMPLES["weather-now"] = { mode: "weather-now", clock: "16:00", weather: WX_CLOUDS, ticker: [WX_HOUR, WX_CLOUDS_LINE] };
+    SAMPLES["weather-now-storm"] = { mode: "weather-now", clock: "16:00", weather: WX_STORM, ticker: [WX_HOUR, WX_STORM_LINE] };
+    SAMPLES["weather-days"] = { mode: "weather-days", clock: "16:00", weather: WX_CLOUDS, ticker: [WX_HOUR, WX_CLOUDS_LINE] };
+    SAMPLES["weather-days-storm"] = { mode: "weather-days", clock: "16:00", weather: WX_STORM, ticker: [WX_HOUR, WX_STORM_LINE] };
+    SAMPLES.stormtracker = { mode: "stormtracker", clock: "15:12", tickerLabel: "WARNING", weather: WX_STORM, ticker: [WX_WARNING_LINE, WX_ACTIVITY] };
+    SAMPLES.alert = { mode: "alert", clock: "15:12", progress: 1 };
+    SAMPLES["board-warning"] = {
+      mode: "board",
+      clock: "15:31",
+      tickerLabel: "WARNING",
+      sessions: WX_SESSIONS,
+      limits: [{ kind: "session", percent: 58 }, { kind: "week", percent: 72 }],
+      ticker: [WX_WARNING_LINE, WX_ACTIVITY]
+    };
+    SAMPLES["alert-outro-1"] = outroOf(SAMPLES["board-warning"], 0.4, "alert");
+    function inReport(scene) {
+      return Object.assign({}, scene, { clock: "15:00", ticker: TICK_HOUR.slice(0, 1) });
+    }
     SAMPLES["board-limits"] = Object.assign({}, SAMPLES["board-every-state"], { limits: [{ kind: "session", percent: 42 }, { kind: "week", percent: 61 }] });
     SAMPLES["board-limits-near"] = Object.assign({}, SAMPLES["board-seven"], { limits: [{ kind: "session", percent: 74 }, { kind: "week", percent: 92 }] });
     SAMPLES["limits-outro"] = outroOf(SAMPLES["board-limits"], 0.8);
@@ -3093,6 +4554,26 @@
         { scene: SAMPLES["hour-review"], dur: 10 },
         { scene: outroOf(SAMPLES["hour-return"], 1, "hour", "15:00"), dur: 1.6 },
         { scene: SAMPLES["hour-return"], dur: 5 }
+      ],
+      /* The same report with a storm in the forecast: KLWD WEATHER follows the review, CURRENT CONDITIONS, EXTENDED FORECAST and STORMTRACKER */
+      "hour-weather": [
+        { scene: SAMPLES["hour-board"], dur: 2 },
+        { scene: SAMPLES["hour-ident-2"], dur: 7.5 },
+        { scene: SAMPLES["hour-desk"], dur: 10 },
+        { scene: SAMPLES["hour-review"], dur: 10 },
+        { scene: inReport(SAMPLES["weather-now-storm"]), dur: 10 },
+        { scene: inReport(SAMPLES["weather-days-storm"]), dur: 10 },
+        { scene: inReport(SAMPLES.stormtracker), dur: 11 },
+        { scene: outroOf(SAMPLES["hour-return"], 1, "hour", "15:00"), dur: 1.6 },
+        { scene: SAMPLES["hour-return"], dur: 5 }
+      ],
+      /* STORM WARNING as it airs: WEATHER ALERT, STORMTRACKER, the outro, and back to the board, where the warning holds */
+      warning: [
+        { scene: SAMPLES["board-warning"], dur: 2 },
+        { scene: SAMPLES.alert, dur: 1.9 },
+        { scene: SAMPLES.stormtracker, dur: 11 },
+        { scene: outroOf(SAMPLES["board-warning"], 1, "alert"), dur: 1.4 },
+        { scene: SAMPLES["board-warning"], dur: 8 }
       ],
       /* A quiet hour: the ident, the desk and the outro, no review */
       "quiet-hour": [
@@ -3444,6 +4925,101 @@
       tremolo(m, end, HZ.A3, 1.8, 0.025);
       tremolo(m, end, HZ.D4, 1.8, 0.02);
     }
+    HZ.Bb2 = 116.54;
+    HZ.E3 = 164.81;
+    HZ.Cs4 = 277.18;
+    HZ.G4 = 392;
+    HZ.E5 = 659.26;
+    HZ.Cs5 = 554.37;
+    function alertTone(m, t, f, dur, vel) {
+      var ctx = m.ctx;
+      var out = voice(m, 1, 0.2);
+      var o = ctx.createOscillator();
+      o.type = "square";
+      o.frequency.value = f;
+      var lp = ctx.createBiquadFilter();
+      lp.type = "lowpass";
+      lp.frequency.value = 2600;
+      var g = ctx.createGain();
+      g.gain.setValueAtTime(1e-4, t);
+      g.gain.exponentialRampToValueAtTime(vel, t + 5e-3);
+      g.gain.setValueAtTime(vel, t + dur - 0.015);
+      g.gain.exponentialRampToValueAtTime(1e-4, t + dur);
+      o.connect(lp);
+      lp.connect(g);
+      g.connect(out);
+      o.start(t);
+      o.stop(t + dur + 0.02);
+    }
+    function thunder(m, t, dur, vel) {
+      var ctx = m.ctx;
+      var out = voice(m, 1, 0.7);
+      var crackSrc = ctx.createBufferSource();
+      crackSrc.buffer = m.white;
+      var hp = ctx.createBiquadFilter();
+      hp.type = "highpass";
+      hp.frequency.value = 1800;
+      var cg = ctx.createGain();
+      cg.gain.setValueAtTime(1e-4, t);
+      cg.gain.exponentialRampToValueAtTime(vel * 0.7, t + 4e-3);
+      cg.gain.exponentialRampToValueAtTime(1e-4, t + 0.22);
+      crackSrc.connect(hp);
+      hp.connect(cg);
+      cg.connect(out);
+      crackSrc.start(t);
+      crackSrc.stop(t + 0.25);
+      var rumbleSrc = ctx.createBufferSource();
+      rumbleSrc.buffer = m.white;
+      rumbleSrc.loop = true;
+      var lp = ctx.createBiquadFilter();
+      lp.type = "lowpass";
+      lp.Q.value = 0.7;
+      lp.frequency.setValueAtTime(420, t);
+      lp.frequency.exponentialRampToValueAtTime(110, t + dur);
+      var rg = ctx.createGain();
+      rg.gain.setValueAtTime(1e-4, t);
+      rg.gain.exponentialRampToValueAtTime(vel, t + 0.05);
+      rg.gain.exponentialRampToValueAtTime(vel * 0.35, t + dur * 0.3);
+      rg.gain.exponentialRampToValueAtTime(vel * 0.6, t + dur * 0.45);
+      rg.gain.exponentialRampToValueAtTime(1e-4, t + dur);
+      rumbleSrc.connect(lp);
+      lp.connect(rg);
+      rg.connect(out);
+      rumbleSrc.start(t);
+      rumbleSrc.stop(t + dur + 0.05);
+    }
+    function scoreWeatherAlert(m, t0) {
+      [0, 0.3, 0.6].forEach(function(x) {
+        alertTone(m, t0 + x, HZ.D6, 0.12, 0.09);
+        alertTone(m, t0 + x + 0.14, HZ.A5, 0.12, 0.09);
+      });
+      var roll = [0.6, 0.66, 0.71, 0.755, 0.795, 0.83, 0.86, 0.885, 0.91, 0.93];
+      riser(m, t0 + 0.6, 0.35, 0.12);
+      roll.forEach(function(x, i) {
+        timpani(m, t0 + x, HZ.D2, 0.06 + 0.24 * i / (roll.length - 1), 0.3);
+      });
+      var hits = [
+        { at: 0.95, logo: HZ.A4, chord: [HZ.D3, HZ.F3, HZ.A3, HZ.D4], drum: HZ.D2, dur: 0.12 },
+        { at: 1.15, logo: HZ.D5, chord: [HZ.F3, HZ.Bb3, HZ.D4], drum: HZ.Bb2, dur: 0.12 },
+        { at: 1.35, logo: HZ.A5, chord: [HZ.G3, HZ.Bb3, HZ.D4, HZ.G4], drum: HZ.G2, dur: 0.14 },
+        { at: 1.6, logo: HZ.D6, chord: [HZ.A2, HZ.E3, HZ.A3, HZ.Cs4, HZ.G4], drum: HZ.A2, dur: 1.3 }
+      ];
+      hits.forEach(function(x, i) {
+        var last = i === hits.length - 1;
+        x.chord.forEach(function(f) {
+          brass(m, t0 + x.at, f, x.dur, last ? 0.15 : 0.065, last ? 1.2 : 0.28);
+        });
+        timpani(m, t0 + x.at, x.drum, last ? 1 : 0.35, last ? 1.4 : 0.6);
+        bell(m, t0 + x.at, x.logo, last ? 1.8 : 0.55, last ? 0.28 : 0.17);
+      });
+      boom(m, t0 + 0.95, 0.2);
+      boom(m, t0 + 1.6, 1);
+      crash(m, t0 + 1.6, 0.45);
+      thunder(m, t0 + 1.6, 3.4, 0.5);
+      brass(m, t0 + 1.6, HZ.A2, 1.3, 0.1, 1.2);
+      tremolo(m, t0 + 1.6, HZ.Cs5, 2.2, 0.045);
+      tremolo(m, t0 + 1.6, HZ.E5, 2.2, 0.035);
+    }
     function pip(m, t, dur, vel) {
       var ctx = m.ctx;
       var out = voice(m, 1, 0.15);
@@ -3519,30 +5095,31 @@
         }
       }
     }
-    function playBed(m, name, at2, until) {
+    function playBed(m, name, at3, until) {
       var ctx = m.ctx;
       var dry = ctx.createGain();
       var send = ctx.createGain();
       dry.connect(m.dry);
       send.connect(m.send);
-      var end = Math.max(until, at2 + BEAT.fadeIn);
+      var end = Math.max(until, at3 + BEAT.fadeIn);
       var out = new Float32Array(32);
       for (var i = 0; i < out.length; i++) {
         out[i] = Math.pow(1 - i / (out.length - 1), 2);
       }
       [dry.gain, send.gain].forEach(function(g) {
-        g.setValueAtTime(0, at2);
-        g.linearRampToValueAtTime(1, at2 + BEAT.fadeIn);
+        g.setValueAtTime(0, at3);
+        g.linearRampToValueAtTime(1, at3 + BEAT.fadeIn);
         g.setValueCurveAtTime(out, end, BEAT.fadeOut);
       });
-      var from = at2 + BEAT.fadeIn - BEAT.turn;
-      beat({ ctx, dry, send, white: m.white }, from, Math.ceil((end + BEAT.fadeOut - from) / BEAT.turn), BEDS[name], at2);
+      var from = at3 + BEAT.fadeIn - BEAT.turn;
+      beat({ ctx, dry, send, white: m.white }, from, Math.ceil((end + BEAT.fadeOut - from) / BEAT.turn), BEDS[name], at3);
     }
     var JINGLES = {
       breaking: { duration: 5.8, score: scoreBreaking },
       "breaking-out": { duration: 3.4, score: scoreBreakingOut },
       hour: { duration: 9.6, score: scoreHour },
-      "hour-out": { duration: 3.6, score: scoreHourOut }
+      "hour-out": { duration: 3.6, score: scoreHourOut },
+      "weather-alert": { duration: 5.2, score: scoreWeatherAlert }
     };
     var AUDIO = null;
     var PLAYING = null;
@@ -3575,14 +5152,14 @@
       out.connect(ctx.destination);
       var m = mixer(ctx, out);
       list.forEach(function(x) {
-        var at2 = Math.max(ctx.currentTime + 0.02, num(x.at, 0));
+        var at3 = Math.max(ctx.currentTime + 0.02, num(x.at, 0));
         if (x.bed && BEDS[x.bed]) {
-          playBed(m, x.bed, at2, Math.max(at2, num(x.until, at2)));
+          playBed(m, x.bed, at3, Math.max(at3, num(x.until, at3)));
           return;
         }
         var j = JINGLES[x.name];
         if (j) {
-          j.score(m, at2);
+          j.score(m, at3);
         }
       });
       PLAYING = function() {
@@ -3642,12 +5219,12 @@
           return;
         }
         var list = [];
-        var at2 = 0;
+        var at3 = 0;
         var key = null;
         var bed = null;
         (RUNS[props.sample] || []).forEach(function(step) {
           var mode = step.scene.mode;
-          var t = ctx.currentTime + at2;
+          var t = ctx.currentTime + at3;
           if (mode === "stinger") {
             list.push({ name: "breaking", at: t });
             key = "beat-minor";
@@ -3656,7 +5233,11 @@
             list.push({ name: "hour", at: t });
             key = "beat-major";
           }
-          if ((mode === "desk" || mode === "review") && key && !bed) {
+          if (mode === "alert") {
+            list.push({ name: "weather-alert", at: t });
+            key = "beat-minor";
+          }
+          if ((mode === "desk" || mode === "review" || mode === "weather-now" || mode === "weather-days" || mode === "stormtracker") && key && !bed) {
             bed = { bed: key, at: t };
           }
           if (mode === "outro") {
@@ -3668,7 +5249,7 @@
             key = null;
             bed = null;
           }
-          at2 += num(step.dur, 4);
+          at3 += num(step.dur, 4);
         });
         if (!list.length) {
           list.push({ name: props.jingle || "breaking", at: ctx.currentTime + cue });
@@ -3776,12 +5357,21 @@
       NewsDesk,
       OTSBox,
       HourReview,
+      WeatherIcon,
+      WeatherNow,
+      WeatherDays,
+      Stormtracker,
+      AlertOpen,
       Clawd,
       Mark,
       Stage: Stage2,
       crawlStep: crawlStep2,
       crawlRun: crawlRun2,
       crawlSpeed: CRAWL_SPEED,
+      weatherIconMarkup,
+      drawn: drawn2,
+      WEATHER: WEATHER2,
+      OUTLOOKS,
       EVENTS,
       STATES,
       CLAWD_SOURCE,
@@ -3808,7 +5398,7 @@
   if (PipNews === void 0) {
     throw new Error("the design system did not load: window.React was missing when its bundle ran");
   }
-  var { Broadcast, Stage, Ticker, crawlStep, crawlRun, crawlSpeed, samples } = PipNews;
+  var { Broadcast, Stage, Ticker, crawlStep, crawlRun, crawlSpeed, samples, drawn } = PipNews;
 
   // packages/renderer/src/App.tsx
   var TICK_MS = 250;
@@ -3842,6 +5432,9 @@
         }
         if (next.reported !== null) {
           post({ type: "reported", at: next.reported });
+        }
+        if (next.weather !== null) {
+          post({ type: "weather", memory: next.weather });
         }
         if (snapshot.current !== null) {
           setProgram(next);
@@ -4024,7 +5617,7 @@
   function settled() {
     const fonts = document.fonts;
     const ready = fonts === void 0 ? Promise.resolve() : fonts.ready.then(() => void 0);
-    return ready.then(() => new Promise((done) => window.setTimeout(done, SETTLE_MS)));
+    return ready.then(drawn).then(() => new Promise((done) => window.setTimeout(done, SETTLE_MS)));
   }
   function Still({ input }) {
     const scene = (0, import_react2.useMemo)(() => input === null ? null : stillScene(input), [input]);

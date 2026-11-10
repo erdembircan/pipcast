@@ -1,0 +1,5 @@
+The Earth STORMTRACKER draws
+
+earth.jpg, topo.jpg, water.jpg and clouds.jpg are NASA's Blue Marble pictures of the Earth: its surface, its relief, where its water is, and its clouds. NASA's imagery is in the public domain (NASA Visible Earth, visibleearth.nasa.gov).
+
+They come from the example images of the three-globe npm package (MIT License, Copyright (c) 2019 Vasco Asturiano). clouds.jpg is that package's cloud picture's transparency, saved as a greyscale JPEG.

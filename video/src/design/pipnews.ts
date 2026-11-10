@@ -38,7 +38,11 @@ export type {
   Scene,
   Session,
   SessionState,
+  Sky,
   TickerItem,
+  TrackMark,
+  WeatherDay,
+  WeatherScene,
 } from '../../../design/components/index.d.ts'
 
 export interface StageProps {
