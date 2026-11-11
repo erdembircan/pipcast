@@ -17,8 +17,8 @@
    Two new instruments, in the jingles' manner (noise through filters):
      rain     a bed of rain from a list of levels: the hiss of the drops, the
               body of the downpour, and a patter of single drops
-     thunder  the rumble rolling away in lumps, each swelling in (no crack,
-              no hit: nothing in it lands as a punch)
+     thunder  the rumble rolling away in lumps, with no crack or boom on
+              the lightning
 */
 (function () {
   'use strict';
@@ -133,7 +133,7 @@
     const lumps = [];
     let at = 0;
     for (let k = 0; k < 7; k++) {
-      lumps.push({ at: at, a: (k === 0 ? 1 : 0.35 + 0.65 * rnd()) * Math.exp(-k * 0.28), rise: 0.35 + 0.35 * rnd() + 0.2 * far, fall: 0.5 + 0.9 * rnd() });
+      lumps.push({ at: at, a: (k === 0 ? 1 : 0.35 + 0.65 * rnd()) * Math.exp(-k * 0.28), rise: 0.06 + 0.25 * rnd() + 0.2 * far, fall: 0.5 + 0.9 * rnd() });
       at += 0.25 + 0.7 * rnd();
     }
     for (let i = 0; i < N; i++) {
@@ -194,8 +194,11 @@
     put('trem', 3.2, { m: 69, d: plan.STRIKE - 3.2 + 0.05, v: 0.03 });
     put('trem', 4.6, { m: 70, d: plan.STRIKE - 4.6 + 0.05, v: 0.025 });
     put('riser', plan.STRIKE - 1.6, { d: 1.6, v: 0.16, lo: 200, hi: 6000 });
-    /* the strike: its own thunder, the storm on one held chord, and the logo sending the signal out (no drum on it) */
-    Dm.concat([65]).forEach(function (m) { put('brass', plan.STRIKE, { m: m, d: 1.1, v: 0.12, rel: 1.4 }); });
+    roll(plan.STRIKE - 1.0, plan.STRIKE - 0.02, 38, 0.05, 0.4);
+    /* the strike: the whole storm on one chord, and the logo sending the signal out */
+    Dm.concat([65]).forEach(function (m) { put('brass', plan.STRIKE, { m: m, d: 1.1, v: 0.15, rel: 1.4 }); });
+    put('timp', plan.STRIKE, { m: 38, v: 1, ring: 1.6 });
+    put('crash', plan.STRIKE, { v: 0.32 });
     plan.SIGNAL_HITS.forEach(function (t, j) {
       put('bell', t, { m: LOGO[j], d: j === 3 ? 2.6 : 1.1, v: j === 3 ? 0.42 : 0.32, pan: j % 2 ? 0.15 : -0.15 });
     });
@@ -212,9 +215,8 @@
         put('trem', c.at + 0.65, { m: 76, d: 2.6, v: 0.035 });
         put('pad', c.at + 0.65, { ms: A7, d: c.until - c.at - 0.4, a: 0.05, r: 1.0, v: 0.45 });
       } else {
-        /* brass and the bell only: no drum on the words */
-        Dm.forEach(function (m) { put('brass', c.at, { m: m, d: 0.5, v: 0.07, rel: 0.8 }); });
-        put('bell', c.at, { m: 69, d: 0.9, v: 0.2 });
+        hit(c.at, Dm, 38, 69, false);
+        hit(c.at + 0.2, Dm, 38, null, false);
         put('pad', c.at, { ms: Dm, d: c.until - c.at - 0.2, a: 0.03, r: 0.8, v: 0.36 });
       }
     });
