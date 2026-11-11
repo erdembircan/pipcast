@@ -248,11 +248,16 @@ export function World({ T, cam, clear, rain, tile, dim = 0, steady = false }: Wo
   const view = { x: cam.x - shake.x / cam.s, y: cam.y - shake.y / cam.s, s: cam.s }
   const rings = ringsAt(T)
   const white = whiteAt(T) * (1 - clear)
-  const clip = tile ? `inset(${tile.y0}px ${W - tile.x1}px ${H - tile.y1}px ${tile.x0}px round ${tile.r}px)` : undefined
+  // The city kept inside the icon's tile by a rounded box that hides what is outside it: headless
+  // Chrome left a clip-path'd layer out of some frames of a 4K render, and the city blinked
+  const box: CSSProperties = tile
+    ? { position: 'absolute', left: tile.x0, top: tile.y0, width: tile.x1 - tile.x0, height: tile.y1 - tile.y0, borderRadius: tile.r, overflow: 'hidden' }
+    : { position: 'absolute', inset: 0 }
+  const shift = tile ? { x: tile.x0, y: tile.y0 } : { x: 0, y: 0 }
   return (
     <div style={{ position: 'absolute', inset: 0, overflow: 'hidden' }}>
       <StormSky width={W} height={H} t={T} cam={view} lights={lights} clear={clear} rain={rain} layer="sky" tile={tile} />
-      <div style={{ position: 'absolute', inset: 0, clipPath: clip }}>
+      <div style={box}>
         <div
           style={{
             position: 'absolute',
@@ -261,7 +266,7 @@ export function World({ T, cam, clear, rain, tile, dim = 0, steady = false }: Wo
             width: 1024,
             height: 1024,
             transformOrigin: '0 0',
-            transform: `translate(${W / 2 - view.x * view.s}px, ${H / 2 - view.y * view.s}px) scale(${view.s})`,
+            transform: `translate(${W / 2 - view.x * view.s - shift.x}px, ${H / 2 - view.y * view.s - shift.y}px) scale(${view.s})`,
           }}
         >
           <Lightning T={T} />
