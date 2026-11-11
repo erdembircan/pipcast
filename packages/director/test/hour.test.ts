@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import type { Snapshot } from '@pipcast/contract'
 
+import type { Forecast } from '../src/forecast.ts'
 import { hourReport } from '../src/hour.ts'
 import { at, session, story } from './helpers.ts'
 
@@ -146,5 +147,101 @@ describe('hourReport', () => {
     )
     const rows = report.segment.steps[2]?.scene(context).rows
     expect(rows?.map((row) => row.id)).toEqual(['asking', 'finished-late', 'finished-early', 'working'])
+  })
+})
+
+// The week resets Sat 24 Oct 2026 at 18:00 (UTC, as the rest of these tests)
+const RESETS = Date.UTC(2026, 9, 24, 18, 0)
+
+function week(outlook: Forecast['outlook'], rest: Partial<Forecast> = {}): Forecast {
+  return {
+    computedAt: at(14, 59, 55),
+    resetsAt: RESETS,
+    outlook,
+    startsAt: null,
+    used: 48,
+    end: 86,
+    chance: 0.1,
+    runsOutAt: null,
+    days: [
+      { closesAt: Date.UTC(2026, 9, 22), low: 48, high: 62 },
+      { closesAt: Date.UTC(2026, 9, 23), low: 62, high: 74 },
+      { closesAt: Date.UTC(2026, 9, 24), low: 74, high: 80 },
+      { closesAt: RESETS, low: 80, high: 86 },
+    ],
+    ...rest,
+  }
+}
+
+const stormy = week('storm', {
+  used: 72,
+  end: 112,
+  chance: 0.8,
+  runsOutAt: Date.UTC(2026, 9, 24, 5, 10),
+  days: [
+    { closesAt: Date.UTC(2026, 9, 22), low: 72, high: 84 },
+    { closesAt: Date.UTC(2026, 9, 23), low: 84, high: 97 },
+    { closesAt: Date.UTC(2026, 9, 24), low: 97, high: 100 },
+    { closesAt: RESETS, low: 100, high: 112 },
+  ],
+})
+
+describe('the report on the hour with KLWD WEATHER', () => {
+  const finished = session('a', { stories: [story('a:1', 'complete', at(14, 30))] })
+  const steps = (forecast: Forecast | null, sessions = [finished], reduced = false) =>
+    hourReport(at(15), at(14), snap(...sessions), at(14, 59, 55), reduced, forecast).segment.steps
+
+  it('adds CURRENT CONDITIONS and EXTENDED FORECAST after the review, and no STORMTRACKER, for clear skies and clouds', () => {
+    for (const forecast of [week('clouds'), week('clear', { end: 55 })]) {
+      expect(steps(forecast).map((step) => [step.role, step.length, step.bed])).toEqual([
+        ['opener', 7500, undefined],
+        ['desk', 10_000, 'beat-major'],
+        ['review', 10_000, 'beat-major'],
+        ['weather', 10_000, 'beat-major'],
+        ['weather', 10_000, 'beat-major'],
+        ['outro', 1600, undefined],
+      ])
+      expect(steps(forecast).map((step) => step.scene(context).mode)).toEqual(['ident', 'desk', 'review', 'weather-now', 'weather-days', 'outro'])
+    }
+  })
+
+  it('adds STORMTRACKER with a storm, 13 s under the same beat', () => {
+    const report = steps(stormy)
+    expect(report.map((step) => step.scene(context).mode)).toEqual(['ident', 'desk', 'review', 'weather-now', 'weather-days', 'stormtracker', 'outro'])
+    expect(report[5]).toMatchObject({ role: 'weather', length: 13_000, bed: 'beat-major' })
+  })
+
+  it('follows the desk in a quiet hour', () => {
+    expect(steps(week('clouds'), [session('a')]).map((step) => step.scene(context).mode)).toEqual([
+      'ident',
+      'desk',
+      'weather-now',
+      'weather-days',
+      'outro',
+    ])
+  })
+
+  it('draws every page from the forecast as the report starts, with the crawl it is given', () => {
+    const ticker = [{ lead: 'ON THE HOUR', text: 'x' }]
+    const scene = steps(stormy)[4]?.scene({ now: at(15), ticker, board: { mode: 'board' } })
+    expect(scene).toMatchObject({ mode: 'weather-days', clock: '15:00', ticker })
+    expect(scene?.weather).toMatchObject({ outlook: 'storm', used: '72%', until: 'TO SAT 18:00' })
+  })
+
+  it('has no weather once the week is used up', () => {
+    const out = week('out', { used: 100, end: 100, chance: 1, days: [] })
+    expect(steps(out).map((step) => step.scene(context).mode)).toEqual(['ident', 'desk', 'review', 'outro'])
+  })
+
+  it('has no weather in the week’s first day, or before a session has read the week', () => {
+    const modes = (forecast: Forecast | null) => steps(forecast).map((step) => step.scene(context).mode)
+    expect(modes(week('early', { startsAt: at(18) }))).toEqual(['ident', 'desk', 'review', 'outro'])
+    expect(modes(null)).toEqual(['ident', 'desk', 'review', 'outro'])
+  })
+
+  it('leaves the outro out with reduced motion and keeps the pages', () => {
+    const { segment } = hourReport(at(15), at(14), snap(finished), at(14, 59, 55), true, stormy)
+    expect(segment.steps.map((step) => step.scene(context).mode)).toEqual(['ident', 'desk', 'review', 'weather-now', 'weather-days', 'stormtracker'])
+    expect(segment.endCue).toBe('hour-out')
   })
 })

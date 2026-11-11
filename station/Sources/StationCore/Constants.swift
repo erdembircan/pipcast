@@ -29,6 +29,9 @@ public enum Constants {
     public static let bedOutMs: Double = 500
     public static let hushMs: Double = 80
 
+    // How many readings of the week's usage the forecast keeps (weather.json): one an hour, so a week is 168
+    public static let weatherMaxPoints = 200
+
     // Where things live
     public static let storeFolder = "Pipcast"
     public static let claudeBundleID = "com.anthropic.claudefordesktop"

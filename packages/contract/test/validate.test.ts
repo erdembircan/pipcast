@@ -5,6 +5,7 @@ import {
   MAX_STORIES,
   STALE_MS,
   STATION_STALE_MS,
+  WEATHER_MAX_POINTS,
   isLive,
   isStationAlive,
   onAir,
@@ -13,6 +14,7 @@ import {
   parseSessionRecord,
   parseSharedOptions,
   parseStationStatus,
+  parseWeather,
   trimRecord,
 } from '@pipcast/contract'
 import type { SessionRecord } from '@pipcast/contract'
@@ -320,5 +322,50 @@ describe('the options the station follows', () => {
     for (const value of [null, undefined, 'x', 1, [], {}, { v: 2, transparent: true }, { v: 1 }, { v: 1, transparent: 'yes' }, { v: 1, transparent: 1 }]) {
       expect(parseSharedOptions(value)).toBeNull()
     }
+  })
+})
+
+describe('parseWeather', () => {
+  const reset = new Date(2026, 10, 16, 18, 0).getTime()
+
+  it('reads a good file as it is', () => {
+    const memory = { v: 1, resetsAt: reset, points: [[reset - 1000, 12.5], [reset - 500, 13]], warnedAt: reset - 100 }
+    expect(parseWeather(memory)).toEqual(memory)
+  })
+
+  it('is null unless it is an object with v 1', () => {
+    expect(parseWeather(null)).toBeNull()
+    expect(parseWeather([])).toBeNull()
+    expect(parseWeather('weather')).toBeNull()
+    expect(parseWeather({ v: 2, resetsAt: reset, points: [], warnedAt: null })).toBeNull()
+    expect(parseWeather({ resetsAt: reset, points: [], warnedAt: null })).toBeNull()
+  })
+
+  it('takes null for a reset or a warning time that is not a finite number', () => {
+    expect(parseWeather({ v: 1, resetsAt: '1', points: [], warnedAt: Number.POSITIVE_INFINITY })).toEqual({ v: 1, resetsAt: null, points: [], warnedAt: null })
+    expect(parseWeather({ v: 1, points: [] })).toEqual({ v: 1, resetsAt: null, points: [], warnedAt: null })
+  })
+
+  it('keeps only the points that are two finite numbers, and holds the percent to 0..100', () => {
+    const memory = parseWeather({
+      v: 1,
+      resetsAt: reset,
+      points: [[1000, 10], [2000], [3000, 'x'], [4000, 20, 1], 'no', [5000, Number.NaN], [6000, 150], [7000, -5]],
+      warnedAt: null,
+    })
+    expect(memory?.points).toEqual([[1000, 10], [6000, 100], [7000, 0]])
+  })
+
+  it('drops a point that is not later than the one before it', () => {
+    const memory = parseWeather({ v: 1, resetsAt: reset, points: [[1000, 10], [1000, 11], [900, 12], [2000, 13]], warnedAt: null })
+    expect(memory?.points).toEqual([[1000, 10], [2000, 13]])
+  })
+
+  it('keeps the newest points when there are too many', () => {
+    const points = Array.from({ length: WEATHER_MAX_POINTS + 25 }, (_, i) => [1000 + i, 50])
+    const memory = parseWeather({ v: 1, resetsAt: reset, points, warnedAt: null })
+    expect(memory?.points).toHaveLength(WEATHER_MAX_POINTS)
+    expect(memory?.points[0]).toEqual([1025, 50])
+    expect(memory?.points[WEATHER_MAX_POINTS - 1]).toEqual([1000 + WEATHER_MAX_POINTS + 24, 50])
   })
 })

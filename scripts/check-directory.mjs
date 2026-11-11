@@ -28,6 +28,7 @@ const HELD = {
   'station/sounds/hour-out.m4a': "the hour's outro, rendered from the design system's score",
   'station/sounds/beat-minor.caf': "the beat under BREAKING NEWS, rendered from the design system's score",
   'station/sounds/beat-major.caf': "the beat under the hour, rendered from the design system's score",
+  'station/sounds/weather-alert.m4a': "STORM WARNING's jingle, rendered from the design system's score",
 }
 
 // The README sections the listing and this repository's README share, word for word
@@ -38,6 +39,11 @@ const VENDOR = {
   'station/web/vendor/react.production.min.js': 'node_modules/react/umd/react.production.min.js',
   'station/web/vendor/react-dom.production.min.js': 'node_modules/react-dom/umd/react-dom.production.min.js',
   'station/web/vendor/LICENSE-react.txt': 'node_modules/react/LICENSE',
+}
+
+// Files the build copies from this repository as they are
+const COPIES = {
+  'station/web/design.js': 'design/components/bundle.js',
 }
 
 const PLUGIN = 'plugin'
@@ -314,6 +320,12 @@ for (const [path, source] of Object.entries(VENDOR)) {
     }
   } else if (!(pluginBytes.get(path)?.equals(original) ?? false)) {
     problem(`plugin/${path} differs from ${source}: copy React's file unchanged.`)
+  }
+}
+
+for (const [path, source] of Object.entries(COPIES)) {
+  if (!(pluginBytes.get(path)?.equals(readFileSync(join(root, source))) ?? false)) {
+    problem(`plugin/${path} differs from ${source}: build it with scripts/build-web.mjs, which copies the file as it is.`)
   }
 }
 

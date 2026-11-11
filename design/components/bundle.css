@@ -292,6 +292,11 @@
    it is drawn */
 .pn-anim .pn-turn-leave { animation: pn-turn-leave 420ms cubic-bezier(0.65, 0, 0.35, 1) both; }
 .pn-anim .pn-turn-enter { animation: pn-slide 460ms cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+/* The weekly forecast as a page of the board, EXTENDED FORECAST's wall in
+   the listing's place, x 40–920, y 84–470: it turns in and out by the
+   same push, as one piece */
+.pn-board-forecast { position: absolute; left: 0; top: -8px; width: 880px; height: 386px; }
+.pn-board-forecast > .pn-wx-wall { left: 0; top: 0; }
 
 /* The account's usage limits, under the listing on the page tab's line,
    y 422–462 from x 48, as chosen on PiP Newsroom · Usage limits: each
@@ -574,6 +579,161 @@
 .pn-review-slot { position: relative; height: 72px; }
 .pn-review-slot > .pn-review-row { position: absolute; left: 0; right: 0; top: 0; }
 .pn-review-tab { position: absolute; right: 0; top: 6px; height: 40px; }
+
+/* ---------- KLWD WEATHER: the weekly forecast ---------- */
+/* Stage units (960 x 540). A 90s local weather segment in the station's own
+   materials: the weather wall is the wall monitor made big (chrome bezel
+   round the studio screen), its pages head with the monitor's bar, the days
+   are glossy bars stood up under the lower third's gold, and the icons are
+   drawn in chrome and gold with the station's drop shadow. Colours are
+   tokens. */
+
+/* ---------- The weather wall ---------- */
+/* x 40–920, y 84–470: the wall monitor's chrome bezel and screen, the
+   whole stage wide under the bug */
+.pn-wx-wall { position: absolute; left: 40px; top: 84px; width: 880px; height: 386px; box-sizing: border-box; padding: 6px; border-radius: 12px; background: linear-gradient(145deg, var(--chrome-hi, #ffffff) 0%, var(--chrome, #c9d3e3) 30%, var(--chrome-lo, #7f90b3) 62%, var(--chrome, #c9d3e3) 100%); box-shadow: 0 12px 26px rgba(0, 0, 0, 0.5); }
+.pn-wx-screen { position: relative; height: 100%; display: flex; flex-direction: column; overflow: hidden; border-radius: 7px; background: linear-gradient(180deg, var(--studio-top, #1a3f93) 0%, var(--studio-ink, #0b2260) 60%, var(--studio-deep, #061233) 100%); box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.6); }
+/* The page's name on the monitor's head bar, in the page's colour; the
+   station's gold for the weather, BREAKING's red for a warning */
+.pn-wx-head { position: relative; flex: none; height: 46px; display: flex; align-items: center; justify-content: space-between; padding: 0 18px; background: linear-gradient(180deg, var(--pn-k-hi) 0%, var(--pn-k) 55%, var(--pn-k-deep) 100%); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5); font: italic 900 30px/1 var(--font-display, "Anybody", "Arial Black", sans-serif); font-stretch: 106%; letter-spacing: 0.01em; white-space: nowrap; color: var(--pn-on-k); }
+.pn-wx-head small { font: 800 28px/1 var(--font-text, "Archivo", "Helvetica Neue", Arial, sans-serif); font-variant-numeric: tabular-nums; letter-spacing: 0; }
+
+/* ---------- The icons: chrome clouds, a gold sun, a gold bolt ---------- */
+.pn-wx-icon { display: block; overflow: visible; filter: drop-shadow(0 4px 0 rgba(6, 18, 51, 0.5)); }
+
+/* ---------- EXTENDED FORECAST ---------- */
+/* One panel a day from today to the reset day: a glossy bar stood up,
+   the day on the lower third's gold, the icon for the day's high, the high
+   (the week's share by the day's close) in gold, the low (by its start)
+   under it. OUT once the pace reaches 100%. */
+.pn-wx-days { flex: 1; min-height: 0; display: flex; gap: 12px; padding: 12px 14px 10px; }
+.pn-wx-day { position: relative; flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; align-items: center; overflow: hidden; border-radius: var(--radius-bar, 10px); background: linear-gradient(180deg, var(--bar, #1d48a8) 0%, var(--bar-lo, #163a8c) 100%); box-shadow: inset 0 1px 0 var(--bar-edge, #8fb0ff), 0 4px 10px rgba(0, 0, 0, 0.3); }
+.pn-wx-day::before { content: ""; position: absolute; left: 0; right: 0; top: 40px; height: 34%; background: linear-gradient(180deg, var(--gloss, rgba(255, 255, 255, 0.22)), rgba(255, 255, 255, 0.03)); pointer-events: none; }
+.pn-wx-day-name { position: relative; align-self: stretch; flex: none; height: 40px; display: flex; align-items: center; justify-content: center; background: linear-gradient(180deg, var(--gold-hi, #ffe08a) 0%, var(--gold, #f2b630) 55%, var(--gold-lo, #b97d0c) 100%); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5); border-bottom: 2px solid var(--gold-lo, #b97d0c); font: italic 900 28px/1 var(--font-display, "Anybody", "Arial Black", sans-serif); font-stretch: 106%; color: var(--on-gold, #2a1800); }
+.pn-wx-day .pn-wx-icon { position: relative; width: 104px; height: 88px; margin-top: 12px; flex: none; }
+.pn-wx-hi { position: relative; margin-top: 10px; font: italic 900 44px/1 var(--font-display, "Anybody", "Arial Black", sans-serif); font-stretch: 100%; font-variant-numeric: tabular-nums; white-space: nowrap; color: var(--gold-hi, #ffe08a); text-shadow: 0 3px 0 rgba(6, 18, 51, 0.7); }
+.pn-wx-lo { position: relative; margin-top: 8px; font: 700 28px/1 var(--font-text, "Archivo", "Helvetica Neue", Arial, sans-serif); font-variant-numeric: tabular-nums; white-space: nowrap; color: var(--on-air-muted, #b9c8ee); }
+.pn-wx-out .pn-wx-hi { color: var(--breaking-text, #ff8a80); }
+/* Seven days to go: the panels narrow, the icon with them */
+.pn-wx-days--7 .pn-wx-day .pn-wx-icon { width: 84px; height: 72px; }
+.pn-wx-days--7 .pn-wx-hi { font-size: 36px; }
+
+/* The verdict along the screen's foot, on the strap's ground and gold
+   rule: the outlook on a tag in its colour (READY's green for CLEAR SKIES,
+   the station's gold for CLOUDS GATHERING, BREAKING's red for STORM
+   WARNING), then one sentence */
+.pn-wx-strip { flex: none; height: 48px; display: flex; align-items: center; gap: 18px; overflow: hidden; background: var(--studio-deep, #061233); border-top: 3px solid var(--gold, #f2b630); font: 600 28px/1 var(--font-text, "Archivo", "Helvetica Neue", Arial, sans-serif); white-space: nowrap; color: var(--on-air, #ffffff); }
+.pn-wx-tag { flex: none; align-self: stretch; display: flex; align-items: center; margin-left: -10px; padding: 0 20px 0 28px; transform: skewX(var(--slant, -12deg)); background: linear-gradient(180deg, var(--pn-k-hi) 0%, var(--pn-k) 55%, var(--pn-k-deep) 100%); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5); font: italic 900 28px/1 var(--font-display, "Anybody", "Arial Black", sans-serif); font-stretch: 106%; color: var(--pn-on-k); }
+.pn-wx-tag > span { display: inline-block; transform: skewX(calc(var(--slant, -12deg) * -1)); }
+
+/* An icon on the crawl, before the FORECAST lead */
+.pn-wx-tick { display: inline-flex; align-items: center; gap: 10px; }
+.pn-wx-tick .pn-wx-icon { width: 46px; height: 38px; filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.5)); }
+
+
+/* ---------- CURRENT CONDITIONS ---------- */
+/* What a 90s station shows when the weathercaster says "right now": the
+   sky, one big temperature and the conditions in words, nothing else. The
+   week's share used is the temperature, in the stinger's own chrome
+   lettering; the outlook's words under it. */
+.pn-wx-now { position: relative; flex: 1; display: flex; align-items: center; justify-content: center; gap: 34px; padding-bottom: 6px; }
+.pn-wx-now-sky.pn-wx-icon { width: 236px; height: 197px; flex: none; filter: drop-shadow(0 6px 0 rgba(6, 18, 51, 0.55)); }
+.pn-wx-now-read { display: flex; flex-direction: column; align-items: flex-start; }
+.pn-wx-now-cap { font: italic 900 32px/1 var(--font-display, "Anybody", "Arial Black", sans-serif); font-stretch: 104%; color: var(--gold-hi, #ffe08a); text-shadow: 0 2px 0 rgba(6, 18, 51, 0.6); }
+.pn-wx-now-temp { font-size: 150px; margin: 2px 0 6px -6px; }
+.pn-wx-now-word { font: italic 900 40px/1 var(--font-display, "Anybody", "Arial Black", sans-serif); font-stretch: 106%; white-space: nowrap; color: var(--on-air, #ffffff); text-shadow: 0 3px 0 rgba(6, 18, 51, 0.7); }
+
+/* ---------- STORMTRACKER: the storm on its track ---------- */
+/* A 90s station's storm tracker, drawn in WebGL by stormScene (bundle.js,
+   straight onto the canvas) on NASA's Blue Marble earth and clouds: the dive from orbit, then
+   the storm (the week's usage) crossing the Gulf from left to right, growing,
+   to its landfall on Florida's coast where the week runs out. The labels
+   pinned to the track and the TIME OF ARRIVAL list are HTML over the scene,
+   placed every frame by the scene's camera. 13 s. */
+.pn-wx-st3-box { flex: 1; min-height: 0; padding: 10px 14px 10px; }
+.pn-wx-st3 { position: relative; width: 840px; height: 306px; overflow: hidden; border-radius: var(--radius-bar, 10px); background: #01030a; box-shadow: inset 0 0 0 2px rgba(6, 18, 51, 0.7), 0 4px 10px rgba(0, 0, 0, 0.3); }
+.pn-wx-st3 > canvas { position: absolute; left: 0; top: 0; width: 840px; height: 306px; display: block; }
+/* Labels pinned to the track: placed every frame by the scene's own camera */
+.pn-wx-st3-label { position: absolute; left: 0; top: 0; z-index: 2; pointer-events: none; opacity: 0; transition: opacity 260ms ease-out; }
+.pn-wx-st3-label.pn-wx-on { opacity: 1; }
+.pn-wx-st3-label > span { position: absolute; left: 0; bottom: 10px; transform: translateX(-50%); white-space: nowrap; }
+.pn-wx-st3-now > span { font: 800 24px/1 var(--font-text, "Archivo", "Helvetica Neue", Arial, sans-serif); color: var(--on-air, #ffffff); text-shadow: 0 2px 0 var(--studio-deep, #061233), 0 0 6px var(--studio-deep, #061233); }
+.pn-wx-st3-mark > span { font: italic 900 28px/1 var(--font-display, "Anybody", "Arial Black", sans-serif); color: var(--gold-hi, #ffe08a); text-shadow: 0 3px 0 var(--studio-deep, #061233), 0 0 8px var(--studio-deep, #061233); }
+.pn-wx-st3-out > span { bottom: 18px; padding: 6px 12px; border-radius: 4px; background: linear-gradient(180deg, var(--breaking-hi, #ff5a4f) 0%, var(--breaking, #c4170e) 55%, var(--breaking-deep, #5c070c) 100%); border: 2px solid var(--gold-hi, #ffe08a); box-shadow: 0 6px 10px rgba(0, 0, 0, 0.5); font: italic 900 26px/1 var(--font-display, "Anybody", "Arial Black", sans-serif); color: var(--on-breaking, #ffffff); }
+.pn-wx-st3-out.pn-wx-on > span { animation: pn-wx-st3-pop 360ms cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+@keyframes pn-wx-st3-pop { from { transform: translateX(-50%) scale(1.5); } to { transform: translateX(-50%) scale(1); } }
+/* TIME OF ARRIVAL, the storm tracker's list: when the storm reaches each
+   mark, a row lighting as it passes */
+.pn-wx-st3-toa { position: absolute; left: 12px; top: 12px; z-index: 2; padding: 8px 14px 10px; background: rgba(6, 18, 51, 0.84); border-top: 3px solid var(--gold, #f2b630); box-shadow: 0 6px 12px rgba(0, 0, 0, 0.45); font: 600 22px/1.25 "IBM Plex Mono", ui-monospace, Menlo, monospace; color: var(--on-air-muted, #b9c8ee); opacity: 0; transition: opacity 300ms; }
+.pn-wx-st3-tracking .pn-wx-st3-toa { opacity: 1; }
+.pn-wx-st3-toa > b { display: block; margin-bottom: 4px; font: italic 900 20px/1 var(--font-display, "Anybody", "Arial Black", sans-serif); letter-spacing: 0.04em; color: var(--gold-hi, #ffe08a); }
+.pn-wx-st3-toa > span { display: block; white-space: pre; opacity: 0.45; }
+.pn-wx-st3-toa > span.pn-wx-on { opacity: 1; color: var(--on-air, #ffffff); }
+.pn-wx-st3-toa > span.pn-wx-st3-hit.pn-wx-on { color: var(--breaking-text, #ff8a80); animation: pn-wx-st3-blink 0.8s steps(2, jump-none) infinite; }
+@keyframes pn-wx-st3-blink { from { opacity: 1; } to { opacity: 0.35; } }
+/* The dive opens with the sun's flare at the earth's limb */
+.pn-wx-st3-flare { position: absolute; right: 150px; top: 18px; width: 220px; height: 220px; margin: -110px -110px 0 0; z-index: 1; pointer-events: none; border-radius: 50%; background: radial-gradient(closest-side, rgba(255, 255, 255, 0.95), rgba(255, 224, 138, 0.55) 18%, rgba(255, 224, 138, 0.12) 45%, rgba(255, 224, 138, 0) 70%); opacity: 0; }
+.pn-wx-st3-flare::after { content: ""; position: absolute; left: -200px; right: -200px; top: 50%; height: 4px; margin-top: -2px; background: linear-gradient(90deg, rgba(255, 255, 255, 0), rgba(255, 255, 255, 0.85), rgba(255, 255, 255, 0)); }
+.pn-wx-st3:not(.pn-wx-st3-tracking) .pn-wx-st3-flare { animation: pn-wx-st3-flare 2.4s ease-out both; }
+@keyframes pn-wx-st3-flare { 0% { opacity: 0; transform: scale(0.6); } 20% { opacity: 1; transform: scale(1); } 100% { opacity: 0; transform: scale(1.3) translateX(-60px); } }
+/* A held picture (a still, or reduced motion) shows its labels and list as they stand: nothing is brought in, and nothing blinks or pops */
+.pn-wx-st3-held .pn-wx-st3-label, .pn-wx-st3-held .pn-wx-st3-toa { transition: none; }
+.pn-wx-st3-held .pn-wx-st3-out.pn-wx-on > span, .pn-wx-st3-held .pn-wx-st3-toa > span.pn-wx-st3-hit.pn-wx-on { animation: none; }
+/* Where the globe can't be drawn (no WebGL 2) the scene stays dark, with the list at the top left, every row lit, and the OUT tag at the top right */
+.pn-wx-st3-plain .pn-wx-st3-toa { opacity: 1; }
+.pn-wx-st3-plain .pn-wx-st3-toa > span { opacity: 1; color: var(--on-air, #ffffff); }
+.pn-wx-st3-plain .pn-wx-st3-toa > span.pn-wx-st3-hit { color: var(--breaking-text, #ff8a80); animation: none; }
+.pn-wx-st3-plain .pn-wx-st3-out { left: auto; right: 12px; top: 12px; opacity: 1; }
+.pn-wx-st3-plain .pn-wx-st3-out > span { position: static; display: inline-block; transform: none; }
+
+/* ---------- WEATHER ALERT: the open ---------- */
+/* Built as ON THE HOUR is: a hero on the left and the words in chrome on
+   the right, sharing the frame's centre line, no strap and no sub title.
+   The hero is the station clock's chrome bezel and glossy face holding the
+   storm; the ground is BREAKING NEWS's glass wall in red, its wave
+   crossing as the stinger's does. Cut to its jingle (1.6 s): the bolt
+   flashes on each pair of alert tones (0, 0.3, 0.6 s), WEATHER slams in on
+   the first hit (0.95 s), ALERT on the second (1.15 s), and on the thunder
+   (1.6 s) the frame flashes white and the glint crosses the words.
+   The dial stands about as tall as the title's two lines, 166 px across, and the dial and the title sit centred on the frame together. */
+.pn-wx-alert-dial { position: absolute; left: 0; top: 0; width: 360px; height: 360px; margin: -180px 0 0 -180px; transform: translate(222px, 268px) scale(0.46); }
+.pn-wx-alert-words { left: 340px; right: 126px; }
+.pn-wx-alert-dial .pn-dial { position: absolute; }
+.pn-wx-alert-dial .pn-dial-face { display: flex; align-items: center; justify-content: center; }
+.pn-wx-alert-dial .pn-wx-icon { width: 250px; height: 208px; margin-top: 18px; filter: drop-shadow(0 8px 0 rgba(6, 18, 51, 0.55)); }
+.pn-wx-alert-line { font-size: 82px; }
+.pn-wx-flash { position: absolute; inset: 0; background: var(--chrome-hi, #ffffff); opacity: 0; pointer-events: none; }
+.pn-anim .pn-wx-alert-dial { animation: pn-wx-dial-in 420ms cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+@keyframes pn-wx-dial-in { from { opacity: 0; transform: translate(222px, 268px) scale(0.662); } to { opacity: 1; transform: translate(222px, 268px) scale(0.46); } }
+.pn-anim .pn-wx-alert-bolt { animation: pn-wx-bolt 1.9s linear both; }
+@keyframes pn-wx-bolt { 0%, 4%, 16%, 20%, 32%, 36%, 84%, 90% { opacity: 1; } 8%, 12%, 24%, 28%, 40%, 80% { opacity: 0.15; } 100% { opacity: 1; } }
+.pn-anim .pn-wx-alert-line { animation: pn-wx-slam 260ms cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+.pn-anim .pn-wx-alert-line:nth-child(1) { animation-delay: 950ms; }
+.pn-anim .pn-wx-alert-line:nth-child(2) { animation-delay: 1150ms; }
+@keyframes pn-wx-slam { from { opacity: 0; transform: translateX(160px) scale(1.3); } to { opacity: 1; transform: translateX(0) scale(1); } }
+.pn-anim .pn-wx-alert-line .pn-stinger-glint { animation: pn-wx-glint 520ms 1600ms ease-in-out both; }
+.pn-anim .pn-wx-alert-line .pn-stinger-shine { animation: pn-wx-shine 520ms 1600ms ease-in-out both; }
+@keyframes pn-wx-glint { from { transform: translateX(-157%); } to { transform: translateX(157%); } }
+@keyframes pn-wx-shine { from { transform: translateX(157%); } to { transform: translateX(-157%); } }
+.pn-anim .pn-wx-flash { animation: pn-wx-flash-white 520ms 1600ms ease-out both; }
+@keyframes pn-wx-flash-white { 0% { opacity: 0; } 12% { opacity: 0.7; } 30% { opacity: 0.15; } 42% { opacity: 0.45; } 100% { opacity: 0; } }
+
+/* ---------- WEATHER ALERT: the outro ---------- */
+/* The open run out over 1.4 s, as the hour's outro runs out the ident:
+   the glint crosses the words, the words leave to the right, the dial
+   drops back and goes, and the open fades to the board underneath, where
+   the warning's crawl now stays. BREAKING NEWS's outro jingle. */
+.pn-anim .pn-wx-alert-out { animation: pn-wx-out-fade 1.4s linear both; }
+@keyframes pn-wx-out-fade { 0%, 60% { opacity: 1; } 86%, 100% { opacity: 0; } }
+.pn-anim .pn-wx-alert-out .pn-wx-alert-dial { animation: pn-wx-dial-out 1.4s ease-in-out both; }
+@keyframes pn-wx-dial-out { 0%, 28% { opacity: 1; transform: translate(222px, 268px) scale(0.46); } 52%, 100% { opacity: 0; transform: translate(222px, 268px) scale(0.322); } }
+.pn-anim .pn-wx-alert-out .pn-wx-alert-bolt { animation: none; }
+.pn-anim .pn-wx-alert-out .pn-wx-alert-line { animation: pn-wx-leave 500ms ease-in both; }
+.pn-anim .pn-wx-alert-out .pn-wx-alert-line:nth-child(1) { animation-delay: 160ms; }
+.pn-anim .pn-wx-alert-out .pn-wx-alert-line:nth-child(2) { animation-delay: 330ms; }
+@keyframes pn-wx-leave { from { opacity: 1; transform: translateX(0) scale(1); } to { opacity: 0; transform: translateX(180px) scale(1.25); } }
+.pn-anim .pn-wx-alert-out .pn-stinger-glint { animation: pn-wx-glint 420ms ease-in-out both; }
+.pn-anim .pn-wx-alert-out .pn-stinger-shine { animation: pn-wx-shine 420ms ease-in-out both; }
 
 /* ---------- The studio: the city through the day, key light, anchor desk ---------- */
 .pn-desk { position: absolute; inset: 0; overflow: hidden; --sky-top: var(--dusk-top, #0b1d4d); --sky-mid: var(--dusk-mid, #3a2d74); --sky-low: var(--dusk-glow, #d9725c); --city: var(--tower, #08112e); --glass: rgba(255, 255, 255, 0.06); }

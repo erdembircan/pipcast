@@ -7,7 +7,7 @@ export type StoryKind = 'needs-input' | 'ready' | 'complete' | 'error'
 
 export type Quadrant = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right'
 
-export type Jingle = 'breaking' | 'breaking-out' | 'hour' | 'hour-out'
+export type Jingle = 'breaking' | 'breaking-out' | 'hour' | 'hour-out' | 'weather-alert'
 
 // The beat under a desk, in its segment's key: D minor under BREAKING NEWS, D
 // major under the hour. The station loops it for as long as it plays
@@ -114,6 +114,19 @@ export interface SharedOptions {
   transparent: boolean
 }
 
+// weather.json: the week's usage readings the forecast goes by, and when STORM
+// WARNING last aired. The station keeps it for the page, which posts it whole
+// when it changes and gets it back until it has it
+export interface WeatherMemory {
+  v: 1
+  // When the week the readings belong to resets, in ms; null before the first reading
+  resetsAt: number | null
+  // [when, in ms; percent of the week used], oldest first, at most one an hour
+  points: [number, number][]
+  // When STORM WARNING last came due, in ms: when it aired, or when it was skipped while you were in Claude
+  warnedAt: number | null
+}
+
 // The bridge between the station and its web page
 
 export interface Snapshot {
@@ -123,6 +136,17 @@ export interface Snapshot {
   windowOut?: boolean
   sessions: SessionRecord[]
   lastReportAt: number | null
+  // How many times what the weather reads of the on-air sessions has changed:
+  // who is on air, and the `limits` each holds. A heartbeat's check-in, or any
+  // other change to a record, does not raise it. The page looks through the
+  // sessions for the week's reading only when it differs from the last time. A
+  // snapshot without one says nothing, so the page looks through them every
+  // time: every producer of snapshots sets it
+  limits?: number
+  // The station's weather.json, sent in the snapshots after each `ready` until
+  // the page says it has it (`weather-taken`). Absent: not sent. Null: there is
+  // no memory. The page keeps it, and hands it to each director it makes
+  weather?: WeatherMemory | null
 }
 
 export interface SnapshotMessage extends Snapshot {
@@ -163,6 +187,9 @@ export type PageMessage =
   | { type: 'ready' }
   | Sound
   | { type: 'reported'; at: number }
+  | { type: 'weather'; memory: WeatherMemory }
+  // The page has the weather memory: the station leaves it out of its snapshots
+  | { type: 'weather-taken' }
   | { type: 'window'; wanted: boolean }
   | { type: 'rendered' }
   | { type: 'log'; level: 'info' | 'error'; text: string }

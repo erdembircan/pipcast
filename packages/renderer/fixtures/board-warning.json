@@ -1,0 +1,43 @@
+{
+  "scene": {
+    "mode": "board",
+    "clock": "15:31",
+    "sessions": [
+      {
+        "id": "forecast",
+        "name": "Weekly limit forecast (#143)",
+        "project": "pipcast",
+        "state": "working"
+      },
+      {
+        "id": "changelog",
+        "name": "Changelog for 1.3.0",
+        "project": "pipcast",
+        "state": "ready"
+      },
+      {
+        "id": "sync",
+        "name": "Calendar sync retries",
+        "project": "mamatime",
+        "state": "needs-input"
+      }
+    ],
+    "limits": [
+      {
+        "kind": "session",
+        "percent": 58
+      },
+      {
+        "kind": "week",
+        "percent": 72
+      }
+    ],
+    "ticker": [
+      {
+        "lead": "STORM WARNING",
+        "text": "in effect until Mon 18:00: at this pace the week runs out Sun around 05:00"
+      },
+      "pipcast: editing packages/director/src/forecast.ts"
+    ]
+  }
+}

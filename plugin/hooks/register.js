@@ -189,6 +189,7 @@ function storePaths(home) {
     control: `${root}/control.json`,
     prefs: `${root}/prefs.json`,
     options: `${root}/options.json`,
+    weather: `${root}/weather.json`,
     lock: `${root}/station.lock`,
     log: `${root}/station.log`
   };

@@ -3,7 +3,8 @@ import { describe, expect, it } from 'vitest'
 import type { StoryKind } from '../../contract/src/types.ts'
 
 import { STATE_AFTER } from '../src/cue.ts'
-import { hourSessions, land, overlay } from '../src/world.ts'
+import { forecastWeek } from '../../director/src/forecast.ts'
+import { hourSessions, land, overlay, syntheticWeek } from '../src/world.ts'
 
 import { DEFAULTS, at, session } from './helpers.ts'
 
@@ -144,5 +145,86 @@ describe('hourSessions', () => {
     const tunedIn = made.map((one) => one.tunedInAt)
     expect(tunedIn).toEqual([...tunedIn].sort((a, b) => a - b))
     expect(new Set(tunedIn).size).toBe(4)
+  })
+})
+
+describe('syntheticWeek', () => {
+  const HOUR = 3_600_000
+  // Fri 13 Nov 2026, 15:12, local
+  const now = new Date(2026, 10, 13, 15, 12).getTime()
+  const forecastOf = (outlook: 'clear' | 'clouds' | 'storm', used?: number, at = now) => {
+    const { memory, reading } = syntheticWeek(outlook, used, at)
+    return forecastWeek({ resetsAt: memory.resetsAt as number, points: memory.points }, reading.percentUsed, at)
+  }
+
+  it.each([
+    ['clear', 36, 55],
+    ['clouds', 48, 86],
+    ['storm', 72, 130],
+  ] as const)('makes a week of %s skies: %i%% used by default, ending near %i%%', (outlook, used, target) => {
+    const week = syntheticWeek(outlook, undefined, now)
+    expect(week.reading).toEqual({ kind: 'week', percentUsed: used, resetsAt: week.memory.resetsAt, at: now })
+    const forecast = forecastOf(outlook)
+    expect(forecast?.outlook).toBe(outlook)
+    expect(Math.abs((forecast?.end ?? 0) - target)).toBeLessThan(6)
+  })
+
+  it('gives each outlook at every hour of the day', () => {
+    for (let step = 0; step < 24 * 4; step += 1) {
+      const at = new Date(2026, 10, 12, 0, 0).getTime() + step * 15 * 60_000
+      expect(forecastOf('clear', undefined, at)?.outlook).toBe('clear')
+      expect(forecastOf('clouds', undefined, at)?.outlook).toBe('clouds')
+      expect(forecastOf('storm', undefined, at)?.outlook).toBe('storm')
+    }
+  })
+
+  it('puts the week as far along as its share is of the end it aims at, to the hour', () => {
+    const { memory } = syntheticWeek('storm', undefined, now)
+    // 72 / 130 of 168 h is 93 h
+    expect((memory.resetsAt as number) - now).toBe(168 * HOUR - 93 * HOUR)
+    // A small share is a fifth of the week at least, and never under 30 hours
+    expect((syntheticWeek('storm', 5, now).memory.resetsAt as number) - now).toBe(168 * HOUR - 34 * HOUR)
+    expect((syntheticWeek('clear', 1, now).memory.resetsAt as number) - now).toBe(168 * HOUR - 34 * HOUR)
+    // A share past the target is nine tenths of the week at most
+    expect((syntheticWeek('clear', 99, now).memory.resetsAt as number) - now).toBe(168 * HOUR - 151 * HOUR)
+  })
+
+  it('has a point every hour from the week’s start, the last at the share used', () => {
+    const { memory, reading } = syntheticWeek('clouds', 60, now)
+    const start = (memory.resetsAt as number) - 168 * HOUR
+    const times = memory.points.map(([at]) => at)
+    expect(times[0]).toBe(start + HOUR)
+    expect(times[times.length - 1]).toBeLessThanOrEqual(now)
+    expect(now - (times[times.length - 1] as number)).toBeLessThan(HOUR)
+    times.slice(1).forEach((at, index) => expect(at - (times[index] as number)).toBe(HOUR))
+    expect(memory.points.length).toBeLessThanOrEqual(168)
+    expect(memory.points[memory.points.length - 1]?.[1]).toBe(60)
+    expect(reading.percentUsed).toBe(60)
+    expect(memory.points.every(([, percent]) => percent * 10 === Math.round(percent * 10))).toBe(true)
+    expect(memory.warnedAt).toBeNull()
+  })
+
+  it('rises evenly through 09:00 to 21:00 each day and stands still otherwise', () => {
+    const { memory } = syntheticWeek('storm', undefined, now)
+    let rose = 0
+    let stood = 0
+    for (let i = 1; i < memory.points.length; i += 1) {
+      const [at, percent] = memory.points[i] as [number, number]
+      const before = (memory.points[i - 1] as [number, number])[1]
+      // The quarter hours the point is the end of, by the hour each began in
+      const active = [1, 2, 3, 4].filter((quarter) => {
+        const hour = new Date(at - quarter * 15 * MINUTE).getHours()
+        return hour >= 9 && hour < 21
+      }).length
+      if (active === 4) {
+        expect(percent).toBeGreaterThan(before)
+        rose += 1
+      } else if (active === 0) {
+        expect(percent).toBe(before)
+        stood += 1
+      }
+    }
+    expect(rose).toBeGreaterThan(0)
+    expect(stood).toBeGreaterThan(0)
   })
 })

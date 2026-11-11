@@ -13,6 +13,7 @@ const empty: BoardState = {
   onAirStoryId: null,
   lastReport: null,
   reportEndedAt: null,
+  forecast: null,
 }
 
 const later = T0 + 3_600_000

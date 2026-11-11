@@ -8,7 +8,7 @@ import StationCore
 /// ring can overlap the next segment's start, and one for the beat, which loops
 /// one turn of itself for as long as it plays. Use it from the main thread only.
 public final class SoundDesk {
-    public static let jingles = ["breaking", "breaking-out", "hour", "hour-out"]
+    public static let jingles = ["breaking", "breaking-out", "hour", "hour-out", "weather-alert"]
     public static let beds = ["beat-minor", "beat-major"]
 
     /// Every file the desk plays, by name: the jingles as AAC, and each bed's

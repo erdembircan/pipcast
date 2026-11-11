@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 
-import type { Snapshot } from '@pipcast/contract'
+import { parseWeather } from '@pipcast/contract'
+import type { Snapshot, WeatherMemory } from '@pipcast/contract'
 import { createDirector } from '@pipcast/director'
 import type { DirectorOptions, Program, Tick } from '@pipcast/director'
 
@@ -31,7 +32,15 @@ export interface AppProps {
 // The live page: keeps the latest snapshot, ticks the director on a timer and
 // as each snapshot comes, and draws what it airs
 export function App({ reducedMotion = prefersReducedMotion(), createSource = createDirector }: AppProps) {
-  const director = useMemo(() => createSource({ reducedMotion }), [createSource, reducedMotion])
+  // The station's weather.json, once the page has it: what the station first
+  // sent, then each memory the director has posted since. A director made later,
+  // as when reduced motion changes, is handed it: without it its desk would
+  // start the week's readings over with the next reading it takes.
+  const memory = useRef<{ taken: boolean; weather: WeatherMemory | null }>({ taken: false, weather: null })
+  const director = useMemo(
+    () => createSource({ reducedMotion, ...(memory.current.taken ? { weather: memory.current.weather } : {}) }),
+    [createSource, reducedMotion],
+  )
   const snapshot = useRef<Snapshot | null>(null)
   const [program, setProgram] = useState<Program | null>(null)
   const [width, setWidth] = useState(window.innerWidth)
@@ -59,6 +68,11 @@ export function App({ reducedMotion = prefersReducedMotion(), createSource = cre
       if (next.reported !== null) {
         post({ type: 'reported', at: next.reported })
       }
+      // The station keeps the weather desk's readings and when STORM WARNING came due
+      if (next.weather !== null) {
+        memory.current = { taken: true, weather: next.weather }
+        post({ type: 'weather', memory: next.weather })
+      }
       // Nothing is drawn until the station has sent its first snapshot
       if (snapshot.current !== null) {
         setProgram(next)
@@ -69,6 +83,14 @@ export function App({ reducedMotion = prefersReducedMotion(), createSource = cre
     // see every snapshot the window was hidden in
     const unsubscribe = subscribe((message) => {
       if (message.type === 'snapshot') {
+        // The station sends the memory until the page says it has it. The first the
+        // page takes; one still on its way after that is older than what the page holds.
+        if (message.weather !== undefined) {
+          if (!memory.current.taken) {
+            memory.current = { taken: true, weather: parseWeather(message.weather) }
+          }
+          post({ type: 'weather-taken' })
+        }
         snapshot.current = message
         tick()
       }

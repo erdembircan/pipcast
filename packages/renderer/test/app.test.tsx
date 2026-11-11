@@ -6,7 +6,7 @@ import { createRoot } from 'react-dom/client'
 import type { Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import type { Program } from '@pipcast/director'
+import type { DirectorOptions, Program } from '@pipcast/director'
 
 import { App } from '../src/App.tsx'
 import { receive } from '../src/bridge.ts'
@@ -39,8 +39,12 @@ describe('the live page', () => {
     vi.useRealTimers()
   })
 
+  // The station's counter of changes to the sessions' limits rises with each snapshot here, as each one differs
+  let limits = 0
+
   function snapshot(sessions: unknown[], extra: Record<string, unknown> = {}) {
-    return { type: 'snapshot', now: Date.now(), visible: true, sessions, lastReportAt: null, ...extra }
+    limits += 1
+    return { type: 'snapshot', now: Date.now(), visible: true, sessions, lastReportAt: null, limits, ...extra }
   }
 
   function record(extra: Record<string, unknown>) {
@@ -97,6 +101,7 @@ describe('the live page', () => {
       sounds: [{ type: 'cue', jingle: 'breaking' }],
       reported: null,
       wantsWindow: false,
+      weather: null,
     }
     act(() => root.render(<App reducedMotion={false} createSource={() => ({ tick: () => program })} />))
     act(() => receive(snapshot([record({})])))
@@ -104,6 +109,94 @@ describe('the live page', () => {
       vi.advanceTimersByTime(250)
     })
     expect(postMessage).toHaveBeenCalledWith({ type: 'cue', jingle: 'breaking' })
+  })
+
+  it('tells the station the weather desk’s memory when the director has some to keep', () => {
+    const memory = { v: 1 as const, resetsAt: 1_800_000_000_000, points: [[1_799_000_000_000, 41.5]] as [number, number][], warnedAt: null }
+    const program: Program = { scene: { mode: 'board' }, key: 'board', sounds: [], reported: null, wantsWindow: false, weather: memory }
+    act(() => root.render(<App reducedMotion={false} createSource={() => ({ tick: () => program })} />))
+    act(() => receive(snapshot([record({})])))
+    act(() => {
+      vi.advanceTimersByTime(250)
+    })
+    expect(postMessage).toHaveBeenCalledWith({ type: 'weather', memory })
+  })
+
+  describe('the weather memory', () => {
+    const memory = { v: 1 as const, resetsAt: 1_800_000_000_000, points: [[1_799_000_000_000, 41.5]] as [number, number][], warnedAt: null }
+    const newer = { ...memory, points: [...memory.points, [1_799_003_600_000, 42.5]] as [number, number][] }
+    const quiet: Program = { scene: { mode: 'board' }, key: 'board', sounds: [], reported: null, wantsWindow: false, weather: null }
+    const taken = () => postMessage.mock.calls.filter((call) => (call[0] as { type: string }).type === 'weather-taken')
+
+    // A source that airs what `program` is, and keeps the options it was made with
+    function source(program: () => Program) {
+      const made: DirectorOptions[] = []
+      return {
+        made,
+        create: (options: DirectorOptions) => {
+          made.push(options)
+          return { tick: () => program() }
+        },
+      }
+    }
+
+    it('says it has the memory once a snapshot carries it, and not before', () => {
+      const { create } = source(() => quiet)
+      act(() => root.render(<App reducedMotion={false} createSource={create} />))
+      act(() => receive(snapshot([record({})])))
+      expect(taken()).toHaveLength(0)
+      act(() => receive(snapshot([record({})], { weather: null })))
+      expect(taken()).toHaveLength(1)
+    })
+
+    it('leaves the first director to take the memory from the snapshot that carries it', () => {
+      const { create, made } = source(() => quiet)
+      act(() => root.render(<App reducedMotion={false} createSource={create} />))
+      act(() => receive(snapshot([record({})], { weather: memory })))
+      expect(made).toStrictEqual([{ reducedMotion: false }])
+    })
+
+    it('hands the memory it took to a director made later, as when reduced motion changes', () => {
+      const { create, made } = source(() => quiet)
+      act(() => root.render(<App reducedMotion={false} createSource={create} />))
+      act(() => receive(snapshot([record({})], { weather: memory })))
+      act(() => root.render(<App reducedMotion createSource={create} />))
+      expect(made[made.length - 1]).toStrictEqual({ reducedMotion: true, weather: memory })
+    })
+
+    it('hands it that there is no memory too', () => {
+      const { create, made } = source(() => quiet)
+      act(() => root.render(<App reducedMotion={false} createSource={create} />))
+      act(() => receive(snapshot([record({})], { weather: null })))
+      act(() => root.render(<App reducedMotion createSource={create} />))
+      expect(made[made.length - 1]).toStrictEqual({ reducedMotion: true, weather: null })
+    })
+
+    it('hands a director made later the memory the last director posted, not the one the station first sent', () => {
+      let program = quiet
+      const { create, made } = source(() => program)
+      act(() => root.render(<App reducedMotion={false} createSource={create} />))
+      act(() => receive(snapshot([record({})], { weather: memory })))
+      program = { ...quiet, weather: newer }
+      act(() => {
+        vi.advanceTimersByTime(250)
+      })
+      expect(postMessage).toHaveBeenCalledWith({ type: 'weather', memory: newer })
+      act(() => root.render(<App reducedMotion createSource={create} />))
+      expect(made[made.length - 1]).toStrictEqual({ reducedMotion: true, weather: newer })
+    })
+
+    it('keeps what it holds when a snapshot already on its way carries an older memory', () => {
+      const { create, made } = source(() => ({ ...quiet, weather: newer }))
+      act(() => root.render(<App reducedMotion={false} createSource={create} />))
+      act(() => receive(snapshot([record({})], { weather: memory })))
+      act(() => {
+        vi.advanceTimersByTime(250)
+      })
+      act(() => receive(snapshot([record({})], { weather: memory })))
+      act(() => root.render(<App reducedMotion createSource={create} />))
+      expect(made[made.length - 1]).toStrictEqual({ reducedMotion: true, weather: newer })
+    })
   })
 
   it('does not air a story that landed while the window was hidden, when the window shows before the timer ticks', () => {

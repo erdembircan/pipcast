@@ -1,4 +1,4 @@
-/* @ds-bundle: {"format":4,"namespace":"PipNews","components":[{"name":"Pip"},{"name":"PipControls"},{"name":"Broadcast"},{"name":"Backdrop"},{"name":"TopBand"},{"name":"Ticker"},{"name":"LowerThird"},{"name":"Stinger"},{"name":"Ident"},{"name":"SessionBoard"},{"name":"StatePill"},{"name":"NewsDesk"},{"name":"OTSBox"},{"name":"HourReview"},{"name":"Clawd"},{"name":"Mark"},{"name":"PlayWithSound"},{"name":"Band"},{"name":"PromptSketch"}]} */
+/* @ds-bundle: {"format":4,"namespace":"PipNews","components":[{"name":"Pip"},{"name":"PipControls"},{"name":"Broadcast"},{"name":"Backdrop"},{"name":"TopBand"},{"name":"Ticker"},{"name":"LowerThird"},{"name":"Stinger"},{"name":"Ident"},{"name":"SessionBoard"},{"name":"StatePill"},{"name":"NewsDesk"},{"name":"OTSBox"},{"name":"HourReview"},{"name":"WeatherIcon"},{"name":"WeatherNow"},{"name":"WeatherDays"},{"name":"Stormtracker"},{"name":"AlertOpen"},{"name":"Clawd"},{"name":"Mark"},{"name":"PlayWithSound"},{"name":"Band"},{"name":"PromptSketch"}]} */
 (function () {
   'use strict';
 
@@ -451,13 +451,24 @@
     var body = document.createElement('span');
     body.className = 'pn-ticker-item';
     var lead = typeof it === 'string' ? null : it.lead;
+    var sky = typeof it === 'string' ? null : it.sky;
+    /* the words go in the item, or after the sky's icon when it has one */
+    var words = body;
+    if (sky) {
+      body.className += ' pn-wx-tick';
+      var holder = document.createElement('span');
+      holder.innerHTML = weatherIconMarkup(sky, nextWx());
+      body.appendChild(holder.firstChild);
+      words = document.createElement('span');
+      body.appendChild(words);
+    }
     if (lead) {
       var tag = document.createElement('span');
       tag.className = 'pn-ticker-lead';
       tag.textContent = lead + ' ';
-      body.appendChild(tag);
+      words.appendChild(tag);
     }
-    body.appendChild(document.createTextNode(typeof it === 'string' ? it : (it.text || '')));
+    words.appendChild(document.createTextNode(typeof it === 'string' ? it : (it.text || '')));
     var sep = document.createElement('i');
     sep.className = 'pn-ticker-sep';
     unit.appendChild(body);
@@ -641,8 +652,12 @@
       items.forEach(function (it, i) {
         var lead = typeof it === 'string' ? null : it.lead;
         var text = typeof it === 'string' ? it : it.text;
-        out.push(h('span', { key: prefix + 'i' + i, className: 'pn-ticker-item' },
-          lead ? h('span', { className: 'pn-ticker-lead' }, lead + ' ') : null, text));
+        var sky = typeof it === 'string' ? null : it.sky;
+        var leadSpan = lead ? h('span', { className: 'pn-ticker-lead' }, lead + ' ') : null;
+        /* the forecast line carries its sky's icon before its words */
+        out.push(sky
+          ? h('span', { key: prefix + 'i' + i, className: 'pn-ticker-item pn-wx-tick' }, h(WeatherIcon, { sky: sky }), h('span', null, leadSpan, text))
+          : h('span', { key: prefix + 'i' + i, className: 'pn-ticker-item' }, leadSpan, text));
         out.push(h('i', { key: prefix + 's' + i, className: 'pn-ticker-sep' }));
       });
       return out;
@@ -686,15 +701,25 @@
 
   /* What a paged graphic shows now: its items as they were at the last
      turn, the page in view, the page before while its turn runs, and how
-     many turns there have been, for keys */
-  function usePages(items, pageMs, animate) {
+     many turns there have been, for keys. The board can also turn to the
+     weekly forecast (`forecast`, a WeatherScene) and back, by the same turn:
+     the forecast is a page of its own, with no tab, and the listing comes
+     back on its first page, held its whole time. A forecast asked for while
+     a turn runs waits for it to finish. */
+  function usePages(items, pageMs, animate, forecast) {
     var latest = React.useRef(items);
     latest.current = items;
-    var shown = React.useRef({ items: items, page: 0 });
+    var wanted = React.useRef(false);
+    wanted.current = !!forecast;
+    var shown = React.useRef({ items: items, page: 0, forecast: false });
     var turn = React.useRef({ prev: null, n: 0 });
+    var sync = React.useRef(null);
     var redraw = useState(0)[1];
     if (items.length <= PAGE_ROWS && shown.current.items.length <= PAGE_ROWS) {
-      shown.current = { items: items, page: 0 };
+      shown.current = { items: items, page: 0, forecast: shown.current.forecast };
+    }
+    if (!animate && shown.current.forecast !== !!forecast) {
+      shown.current = { items: shown.current.items, page: shown.current.page, forecast: !!forecast };
     }
     useEffect(function () {
       if (!animate) { return undefined; }
@@ -702,38 +727,75 @@
       var next;
       var settle;
       function later() {
+        clearTimeout(next);
         next = setTimeout(step, pageMs - ((Date.now() - begun) % pageMs));
       }
+      function turned(to) {
+        var from = shown.current;
+        shown.current = to;
+        /* With reduced motion a turn is a cut: nothing is under way after it */
+        if (reducedMotion()) {
+          turn.current = { prev: null, n: turn.current.n + 1 };
+          return;
+        }
+        turn.current = { prev: from, n: turn.current.n + 1 };
+        clearTimeout(settle);
+        settle = setTimeout(function () {
+          turn.current = { prev: null, n: turn.current.n };
+          redraw(function (k) { return k + 1; });
+          sync.current();
+        }, TURN_MS);
+      }
       function step() {
+        if (shown.current.forecast) {
+          later();
+          return;
+        }
         var from = shown.current;
         var to = latest.current;
         if (to.length <= PAGE_ROWS && from.items.length <= PAGE_ROWS) {
-          shown.current = { items: to, page: 0 };
+          shown.current = { items: to, page: 0, forecast: false };
         } else {
           var page = from.page + 1;
-          shown.current = { items: to, page: page >= pageCount(to.length) ? 0 : page };
-          turn.current = { prev: from, n: turn.current.n + 1 };
-          clearTimeout(settle);
-          settle = setTimeout(function () {
-            turn.current = { prev: null, n: turn.current.n };
-            redraw(function (k) { return k + 1; });
-          }, TURN_MS);
+          turned({ items: to, page: page >= pageCount(to.length) ? 0 : page, forecast: false });
         }
         redraw(function (k) { return k + 1; });
         later();
       }
+      /* The board goes to the forecast, or back from it, once no turn is under way */
+      sync.current = function () {
+        if (turn.current.prev !== null || shown.current.forecast === wanted.current) { return; }
+        if (wanted.current) {
+          turned({ items: shown.current.items, page: shown.current.page, forecast: true });
+        } else {
+          begun = Date.now();
+          turned({ items: latest.current, page: 0, forecast: false });
+          later();
+        }
+        redraw(function (k) { return k + 1; });
+      };
       later();
-      return function () { clearTimeout(next); clearTimeout(settle); };
+      sync.current();
+      return function () { sync.current = null; clearTimeout(next); clearTimeout(settle); };
     }, [animate, pageMs]);
+    useEffect(function () {
+      if (sync.current) { sync.current(); }
+    }, [!!forecast]);
     var pushing = animate && !reducedMotion();
-    return { items: shown.current.items, page: shown.current.page, prev: pushing ? turn.current.prev : null, n: turn.current.n };
+    return {
+      items: shown.current.items,
+      page: shown.current.page,
+      forecast: shown.current.forecast,
+      prev: pushing ? turn.current.prev : null,
+      n: turn.current.n
+    };
   }
 
   /* Each slot of a page: the row in view, and while a turn runs the row
      of the page before leaving it, each on its turn's clock */
   function pageSlots(view, slotClass, rowClass, content) {
-    var cur = pageItems(view.items, view.page);
-    var before = view.prev ? pageItems(view.prev.items, view.prev.page) : [];
+    var cur = view.forecast ? [] : pageItems(view.items, view.page);
+    var before = view.prev && !view.prev.forecast ? pageItems(view.prev.items, view.prev.page) : [];
     var slots = [];
     for (var r = 0; r < Math.max(cur.length, before.length); r += 1) {
       var faces = [];
@@ -759,8 +821,8 @@
   /* Which page of how many, on the ticker clock's blue tab; only with two
      pages or more. It turns after the rows. */
   function pageTab(view, tabClass) {
-    var pages = pageCount(view.items.length);
-    var before = view.prev ? pageCount(view.prev.items.length) : 1;
+    var pages = view.forecast ? 1 : pageCount(view.items.length);
+    var before = view.prev && !view.prev.forecast ? pageCount(view.prev.items.length) : 1;
     if (pages < 2 && before < 2) { return null; }
     var faces = [];
     if (view.prev && before > 1) {
@@ -818,7 +880,14 @@
       h('span', { className: 'pn-limit-track' }, h('i', { className: 'pn-limit-fill', style: { width: percent + '%' } })),
       h('span', { className: 'pn-limit-figure' }, percent + '%')));
     });
-    return meters.length ? h('div', { className: 'pn-board-limits' }, meters) : null;
+    var face = props.face;
+    if (face === 'none') { return null; }
+    return meters.length
+      ? h('div', {
+        className: cx('pn-board-limits', face && face.className),
+        style: face ? { animationDelay: face.delay + 'ms' } : undefined
+      }, meters)
+      : null;
   }
 
   /* The listing, as the first station sketch drew it: a glossy row per
@@ -834,20 +903,60 @@
         return (STATES[a.state] || STATES.working).priority - (STATES[b.state] || STATES.working).priority;
       });
     }
-    var view = usePages(list, BOARD_PAGE_MS, bool(props.animate, false));
+    /* The forecast the board turns to, kept while it turns back, when the
+       scene no longer carries it */
+    var given = props.forecast || scene.forecast;
+    var kept = React.useRef(null);
+    if (given) { kept.current = given; }
+    var view = usePages(list, BOARD_PAGE_MS, bool(props.animate, false), given);
+    var slots = pageSlots(view, 'pn-board-slot', 'pn-row', function (s) {
+      return [
+        /* The project leads the row on a plate, as chosen on PiP
+           Newsroom · Project in the listing; a session without one has
+           no plate */
+        s.project ? h('span', { key: 'project', className: 'pn-row-project' }, h('span', null, s.project)) : null,
+        h('span', { key: 'name', className: 'pn-row-name' }, s.name),
+        h(StatePill, { key: 'pill', state: s.state })
+      ];
+    });
     return h('div', { className: cx('pn-board', props.inline && 'pn-inline') },
-      pageSlots(view, 'pn-board-slot', 'pn-row', function (s) {
-        return [
-          /* The project leads the row on a plate, as chosen on PiP
-             Newsroom · Project in the listing; a session without one has
-             no plate */
-          s.project ? h('span', { key: 'project', className: 'pn-row-project' }, h('span', null, s.project)) : null,
-          h('span', { key: 'name', className: 'pn-row-name' }, s.name),
-          h(StatePill, { key: 'pill', state: s.state })
-        ];
-      }),
+      slots,
       pageTab(view, 'pn-board-tab'),
-      h(LimitMeters, { limits: props.limits || scene.limits }));
+      h(LimitMeters, { limits: props.limits || scene.limits, face: limitsFace(view) }),
+      forecastFaces(view, kept.current));
+  }
+
+  /* The weekly forecast as a page of the board: EXTENDED FORECAST's wall in
+     the listing's place. It slides in from the left once the rows have gone,
+     and leaves to the right as they do. */
+  function forecastFaces(view, weather) {
+    if (!weather) { return null; }
+    var faces = [];
+    if (view.prev && view.prev.forecast) {
+      faces.push(h('div', { key: 'out:' + view.n, className: 'pn-board-forecast pn-turn-leave' }, h(WeatherDays, { weather: weather })));
+    }
+    if (view.forecast) {
+      faces.push(h('div', {
+        key: 'in:' + view.n,
+        className: cx('pn-board-forecast', view.prev && 'pn-turn-enter'),
+        style: view.prev ? { animationDelay: PAGE_ROWS * TURN.stagger + TURN.leave + 'ms' } : undefined
+      }, h(WeatherDays, { weather: weather })));
+    }
+    return faces;
+  }
+
+  /* The usage limits turn with the tab: they leave after the rows, and come
+     back after the forecast has gone. null while they stay put, 'none' while
+     the forecast is up. */
+  function limitsFace(view) {
+    if (view.forecast) {
+      return view.prev && !view.prev.forecast
+        ? { className: 'pn-turn-leave', delay: PAGE_ROWS * TURN.stagger }
+        : 'none';
+    }
+    return view.prev && view.prev.forecast
+      ? { className: 'pn-turn-enter', delay: PAGE_ROWS * TURN.stagger + TURN.leave }
+      : null;
   }
 
   /* The lower third. Every story wears the red BREAKING tab; only the hour
@@ -1212,6 +1321,1622 @@
       pageTab(view, 'pn-review-tab'));
   }
 
+  /* ------------------------------------------------------------------
+     KLWD WEATHER: the weekly forecast, a 90s local weather segment drawn
+     from a WeatherScene (index.d.ts). CURRENT CONDITIONS and EXTENDED
+     FORECAST are pages of the report on the hour; STORM WARNING is its
+     own segment, WEATHER ALERT's open and STORMTRACKER, a storm on its
+     track in WebGL. The icons are drawn here, in the station's chrome and
+     gold, as markup, so the crawl can carry one too.
+     ------------------------------------------------------------------ */
+  /* The words of the pages, as packages/contract/src/copy.ts has them: a
+     test holds the two together */
+  var WEATHER = {
+    now: 'CURRENT CONDITIONS',
+    days: 'EXTENDED FORECAST',
+    tracker: 'STORMTRACKER',
+    week: 'THE WEEK',
+    arrival: 'TIME OF ARRIVAL',
+    start: 'NOW',
+    out: 'OUT',
+    alert: ['WEATHER', 'ALERT']
+  };
+  /* The outlook on the strap's tag: its words and its colour. READY's green
+     for clear skies, the station's gold for clouds, BREAKING's red for a storm. */
+  var OUTLOOKS = {
+    clear: { word: 'CLEAR SKIES', k: 'pn-k-ready' },
+    clouds: { word: 'CLOUDS GATHERING', k: 'pn-k-working' },
+    storm: { word: 'STORM WARNING', k: 'pn-k-breaking' }
+  };
+  var SKY_WORDS = { sun: 'Sunny', partly: 'Partly cloudy', overcast: 'Overcast', storm: 'Storms' };
+
+  function skyStop(offset, name, hex, opacity) {
+    return '<stop offset="' + offset + '" style="stop-color: var(--' + name + ', ' + hex + ');' + (opacity === undefined ? '' : ' stop-opacity: ' + opacity + ';') + '"></stop>';
+  }
+  /* The gradients an icon is filled with. Each icon has its own, ending in
+     `uid`, so that two icons on a page never share a url(#...) */
+  function skyDefs(uid) {
+    return '<defs>' +
+      '<radialGradient id="pn-wx-sun-g-' + uid + '" cx="0.42" cy="0.38" r="0.7">' + skyStop(0, 'gold-hi', '#ffe08a') + skyStop(0.55, 'gold', '#f2b630') + skyStop(1, 'gold-lo', '#b97d0c') + '</radialGradient>' +
+      '<linearGradient id="pn-wx-ray-g-' + uid + '" x1="0" y1="0" x2="0" y2="1">' + skyStop(0, 'gold-hi', '#ffe08a') + skyStop(1, 'gold', '#f2b630') + '</linearGradient>' +
+      '<linearGradient id="pn-wx-cloud-g-' + uid + '" gradientUnits="userSpaceOnUse" x1="0" y1="22" x2="0" y2="86">' + skyStop(0, 'chrome-hi', '#ffffff') + skyStop(0.55, 'chrome', '#c9d3e3') + skyStop(1, 'chrome-lo', '#7f90b3') + '</linearGradient>' +
+      '<linearGradient id="pn-wx-cloud-d-' + uid + '" gradientUnits="userSpaceOnUse" x1="0" y1="22" x2="0" y2="86">' + skyStop(0, 'chrome-lo', '#7f90b3') + skyStop(1, 'morning-tower', '#4a5878') + '</linearGradient>' +
+      '<linearGradient id="pn-wx-bolt-g-' + uid + '" x1="0" y1="0" x2="0" y2="1">' + skyStop(0, 'gold-hi', '#ffe08a') + skyStop(0.5, 'gold', '#f2b630') + skyStop(1, 'gold-lo', '#b97d0c') + '</linearGradient>' +
+      '</defs>';
+  }
+  function tenth(n) { return Math.round(n * 10) / 10; }
+  /* The sun: ten rays round a disc, with a highlight */
+  function skySun(uid) {
+    var rays = '';
+    for (var k = 0; k < 10; k++) {
+      var a = (k * 36 - 90) * Math.PI / 180;
+      var tip = [60 + 47 * Math.cos(a), 50 + 47 * Math.sin(a)];
+      var n = [Math.cos(a + Math.PI / 2), Math.sin(a + Math.PI / 2)];
+      var base = [60 + 31 * Math.cos(a), 50 + 31 * Math.sin(a)];
+      var p1 = [base[0] + 7 * n[0], base[1] + 7 * n[1]];
+      var p2 = [base[0] - 7 * n[0], base[1] - 7 * n[1]];
+      rays += '<polygon points="' + tenth(tip[0]) + ',' + tenth(tip[1]) + ' ' + tenth(p1[0]) + ',' + tenth(p1[1]) + ' ' + tenth(p2[0]) + ',' + tenth(p2[1]) + '" fill="url(#pn-wx-ray-g-' + uid + ')" style="stroke: var(--gold-lo, #b97d0c); stroke-width: 2; stroke-linejoin: round;"></polygon>';
+    }
+    return rays + '<circle cx="60" cy="50" r="27" fill="url(#pn-wx-sun-g-' + uid + ')" style="stroke: var(--gold-lo, #b97d0c); stroke-width: 2.5;"></circle><ellipse cx="51" cy="39" rx="12" ry="7" style="fill: var(--chrome-hi, #ffffff); opacity: 0.6;"></ellipse>';
+  }
+  /* A cloud: four shapes drawn twice, the rim underneath and the fill over it; the dark one is a storm cloud */
+  function skyCloud(dark, uid) {
+    function shapes(attrs) {
+      return '<circle cx="40" cy="60" r="18" ' + attrs + '></circle><circle cx="62" cy="46" r="25" ' + attrs + '></circle><circle cx="86" cy="60" r="17" ' + attrs + '></circle><rect x="24" y="58" width="80" height="26" rx="13" ' + attrs + '></rect>';
+    }
+    var rim = dark ? 'var(--chrome, #c9d3e3)' : 'var(--chrome-lo, #7f90b3)';
+    return shapes('style="fill: ' + rim + '; stroke: ' + rim + '; stroke-width: 7;"') +
+      shapes('fill="url(#pn-wx-' + (dark ? 'cloud-d' : 'cloud-g') + '-' + uid + ')"') +
+      '<ellipse cx="57" cy="34" rx="15" ry="6" style="fill: var(--chrome-hi, #ffffff); opacity: ' + (dark ? 0.3 : 0.7) + ';"></ellipse>';
+  }
+  function skyBolt(uid) {
+    return '<polygon points="66,52 46,80 59,80 50,102 82,68 67,68 76,52" fill="url(#pn-wx-bolt-g-' + uid + ')" style="stroke: var(--on-gold, #2a1800); stroke-width: 2.5; stroke-linejoin: round;"></polygon>';
+  }
+  /* What an icon draws: the sun, the sun behind a cloud, two clouds, a storm
+     cloud over a bolt. `boltClass` puts the bolt in a group of its own, for
+     WEATHER ALERT's flashes. */
+  function skyShapes(sky, uid, boltClass) {
+    if (sky === 'partly') { return '<g transform="translate(-6 -6) scale(0.8)">' + skySun(uid) + '</g><g transform="translate(16 16) scale(0.84)">' + skyCloud(false, uid) + '</g>'; }
+    if (sky === 'overcast') { return '<g transform="translate(-12 -10) scale(0.86)">' + skyCloud(true, uid) + '</g><g transform="translate(14 12) scale(0.86)">' + skyCloud(false, uid) + '</g>'; }
+    if (sky === 'storm') { return (boltClass ? '<g class="' + boltClass + '">' + skyBolt(uid) + '</g>' : skyBolt(uid)) + '<g transform="translate(0 -12)">' + skyCloud(true, uid) + '</g>'; }
+    return skySun(uid);
+  }
+  var wxSeq = 0;
+  function nextWx() { wxSeq += 1; return wxSeq; }
+  /* An icon as markup, for the crawl: `uid` ends its gradients' ids */
+  function weatherIconMarkup(sky, uid) {
+    var kind = SKY_WORDS[sky] ? sky : 'sun';
+    return '<svg class="pn-wx-icon" viewBox="0 0 120 100" role="img" aria-label="' + SKY_WORDS[kind] + '">' + skyDefs(uid) + skyShapes(kind, uid) + '</svg>';
+  }
+  /* A sky's icon. `size` is its width in px; with none, the page's style
+     sizes it. `bolt` names the group the bolt is drawn in, for WEATHER ALERT. */
+  function WeatherIcon(props) {
+    var uid = useState(nextWx)[0];
+    var sky = SKY_WORDS[props.sky] ? props.sky : 'sun';
+    var size = num(props.size, 0);
+    return h('svg', {
+      className: cx('pn-wx-icon', props.className),
+      viewBox: '0 0 120 100',
+      role: 'img',
+      'aria-label': SKY_WORDS[sky],
+      style: size ? { width: size + 'px', height: (size * 100 / 120) + 'px' } : undefined,
+      dangerouslySetInnerHTML: { __html: skyDefs(uid) + skyShapes(sky, uid, props.bolt) }
+    });
+  }
+
+  /* The weather wall: the wall monitor made big, with its head bar. `k` is
+     the page's colour, gold for the weather and red for a warning. */
+  function weatherWall(k, head, until, content) {
+    return h('div', { className: cx('pn-wx-wall', k) },
+      h.apply(null, ['div', { className: 'pn-wx-screen' },
+        h('div', { className: 'pn-wx-head' }, h('span', null, head), until ? h('small', null, until) : null)].concat(content)));
+  }
+  function noMove() { return undefined; }
+  /* Chrome lettering at rest, as the stinger's words end: the same line, with
+     its glint off to the side */
+  function chromeStill(word, className) {
+    return chromeLine(word, className, 1, function () { return {}; }, function () { return 1; }, noMove);
+  }
+
+  /* CURRENT CONDITIONS: what the weathercaster says "right now" over. The
+     sky, the week's share used as the temperature in chrome lettering, and
+     the outlook in words. */
+  function WeatherNow(props) {
+    var wx = props.weather || SAMPLES['weather-now'].weather;
+    return weatherWall('pn-k-hourly', WEATHER.now, null, [
+      h('div', { key: 'now', className: 'pn-wx-now' },
+        h(WeatherIcon, { sky: wx.sky, className: 'pn-wx-now-sky' }),
+        h('div', { className: 'pn-wx-now-read' },
+          h('span', { className: 'pn-wx-now-cap' }, WEATHER.week),
+          chromeStill(wx.used, 'pn-stinger-line pn-wx-now-temp'),
+          h('span', { className: 'pn-wx-now-word' }, wx.word)))
+    ]);
+  }
+
+  /* EXTENDED FORECAST: a panel a day from today to the reset's day, the sky
+     of the day's high with the high and the low, and under them the verdict
+     on a tag in the outlook's colour. */
+  function WeatherDays(props) {
+    var wx = props.weather || SAMPLES['weather-days'].weather;
+    var days = wx.days || [];
+    var outlook = OUTLOOKS[wx.outlook] || OUTLOOKS.clear;
+    return weatherWall('pn-k-hourly', WEATHER.days, wx.until, [
+      h('div', { key: 'days', className: cx('pn-wx-days', days.length > 5 && 'pn-wx-days--7') },
+        days.map(function (d, i) {
+          return h('div', { key: i, className: cx('pn-wx-day', d.out && 'pn-wx-out') },
+            h('span', { className: 'pn-wx-day-name' }, d.name),
+            h(WeatherIcon, { sky: d.sky }),
+            h('span', { className: 'pn-wx-hi' }, d.high),
+            h('span', { className: 'pn-wx-lo' }, d.low));
+        })),
+      h('div', { key: 'strip', className: 'pn-wx-strip' },
+        h('span', { className: cx('pn-wx-tag', outlook.k) }, h('span', null, wx.word || outlook.word)),
+        h('span', null, wx.strap))
+    ]);
+  }
+
+  /* STORMTRACKER's globe. A 90s station's storm tracker in WebGL 2, drawn
+     straight onto the canvas with no library, the week's usage as the storm.
+
+     What the period footage shows, and this follows: the earth from orbit,
+     lit, with its atmosphere glowing at the limb and satellite clouds over
+     it; the camera dives down to a low, oblique view of a region where the
+     horizon still curves; satellite clouds drift with their shadows moving
+     on the land and sea; a storm, its clouds standing up in 3D, comes in
+     from the left and grows as it goes, toward the coast it will hit; its
+     track is drawn ahead of it, and a TIME OF ARRIVAL list says when.
+
+     The storm forms over the western Gulf at NOW and moves east, faster as
+     it goes, growing, its core colouring as it strengthens (as a colourised
+     satellite picture shows a storm's tops), leaving its rain behind. The
+     track's marks come up as it passes each day's close the week reaches
+     before it runs out. Landfall on Florida's Gulf coast is where the week
+     runs out: lightning, OUT.
+
+     One timeline, 13 s: 0-2.6 s the dive from orbit, 2.6-9 s the storm on
+     its track, 9-13 s landfall, the storm turning on over the coast with its
+     OUT tag up. stormScene(root, options) draws into the
+     canvas in `root`, and places the elements in it that have data-at and
+     data-row from the scene's camera. `options.marks` are the TrackMarks
+     (`at` is how far along the track), `options.textures` the folder of the
+     four pictures, and `options.hold` the moment of the timeline to draw
+     once, or null to run it once from now and keep its last picture. It
+     returns { dispose, ready }, or null when there is no graphics context;
+     `ready` comes once a held moment has been drawn, or the scene is given up.
+     When a picture cannot be uploaded or the scene cannot be drawn it gives the
+     scene up and calls `options.onFail`, once. Colours are read from the
+     station's tokens on `root`.
+
+     How the picture is made. The scene is a short list of things drawn in a
+     fixed order each frame, with a few lights, in linear colour that is
+     turned to the screen's sRGB on the way out (so a colour given as
+     #rrggbb is used as it stands, then encoded, which is what makes the
+     palette read as it does). This is our code, written from the published
+     math: Blinn, Phong, Cook and Torrance and Schlick for the highlight,
+     Epic's 2013 form of Schlick's Fresnel, Mikkelsen's bump mapping from
+     derivatives (2010), the sRGB curve of IEC 61966-2-1, and the usual
+     projection and rotation matrices. Its pictures were checked against the
+     ones three.js r149 drew of this scene at eight moments of the 13 s: the
+     mean difference is under a thousandth of a level in each channel, and
+     about one pixel in a thousand is one to three levels off (the sRGB
+     exponent is 1/2.4 here and 0.41666 there), and two are off by more than
+     eight. */
+  var stormScene = (function () {
+    var DUR = 13, T_DIVE = 2.6, T_LAND = 9.0;
+    var START = [25.4, -95.4], END = [27.95, -82.75];
+    var NEAR = 0.001, FAR = 200, FOV = 38, RATIO = 2;
+    var CLEAR = [1 / 255, 3 / 255, 10 / 255];
+
+    function rad(d) { return d * Math.PI / 180; }
+    function clamp(x, a, b) { return Math.max(a, Math.min(b, x)); }
+    function smooth(x) { x = clamp(x, 0, 1); return x * x * (3 - 2 * x); }
+
+    /* Vectors are three numbers, quaternions four ([x, y, z, w]) and matrices sixteen, one column after another,
+       as WebGL takes them. A function that makes one fills its first argument, which the caller keeps (a
+       Float64Array, so the numbers are the doubles they were worked out as), and returns it, so a frame allocates
+       none of them. That argument may also be one of the others, but for the matrices that say it may not. */
+    function vec3() { return new Float64Array(3); }
+    function vec4() { return new Float64Array(4); }
+    function mat4() { return new Float64Array(16); }
+    function vSet(out, x, y, z) { out[0] = x; out[1] = y; out[2] = z; return out; }
+    function vAdd(out, a, b) { return vSet(out, a[0] + b[0], a[1] + b[1], a[2] + b[2]); }
+    function vSub(out, a, b) { return vSet(out, a[0] - b[0], a[1] - b[1], a[2] - b[2]); }
+    function vMul(out, a, k) { return vSet(out, a[0] * k, a[1] * k, a[2] * k); }
+    function vDot(a, b) { return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]; }
+    function vCross(out, a, b) { return vSet(out, a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]); }
+    function vLen(a) { return Math.sqrt(vDot(a, a)); }
+    function vUnit(out, a) { var k = 1 / (vLen(a) || 1); return vSet(out, a[0] * k, a[1] * k, a[2] * k); }
+    function vLerp(out, a, b, f) { return vSet(out, a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f, a[2] + (b[2] - a[2]) * f); }
+    /* the part of `a` that lies in the plane whose normal is `n` */
+    function vAcross(out, a, n) {
+      var d = vDot(n, n), k = d === 0 ? 0 : vDot(n, a) / d;
+      return d === 0 ? vSet(out, 0, 0, 0) : vSet(out, a[0] - n[0] * k, a[1] - n[1] * k, a[2] - n[2] * k);
+    }
+    function plain(numbers) { return Array.prototype.slice.call(numbers); }
+
+    // scratch the functions below work in
+    var WORK_A = vec3(), WORK_B = vec3(), WORK_C = vec3();
+    var X_AXIS = vSet(vec3(), 1, 0, 0), Y_AXIS = vSet(vec3(), 0, 1, 0), Z_AXIS = vSet(vec3(), 0, 0, 1);
+
+    function qAboutY(out, angle) { out[0] = 0; out[1] = Math.sin(angle / 2); out[2] = 0; out[3] = Math.cos(angle / 2); return out; }
+    function qAboutZ(out, angle) { out[0] = 0; out[1] = 0; out[2] = Math.sin(angle / 2); out[3] = Math.cos(angle / 2); return out; }
+    function qConjugate(out, q) { out[0] = -q[0]; out[1] = -q[1]; out[2] = -q[2]; out[3] = q[3]; return out; }
+    /* the turn that takes the unit vector `a` to the unit vector `b` */
+    function qBetween(out, a, b) {
+      var cosPlusOne = vDot(a, b) + 1, axis = WORK_A;
+      if (cosPlusOne < 1e-8) {
+        // opposite: half a turn about any axis that lies across `a`
+        vUnit(axis, vCross(axis, a, Math.abs(a[0]) < 0.9 ? X_AXIS : Y_AXIS));
+        out[0] = axis[0]; out[1] = axis[1]; out[2] = axis[2]; out[3] = 0;
+      } else {
+        vCross(axis, a, b);
+        out[0] = axis[0]; out[1] = axis[1]; out[2] = axis[2]; out[3] = cosPlusOne;
+      }
+      var l = Math.sqrt(out[0] * out[0] + out[1] * out[1] + out[2] * out[2] + out[3] * out[3]) || 1;
+      out[0] /= l; out[1] /= l; out[2] /= l; out[3] /= l;
+      return out;
+    }
+    /* `v` turned by the unit quaternion `q`: v + w t + u x t, where u is the quaternion's axis part and t is twice u x v */
+    function qRotate(out, q, v) {
+      var ux = q[0], uy = q[1], uz = q[2], w = q[3], vx = v[0], vy = v[1], vz = v[2];
+      var tx = 2 * (uy * vz - uz * vy), ty = 2 * (uz * vx - ux * vz), tz = 2 * (ux * vy - uy * vx);
+      return vSet(out, vx + w * tx + (uy * tz - uz * ty), vy + w * ty + (uz * tx - ux * tz), vz + w * tz + (ux * ty - uy * tx));
+    }
+
+    /* a place, a turn and a size, as a matrix: the turn's rotation matrix with each column made as long as its size */
+    function mFrom(out, p, q, s) {
+      var x = q[0], y = q[1], z = q[2], w = q[3];
+      var xx = x * x, yy = y * y, zz = z * z, xy = x * y, xz = x * z, yz = y * z, wx = w * x, wy = w * y, wz = w * z;
+      out[0] = (1 - 2 * (yy + zz)) * s[0]; out[1] = 2 * (xy + wz) * s[0]; out[2] = 2 * (xz - wy) * s[0]; out[3] = 0;
+      out[4] = 2 * (xy - wz) * s[1]; out[5] = (1 - 2 * (xx + zz)) * s[1]; out[6] = 2 * (yz + wx) * s[1]; out[7] = 0;
+      out[8] = 2 * (xz + wy) * s[2]; out[9] = 2 * (yz - wx) * s[2]; out[10] = (1 - 2 * (xx + yy)) * s[2]; out[11] = 0;
+      out[12] = p[0]; out[13] = p[1]; out[14] = p[2]; out[15] = 1;
+      return out;
+    }
+    /* a x b; `out` must be neither */
+    function mMul(out, a, b) {
+      var c, r, k, sum;
+      for (c = 0; c < 4; c++) {
+        for (r = 0; r < 4; r++) {
+          sum = 0;
+          for (k = 0; k < 4; k++) { sum += a[k * 4 + r] * b[c * 4 + k]; }
+          out[c * 4 + r] = sum;
+        }
+      }
+      return out;
+    }
+    /* the inverse of a matrix that is only a turn and a move, as the camera's; `out` must not be `m` */
+    function mInverseRigid(out, m) {
+      var tx = m[12], ty = m[13], tz = m[14];
+      out[0] = m[0]; out[1] = m[4]; out[2] = m[8]; out[3] = 0;
+      out[4] = m[1]; out[5] = m[5]; out[6] = m[9]; out[7] = 0;
+      out[8] = m[2]; out[9] = m[6]; out[10] = m[10]; out[11] = 0;
+      out[12] = -(m[0] * tx + m[1] * ty + m[2] * tz); out[13] = -(m[4] * tx + m[5] * ty + m[6] * tz); out[14] = -(m[8] * tx + m[9] * ty + m[10] * tz); out[15] = 1;
+      return out;
+    }
+    /* the camera's place in the world, looking from `eye` at `target` with `up` as its up: its axes are
+       sideways, up and back (from the target to the eye), and it stands at `eye` */
+    function mLookFrom(out, eye, target, up) {
+      var back = vSub(WORK_A, eye, target), side = WORK_B, over = WORK_C;
+      if (vDot(back, back) === 0) { vSet(back, 0, 0, 1); } else { vUnit(back, back); }
+      vCross(side, up, back);
+      if (vDot(side, side) === 0) {
+        // up lies along the way it looks: any sideways will do
+        vCross(side, Math.abs(back[1]) < 0.9 ? Y_AXIS : X_AXIS, back);
+      }
+      vUnit(side, side);
+      vCross(over, back, side);
+      out[0] = side[0]; out[1] = side[1]; out[2] = side[2]; out[3] = 0;
+      out[4] = over[0]; out[5] = over[1]; out[6] = over[2]; out[7] = 0;
+      out[8] = back[0]; out[9] = back[1]; out[10] = back[2]; out[11] = 0;
+      out[12] = eye[0]; out[13] = eye[1]; out[14] = eye[2]; out[15] = 1;
+      return out;
+    }
+    /* the lens: `fov` degrees from the top of the picture to the bottom, `aspect` wide for its height */
+    function mPerspective(out, fov, aspect, near, far) {
+      var top = near * Math.tan(rad(fov) * 0.5), height = 2 * top, width = aspect * height, left = -0.5 * width;
+      var scaleX = 2 * near / width, scaleY = 2 * near / height;
+      var shiftX = (2 * left + width) / width, shiftY = (top + (top - height)) / height;
+      var depthScale = -(far + near) / (far - near), depthShift = -2 * far * near / (far - near);
+      out[0] = scaleX; out[1] = 0; out[2] = 0; out[3] = 0;
+      out[4] = 0; out[5] = scaleY; out[6] = 0; out[7] = 0;
+      out[8] = shiftX; out[9] = shiftY; out[10] = depthScale; out[11] = -1;
+      out[12] = 0; out[13] = 0; out[14] = depthShift; out[15] = 0;
+      return out;
+    }
+    /* the point `v` taken through a matrix, and divided by its w */
+    function mPoint(out, m, v) {
+      var x = v[0], y = v[1], z = v[2];
+      var hx = m[0] * x + m[4] * y + m[8] * z + m[12];
+      var hy = m[1] * x + m[5] * y + m[9] * z + m[13];
+      var hz = m[2] * x + m[6] * y + m[10] * z + m[14];
+      var hw = m[3] * x + m[7] * y + m[11] * z + m[15];
+      return vSet(out, hx / hw, hy / hw, hz / hw);
+    }
+    /* a direction through the turn part of a matrix, made a unit again */
+    function mDirection(out, m, v) {
+      vSet(out, m[0] * v[0] + m[4] * v[1] + m[8] * v[2], m[1] * v[0] + m[5] * v[1] + m[9] * v[2], m[2] * v[0] + m[6] * v[1] + m[10] * v[2]);
+      return vUnit(out, out);
+    }
+    /* what turns a surface's normal into the view's: the inverse transpose of a matrix's upper 3 x 3, which is its
+       cofactors over its determinant, laid out column by column (`out` holds nine numbers) */
+    function mNormal(out, m) {
+      var a = m[0], b = m[4], c = m[8], d = m[1], e = m[5], f = m[9], g = m[2], h = m[6], i = m[10];
+      var c00 = e * i - f * h, c01 = f * g - d * i, c02 = d * h - e * g;
+      var c10 = c * h - b * i, c11 = a * i - c * g, c12 = b * g - a * h;
+      var c20 = b * f - c * e, c21 = c * d - a * f, c22 = a * e - b * d;
+      var det = a * c00 + b * c01 + c * c02;
+      var k = det === 0 ? 0 : 1 / det;
+      out[0] = c00 * k; out[1] = c10 * k; out[2] = c20 * k; out[3] = c01 * k; out[4] = c11 * k; out[5] = c21 * k; out[6] = c02 * k; out[7] = c12 * k; out[8] = c22 * k;
+      return out;
+    }
+
+    function geo(out, lat, lon, r) {
+      var p = rad(lon + 180), t = rad(90 - lat);
+      return vSet(out, -r * Math.sin(t) * Math.cos(p), r * Math.cos(t), r * Math.sin(t) * Math.sin(p));
+    }
+    var LATLON = new Float64Array(2);
+    function trackLatLon(out, s) {
+      out[0] = START[0] + (END[0] - START[0]) * s + Math.sin(s * Math.PI) * 1.4;
+      out[1] = START[1] + (END[1] - START[1]) * s;
+      return out;
+    }
+    function trackAt(out, s, r) { trackLatLon(LATLON, s); return geo(out, LATLON[0], LATLON[1], r); }
+    // The storm's progress along its track at time t: faster as it goes
+    function progress(t) { var u = clamp((t - T_DIVE) / (T_LAND - T_DIVE), 0, 1); return Math.pow(u, 1.6); }
+
+    /* A colour given as the station's tokens give them (#rgb or #rrggbb, or
+       rgb(r, g, b)), as [r, g, b] from 0 to 1; the fallback when it is
+       none of those. */
+    function parseColor(value) {
+      var text = String(value || '').trim(), m;
+      m = /^#([0-9a-f]{6})$/i.exec(text);
+      if (m) {
+        var n = parseInt(m[1], 16);
+        return [(n >> 16 & 255) / 255, (n >> 8 & 255) / 255, (n & 255) / 255];
+      }
+      m = /^#([0-9a-f])([0-9a-f])([0-9a-f])$/i.exec(text);
+      if (m) { return [parseInt(m[1] + m[1], 16) / 255, parseInt(m[2] + m[2], 16) / 255, parseInt(m[3] + m[3], 16) / 255]; }
+      m = /^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/i.exec(text);
+      if (m) { return [Math.min(255, +m[1]) / 255, Math.min(255, +m[2]) / 255, Math.min(255, +m[3]) / 255]; }
+      return null;
+    }
+    function colorOf(value, fallback) { return parseColor(value) || parseColor(fallback) || [1, 0, 1]; }
+    function tokens(el) {
+      var cs = getComputedStyle(el);
+      function c(n, f) { return colorOf(cs.getPropertyValue('--' + n), f); }
+      return {
+        breaking: c('breaking', '#c4170e'), breakingHi: c('breaking-hi', '#ff5a4f'), gold: c('gold', '#f2b630'),
+        goldHi: c('gold-hi', '#ffe08a'), ready: c('ready', '#2fb44a'), readyHi: c('ready-hi', '#8af59b'),
+        glow: c('row-hi', '#5b8be8'), edge: c('bar-edge', '#8fb0ff'), deep: c('studio-deep', '#061233'), white: c('chrome-hi', '#ffffff')
+      };
+    }
+
+    /* The camera: from orbit down to a low look north over the Gulf, then
+       tightening on the storm and its landfall as it comes in. A pure
+       function of the time: where it is, which way is up, and what it
+       looks at. */
+    function trackPose(eye, look, s) {
+      trackLatLon(LATLON, s);
+      var lookLat = LATLON[0] + (END[0] - LATLON[0]) * 0.45 + 1.0, lookLon = LATLON[1] + (END[1] - LATLON[1]) * 0.45;
+      geo(eye, lookLat - 8.0 + 1.6 * s, lookLon - 0.3, 1.125 - 0.012 * s);
+      geo(look, lookLat, lookLon, 1.0);
+    }
+    var ORBIT = geo(vec3(), 24, -89, 3.25), ORBIT_DIR = vUnit(vec3(), ORBIT);
+    var SETTLED_EYE = vec3(), SETTLED_LOOK = vec3(), ORIGIN = vec3();
+    trackPose(SETTLED_EYE, SETTLED_LOOK, 0);
+    var SETTLED_DIR = vUnit(vec3(), SETTLED_EYE), SETTLED_DISTANCE = vLen(SETTLED_EYE);
+    var DIVE_DIR = vec3(), DIVE_UP = vec3();
+    function newCameraPose() { return { eye: vec3(), look: vec3(), up: vec3() }; }
+    function cameraPose(pose, t) {
+      trackPose(pose.eye, pose.look, progress(t));
+      if (t < T_DIVE) {
+        // the dive: straight down onto the Gulf, slowing as it nears
+        var f = smooth(t / T_DIVE);
+        vUnit(DIVE_DIR, vLerp(DIVE_DIR, ORBIT_DIR, SETTLED_DIR, f));
+        var r = 3.25 + (SETTLED_DISTANCE - 3.25) * (1 - Math.pow(1 - f, 2.6));
+        vMul(pose.eye, DIVE_DIR, r);
+        vLerp(pose.look, ORIGIN, SETTLED_LOOK, smooth(t / (T_DIVE * 0.7)));
+        vUnit(pose.up, vLerp(DIVE_UP, Y_AXIS, SETTLED_DIR, f));
+      } else {
+        vUnit(pose.up, pose.eye);
+      }
+      return pose;
+    }
+    /* The camera as matrices for a canvas `aspect` wide for its height: where it stands, its inverse and its lens.
+       The lens is made once, by newView; a pose is put in a view with lookView. */
+    function newView(aspect) {
+      return { eye: vec3(), world: mat4(), inverse: mat4(), projection: mPerspective(mat4(), FOV, aspect, NEAR, FAR) };
+    }
+    function lookView(view, pose) {
+      vSet(view.eye, pose.eye[0], pose.eye[1], pose.eye[2]);
+      mLookFrom(view.world, pose.eye, pose.look, pose.up);
+      mInverseRigid(view.inverse, view.world);
+      return view;
+    }
+    /* Where a point of the world falls in a W x H canvas, in pixels from its top left, and whether the camera sees that side of the globe */
+    var SEEN_A = vec3(), SEEN_B = vec3(), SEEN_C = vec3();
+    function screenPoint(out, v, view, W, H) {
+      mPoint(SEEN_A, view.projection, mPoint(SEEN_A, view.inverse, v));
+      vUnit(SEEN_B, v);
+      vUnit(SEEN_C, vSub(SEEN_C, view.eye, v));
+      out.x = (SEEN_A[0] + 1) / 2 * W;
+      out.y = (1 - SEEN_A[1]) / 2 * H;
+      out.on = SEEN_A[2] < 1 && vDot(SEEN_B, SEEN_C) > 0;
+      return out;
+    }
+
+    // Light from the south-east, the afternoon sun over the Atlantic
+    var SUN = geo(vec3(), 14, -70, 1);
+    vUnit(SUN, SUN);
+    SUN[1] += 0.25;
+    vUnit(SUN, SUN);
+    var SUN_FAR = vMul(vec3(), SUN, 10);
+
+    /* Where the storm is and how it looks at time t: also pure. */
+    var STORM_N = vec3(), STORM_AWAY = vec3(), STORM_Q = vec4();
+    function newStormPose() {
+      return { s: 0, scale: 0, position: vec3(), turn: vec4(), spin: 0, formed: 0, shadow: vec3(), flash: 0, landfall: 0 };
+    }
+    function stormPose(pose, t) {
+      var s = progress(t);
+      pose.s = s;
+      pose.scale = 0.026 + 0.042 * Math.pow(s, 0.85);
+      vUnit(STORM_N, trackAt(STORM_N, s, 1.0));
+      qBetween(pose.turn, Z_AXIS, STORM_N);
+      vMul(pose.position, STORM_N, 1.0008);
+      pose.formed = smooth((t - T_DIVE + 0.5) / 1.0);
+      // the shadow falls away from the sun across the sea
+      vAcross(STORM_AWAY, SUN, STORM_N);
+      vMul(STORM_AWAY, vUnit(STORM_AWAY, STORM_AWAY), -0.42);
+      qRotate(pose.shadow, qConjugate(STORM_Q, pose.turn), STORM_AWAY);
+      pose.shadow[2] = 0.0005;
+      // landfall: lightning
+      var lt = t - T_LAND;
+      pose.flash = lt > 0 ? Math.max(0, Math.sin(lt * 23) * Math.sin(lt * 7.3)) * (lt < 1.8 ? 1 : 0) : 0;
+      pose.landfall = lt;
+      pose.spin = t * 0.5;
+      return pose;
+    }
+
+    /* The storm seen from above: spiral bands round a clear eye, drawn once */
+    function spiralCanvas(size) {
+      var c = document.createElement('canvas');
+      c.width = c.height = size;
+      var g = c.getContext('2d');
+      var cx = size / 2, rnd = seeded(41), S = size / 512;
+      function blob(x, y, s, a) {
+        var gr = g.createRadialGradient(x, y, 0, x, y, s);
+        gr.addColorStop(0, 'rgba(255,255,255,' + a + ')');
+        gr.addColorStop(0.6, 'rgba(255,255,255,' + (a * 0.5) + ')');
+        gr.addColorStop(1, 'rgba(255,255,255,0)');
+        g.fillStyle = gr;
+        g.beginPath(); g.arc(x, y, s, 0, Math.PI * 2); g.fill();
+      }
+      g.globalCompositeOperation = 'lighter';
+      // the central dense overcast round the eye
+      var i, k;
+      for (i = 0; i < 260; i++) {
+        var a0 = rnd() * Math.PI * 2, r0 = (0.07 + Math.pow(rnd(), 1.5) * 0.13) * size;
+        blob(cx + Math.cos(a0) * r0, cx + Math.sin(a0) * r0, (14 + rnd() * 16) * S, 0.22);
+      }
+      // a thin veil of cloud between the bands
+      for (i = 0; i < 160; i++) {
+        var a1 = rnd() * Math.PI * 2, r1 = (0.16 + rnd() * 0.3) * size;
+        blob(cx + Math.cos(a1) * r1, cx + Math.sin(a1) * r1, (22 + rnd() * 26) * S, 0.05);
+      }
+      // four rain bands, each leaving the core and curling out a little over
+      // half a turn, wide where they leave and breaking up at their ends
+      for (k = 0; k < 4; k++) {
+        var off = k * Math.PI / 2 + 0.3;
+        for (i = 0; i < 520; i++) {
+          var t = i / 520;
+          if (rnd() < Math.pow(t, 1.6) * 0.7) { continue; }
+          var ang = off + t * 1.25 * Math.PI;
+          var r = (0.17 + t * 0.32) * size;
+          var w = (1 - t * 0.55) * 34 * S;
+          var jit = (rnd() - 0.5) * w;
+          blob(cx + Math.cos(ang) * (r + jit), cx + Math.sin(ang) * (r + jit), (8 + rnd() * 14) * S * (1 - t * 0.45), 0.13);
+        }
+      }
+      // the eye, clear
+      g.globalCompositeOperation = 'destination-out';
+      var eg = g.createRadialGradient(cx, cx, 0, cx, cx, size * 0.055);
+      eg.addColorStop(0, 'rgba(0,0,0,1)'); eg.addColorStop(0.7, 'rgba(0,0,0,0.9)'); eg.addColorStop(1, 'rgba(0,0,0,0)');
+      g.fillStyle = eg; g.fillRect(0, 0, size, size);
+      return c;
+    }
+    function dotCanvas(size, ring) {
+      var c = document.createElement('canvas');
+      c.width = c.height = size;
+      var g = c.getContext('2d'), h = size / 2;
+      g.fillStyle = '#ffffff';
+      g.strokeStyle = ring ? '#ffffff' : '#061233';
+      g.lineWidth = size * (ring ? 0.16 : 0.12);
+      g.beginPath(); g.arc(h, h, h * 0.55, 0, Math.PI * 2);
+      if (ring) { g.stroke(); } else { g.fill(); g.stroke(); }
+      return c;
+    }
+
+    /* ---------------- The shapes ---------------- */
+
+    /* A globe of `radius`: `down` bands of `across` quads each, from the north pole to the south. A point is
+       [x, y, z] with its normal and the picture's [u, v], and the points are numbered ring by ring, a ring's
+       first and last at the seam. The picture runs once round (u) and from the south pole up (v); at a pole,
+       where the ring is a single point, its points are moved half a quad along so the picture does not pinch.
+       Each quad is two triangles, counter-clockwise from outside, and the bands at the poles have only the
+       triangle that is not flat. */
+    function sphereShape(radius, across, down) {
+      var columns = across + 1, rows = down + 1;
+      // the angle round the axis for each column, the angle down from the north pole for each ring
+      var round = [], polar = [], c, r;
+      for (c = 0; c < columns; c++) { round.push({ cos: Math.cos(2 * Math.PI * c / across), sin: Math.sin(2 * Math.PI * c / across) }); }
+      for (r = 0; r < rows; r++) { polar.push({ cos: Math.cos(Math.PI * r / down), sin: Math.sin(Math.PI * r / down) }); }
+      var pos = [], nor = [], uvs = [], idx = [];
+      for (r = 0; r < rows; r++) {
+        var pole = r === 0 ? 0.5 : (r === down ? -0.5 : 0);
+        for (c = 0; c < columns; c++) {
+          // x runs against the angle's cosine, so the seam is at +x and the picture reads west to east
+          var nx = -polar[r].sin * round[c].cos, ny = polar[r].cos, nz = polar[r].sin * round[c].sin;
+          pos.push(radius * nx, radius * ny, radius * nz);
+          nor.push(nx, ny, nz);
+          uvs.push((c + pole) / across, 1 - r / down);
+        }
+      }
+      for (r = 0; r < down; r++) {
+        for (c = 0; c < across; c++) {
+          var nw = r * columns + c, ne = nw + 1, sw = nw + columns, se = sw + 1;
+          if (r > 0) { idx.push(nw, se, ne); }
+          if (r < down - 1) { idx.push(sw, se, nw); }
+        }
+      }
+      return { position: pos, normal: nor, uv: uvs, index: idx };
+    }
+    /* A flat sheet `w` x `h` about the origin facing +z, in across x down quads, its picture's top at +y */
+    function sheetShape(w, h, across, down) {
+      var pos = [], nor = [], uvs = [], idx = [], stride = across + 1, ix, iy;
+      for (iy = 0; iy <= down; iy++) {
+        for (ix = 0; ix <= across; ix++) {
+          pos.push(ix * (w / across) - w / 2, h / 2 - iy * (h / down), 0);
+          nor.push(0, 0, 1);
+          uvs.push(ix / across, 1 - iy / down);
+        }
+      }
+      for (iy = 0; iy < down; iy++) {
+        for (ix = 0; ix < across; ix++) {
+          var nw = ix + stride * iy, sw = nw + stride, ne = nw + 1, se = sw + 1;
+          idx.push(nw, sw, ne, sw, se, ne);
+        }
+      }
+      return { position: pos, normal: nor, uv: uvs, index: idx };
+    }
+
+    /* ---------------- The shaders (GLSL ES 3.00) ---------------- */
+
+    var HEAD = '#version 300 es\nprecision highp float;\nprecision highp int;\nprecision highp sampler2D;\n';
+
+    /* The colour on its way to the screen: linear light to sRGB, channel by channel, as IEC 61966-2-1 gives
+       it: a straight line near black and a power of 1/2.4 above. */
+    var TO_SCREEN = [
+      'float encodeChannel(float c) {',
+      '  return c <= 0.0031308 ? 12.92 * c : 1.055 * pow(c, 1.0 / 2.4) - 0.055;',
+      '}',
+      'vec3 toScreen(vec3 c) {',
+      '  return vec3(encodeChannel(c.r), encodeChannel(c.g), encodeChannel(c.b));',
+      '}'
+    ].join('\n');
+
+    /* Lit surfaces: the sun, the lightning's bolt (which reaches only so far
+       and fades to nothing at its edge) and the ambient light, all with their
+       colours already scaled by pi, which the 1/pi of a surface's diffuse
+       cancels. */
+    var LIGHTS = [
+      'uniform vec3 ambientColor;',
+      'uniform vec3 sunDirection;',
+      'uniform vec3 sunColor;',
+      'uniform vec3 boltPosition;',
+      'uniform vec3 boltColor;',
+      'const float PI = 3.141592653589793;',
+      '// The bolt lights what is within 0.4 of it, less and less to nothing at that distance.',
+      'const float BOLT_REACH = 0.4;',
+      'const float BOLT_FADE = 2.0;',
+      '// The highlight light from `toLight` makes, seen along `toEye`, off a surface facing `n` that reflects',
+      '// `f0` of it head on: Cook and Torrance\'s DFG / (4 (n.l)(n.v)) with the half vector h = (l + v) / |l + v|',
+      '// and the geometry term taken as (n.l)(n.v), which leaves D F / 4. D is Blinn\'s (n.h)^s, with the',
+      '// (s + 2) / 2pi that keeps its energy whatever s is; F is Schlick\'s f0 + (1 - f0)(1 - v.h)^5, in the',
+      '// form Epic gave at SIGGRAPH 2013 (2 to the power of a quadratic in v.h in place of the fifth power).',
+      'vec3 highlight(vec3 toLight, vec3 toEye, vec3 n, vec3 f0, float shininess) {',
+      '  vec3 h = normalize(toLight + toEye);',
+      '  float vh = clamp(dot(toEye, h), 0.0, 1.0);',
+      '  vec3 fresnel = f0 + (1.0 - f0) * exp2((-5.55473 * vh - 6.98316) * vh);',
+      '  float spread = (shininess + 2.0) / (2.0 * PI) * pow(clamp(dot(n, h), 0.0, 1.0), shininess);',
+      '  return fresnel * (0.25 * spread);',
+      '}',
+      '// The light on a surface at `pos` (in the view) facing `n`: what the sun and the bolt give it, then the ambient.',
+      '// The colours of the lights are already multiplied by pi, which the 1/pi of the surface\'s diffuse cancels.',
+      'vec3 lit(vec3 albedo, vec3 n, vec3 pos, float shininess, vec3 specular, float glossy) {',
+      '  vec3 toEye = normalize(-pos);',
+      '  vec3 diffuse = vec3(0.0);',
+      '  vec3 shine = vec3(0.0);',
+      '  vec3 toBolt = boltPosition - pos;',
+      '  vec3 boltDir = normalize(toBolt);',
+      '  float near = pow(max(1.0 - length(toBolt) / BOLT_REACH, 0.0), BOLT_FADE);',
+      '  vec3 incoming = max(dot(n, boltDir), 0.0) * (boltColor * near);',
+      '  diffuse += incoming * albedo / PI;',
+      '  if (glossy > 0.0) { shine += incoming * highlight(boltDir, toEye, n, specular, shininess) * glossy; }',
+      '  incoming = max(dot(n, sunDirection), 0.0) * sunColor;',
+      '  diffuse += incoming * albedo / PI;',
+      '  if (glossy > 0.0) { shine += incoming * highlight(sunDirection, toEye, n, specular, shininess) * glossy; }',
+      '  return diffuse + ambientColor * albedo / PI + shine;',
+      '}'
+    ].join('\n');
+
+    /* The earth (glossy, with bumps) and the clouds (matte): one vertex shader, two fragment ones */
+    var LIT_VERTEX = HEAD + [
+      'layout(location = 0) in vec3 position;',
+      'layout(location = 1) in vec3 normal;',
+      'layout(location = 2) in vec2 uv;',
+      'uniform mat4 modelViewMatrix;',
+      'uniform mat4 projectionMatrix;',
+      'uniform mat3 normalMatrix;',
+      'out vec2 vUv;',
+      'out vec3 vNormal;',
+      'out vec3 vViewPosition;',
+      'void main() {',
+      '  vUv = uv;',
+      '  vNormal = normalize(normalMatrix * normal);',
+      '  vec4 inView = modelViewMatrix * vec4(position, 1.0);',
+      '  vViewPosition = -inView.xyz;',
+      '  gl_Position = projectionMatrix * inView;',
+      '}'
+    ].join('\n');
+
+    var EARTH_FRAGMENT = HEAD + [
+      'uniform sampler2D map;',
+      'uniform sampler2D bumpMap;',
+      'uniform sampler2D specularMap;',
+      'uniform float bumpScale;',
+      'uniform vec3 specularColor;',
+      'uniform float shininess;',
+      LIGHTS,
+      TO_SCREEN,
+      'in vec2 vUv;',
+      'in vec3 vNormal;',
+      'in vec3 vViewPosition;',
+      'out vec4 outColor;',
+      '// Bump mapping from the screen\'s derivatives, after Morten Mikkelsen, "Bump Mapping Unparametrized',
+      '// Surfaces on the GPU" (2010). The surface is taken as parametrized by the screen\'s x and y: px and py',
+      '// are how the position changes one pixel along each, so a height h(x, y) on it has the surface',
+      '// gradient (dh/dx (py x n) + dh/dy (n x px)) / (px . (py x n)), and the bumped normal leans against it.',
+      'float heightAt(vec2 at) { return bumpScale * texture(bumpMap, at).x; }',
+      'vec3 bumpedNormal(vec3 n, vec3 pos) {',
+      '  // dh/dx and dh/dy by forward differences, one pixel over along each screen axis in the map',
+      '  float h = heightAt(vUv);',
+      '  float dhdx = heightAt(vUv + dFdx(vUv)) - h;',
+      '  float dhdy = heightAt(vUv + dFdy(vUv)) - h;',
+      '  vec3 px = dFdx(pos);',
+      '  vec3 py = dFdy(pos);',
+      '  vec3 ex = cross(py, n);',
+      '  vec3 ey = cross(n, px);',
+      '  vec3 gradient = (dhdx * ex + dhdy * ey) / dot(px, ex);',
+      '  return normalize(n - gradient);',
+      '}',
+      'void main() {',
+      '  vec4 surface = texture(map, vUv);',
+      '  float glossy = texture(specularMap, vUv).r;',
+      '  vec3 n = bumpedNormal(normalize(vNormal), -vViewPosition);',
+      '  vec3 colour = lit(surface.rgb, n, -vViewPosition, shininess, specularColor, glossy);',
+      '  outColor = vec4(toScreen(colour), 1.0);',
+      '}'
+    ].join('\n');
+
+    var CLOUD_FRAGMENT = HEAD + [
+      'uniform sampler2D alphaMap;',
+      'uniform float opacity;',
+      LIGHTS,
+      TO_SCREEN,
+      'in vec2 vUv;',
+      'in vec3 vNormal;',
+      'in vec3 vViewPosition;',
+      'out vec4 outColor;',
+      'void main() {',
+      '  float alpha = opacity * texture(alphaMap, vUv).g;',
+      '  vec3 colour = lit(vec3(1.0), normalize(vNormal), -vViewPosition, 1.0, vec3(0.0), 0.0);',
+      '  outColor = vec4(toScreen(colour), alpha);',
+      '}'
+    ].join('\n');
+
+    /* A flat colour: with a picture's green channel for its opacity (the
+       clouds' shadow, the storm's shadow), or with a colour for each point of
+       a strip (the rain). */
+    function flatVertex(withColor) {
+      return HEAD + [
+        'layout(location = 0) in vec3 position;',
+        'layout(location = 2) in vec2 uv;',
+        withColor ? 'layout(location = 3) in vec3 color;' : '',
+        'uniform mat4 modelViewMatrix;',
+        'uniform mat4 projectionMatrix;',
+        'out vec2 vUv;',
+        withColor ? 'out vec3 vColor;' : '',
+        'void main() {',
+        '  vUv = uv;',
+        withColor ? '  vColor = color;' : '',
+        '  gl_Position = projectionMatrix * (modelViewMatrix * vec4(position, 1.0));',
+        '}'
+      ].join('\n');
+    }
+    function flatFragment(withPicture, withColor) {
+      return HEAD + [
+        'uniform vec3 diffuse;',
+        'uniform float opacity;',
+        withPicture ? 'uniform sampler2D alphaMap;' : '',
+        TO_SCREEN,
+        'in vec2 vUv;',
+        withColor ? 'in vec3 vColor;' : '',
+        'out vec4 outColor;',
+        'void main() {',
+        '  vec3 colour = diffuse;',
+        withColor ? '  colour *= vColor;' : '',
+        '  float alpha = opacity;',
+        withPicture ? '  alpha *= texture(alphaMap, vUv).g;' : '',
+        '  outColor = vec4(toScreen(colour), alpha);',
+        '}'
+      ].join('\n');
+    }
+
+    /* The air's glow: brightest where the surface turns away, seen from inside the shell */
+    var ATMOS_VERTEX = HEAD + [
+      'layout(location = 0) in vec3 position;',
+      'layout(location = 1) in vec3 normal;',
+      'uniform mat4 modelViewMatrix;',
+      'uniform mat4 projectionMatrix;',
+      'uniform mat3 normalMatrix;',
+      'out vec3 vN;',
+      'out vec3 vV;',
+      'void main(){',
+      '  vec4 mv = modelViewMatrix * vec4(position,1.0);',
+      '  vN = normalize(normalMatrix * normal);',
+      '  vV = normalize(-mv.xyz);',
+      '  gl_Position = projectionMatrix * mv;',
+      '}'
+    ].join('\n');
+    var ATMOS_FRAGMENT = HEAD + [
+      'uniform vec3 glow;',
+      'uniform vec3 edge;',
+      'in vec3 vN;',
+      'in vec3 vV;',
+      'out vec4 outColor;',
+      'void main(){',
+      '  float f = pow(1.0 - abs(dot(vN, vV)), 3.0);',
+      '  outColor = vec4(mix(glow, edge, f) * f * 1.6, f);',
+      '}'
+    ].join('\n');
+
+    /* The storm: a flat sheet whose points are lifted by the spiral's own opacity and a drifting detail of cloud, so the tops stand up; shaded by the slope of what it finds */
+    var DISC_VERTEX = HEAD + [
+      'layout(location = 0) in vec3 position;',
+      'layout(location = 2) in vec2 uv;',
+      'uniform mat4 modelMatrix;',
+      'uniform mat4 modelViewMatrix;',
+      'uniform mat4 projectionMatrix;',
+      'uniform sampler2D map;',
+      'uniform sampler2D detail;',
+      'uniform float uH;',
+      'out vec2 vUv;',
+      'out float vD;',
+      'out vec3 vPos;',
+      'void main(){',
+      '  vUv = uv;',
+      '  float d = clamp(texture(map, uv).a * 1.25, 0.0, 1.0);',
+      '  float det = texture(detail, uv * 1.6 + vec2(0.31, 0.17)).r;',
+      '  float h = (pow(d, 0.9) * 0.85 + det * 0.25 * d) * uH;',
+      '  vD = d;',
+      '  vec3 p = position + vec3(0.0, 0.0, h);',
+      '  vPos = (modelMatrix * vec4(p, 1.0)).xyz;',
+      '  gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);',
+      '}'
+    ].join('\n');
+    var DISC_FRAGMENT = HEAD + [
+      'uniform vec3 uSun;',
+      'uniform float uFlash;',
+      'uniform float uAlpha;',
+      'uniform vec3 cLit;',
+      'uniform vec3 cShade;',
+      'in vec2 vUv;',
+      'in float vD;',
+      'in vec3 vPos;',
+      'out vec4 outColor;',
+      'void main(){',
+      '  vec3 n = normalize(cross(dFdx(vPos), dFdy(vPos)));',
+      '  if (dot(n, normalize(vPos)) < 0.0) { n = -n; }',
+      '  float lam = clamp(dot(n, normalize(uSun)), 0.0, 1.0);',
+      '  vec3 col = mix(cShade, cLit, 0.25 + 0.75 * lam);',
+      '  col = mix(col, vec3(1.0), uFlash * vD);',
+      '  outColor = vec4(col, smoothstep(0.05, 0.4, vD) * uAlpha);',
+      '}'
+    ].join('\n');
+
+    /* The stars: square points of a fixed size in pixels */
+    var STAR_VERTEX = HEAD + [
+      'layout(location = 0) in vec3 position;',
+      'uniform mat4 modelViewMatrix;',
+      'uniform mat4 projectionMatrix;',
+      'uniform float size;',
+      'void main() {',
+      '  gl_Position = projectionMatrix * (modelViewMatrix * vec4(position, 1.0));',
+      '  gl_PointSize = size;',
+      '}'
+    ].join('\n');
+    var PLAIN_FRAGMENT = HEAD + [
+      'uniform vec3 diffuse;',
+      'uniform float opacity;',
+      TO_SCREEN,
+      'out vec4 outColor;',
+      'void main() {',
+      '  outColor = vec4(toScreen(diffuse), opacity);',
+      '}'
+    ].join('\n');
+
+    /* The track: a line, dashed by the distance along it (the dashes ahead of the storm) or whole (the gold behind) */
+    function lineVertex(dashed) {
+      return HEAD + [
+        'layout(location = 0) in vec3 position;',
+        dashed ? 'layout(location = 4) in float lineDistance;' : '',
+        'uniform mat4 modelViewMatrix;',
+        'uniform mat4 projectionMatrix;',
+        dashed ? 'out float vAlong;' : '',
+        'void main() {',
+        dashed ? '  vAlong = lineDistance;' : '',
+        '  gl_Position = projectionMatrix * (modelViewMatrix * vec4(position, 1.0));',
+        '}'
+      ].join('\n');
+    }
+    function lineFragment(dashed) {
+      return HEAD + [
+        'uniform vec3 diffuse;',
+        'uniform float opacity;',
+        dashed ? 'uniform float dashSize;' : '',
+        dashed ? 'uniform float cycle;' : '',
+        dashed ? 'in float vAlong;' : '',
+        TO_SCREEN,
+        'out vec4 outColor;',
+        'void main() {',
+        dashed ? '  if (mod(vAlong, cycle) > dashSize) { discard; }' : '',
+        '  outColor = vec4(toScreen(diffuse), opacity);',
+        '}'
+      ].join('\n');
+    }
+
+    /* The dots and the target: a square that always faces the camera, `size` across in the world. Its four
+       corners are put out from its middle, which is given in the view, sideways and up in the view, so the
+       square lies across the way the camera looks. */
+    var SPRITE_VERTEX = HEAD + [
+      'layout(location = 0) in vec3 position;',
+      'layout(location = 2) in vec2 uv;',
+      'uniform mat4 projectionMatrix;',
+      'uniform vec3 centre;',
+      'uniform float size;',
+      'out vec2 vUv;',
+      'void main() {',
+      '  vUv = uv;',
+      '  gl_Position = projectionMatrix * vec4(centre + vec3(position.xy * size, 0.0), 1.0);',
+      '}'
+    ].join('\n');
+    var SPRITE_FRAGMENT = HEAD + [
+      'uniform vec3 diffuse;',
+      'uniform float opacity;',
+      'uniform sampler2D map;',
+      TO_SCREEN,
+      'in vec2 vUv;',
+      'out vec4 outColor;',
+      'void main() {',
+      '  vec4 picture = texture(map, vUv);',
+      '  outColor = vec4(toScreen(diffuse * picture.rgb), opacity * picture.a);',
+      '}'
+    ].join('\n');
+
+    function stormScene(root, options) {
+      var canvas = root.querySelector('canvas');
+      if (!canvas) { return null; }
+      var W = root.offsetWidth || 840, H = root.offsetHeight || 306;
+      var hold = typeof options.hold === 'number' ? options.hold : null;
+      var marks = options.marks || [];
+      var base = options.textures || 'textures/';
+      var gl;
+      try {
+        // An opaque canvas, with the depth and stencil buffers
+        gl = canvas.getContext('webgl2', { antialias: true, alpha: false, depth: true, stencil: true, premultipliedAlpha: true, preserveDrawingBuffer: hold !== null });
+      } catch (e) {
+        return null;
+      }
+      if (!gl || (gl.isContextLost && gl.isContextLost())) { return null; }
+      // A held picture is drawn as it stands: its labels and list are not brought in by a transition,
+      // which a page with no frames to run it, such as the station's snapshot, never plays
+      if (hold !== null) { root.classList.add('pn-wx-st3-held'); }
+      var K = tokens(root);
+      var cw = Math.floor(W * RATIO), ch = Math.floor(H * RATIO);
+      function sizeCanvas() {
+        canvas.width = cw;
+        canvas.height = ch;
+      }
+      sizeCanvas();
+
+      var running = true;
+      var drawn = false;
+      var settle = null;
+      var finished = new Promise(function (resolve) { settle = resolve; });
+      var made = { buffers: [], arrays: [], textures: [], programs: [] };
+      var pending = 4;
+      /* A still has no frames to wait for: it draws its moment once the pictures have come, or failed to */
+      function loaded() {
+        pending -= 1;
+        if (hold !== null && pending <= 0 && running && drawSafely(hold)) {
+          drawn = true;
+          settle();
+        }
+      }
+      /* A picture WebKit refuses to upload (it does, with "The operation is insecure", where the page may not read
+         other files), or any other failure to draw: the scene is given up, once, and the caller told, so the labels
+         and list can fall back to the plain form. Nothing is tried again, and nothing throws every frame. */
+      function broke() {
+        if (!running) { return; }
+        dispose();
+        Object.keys(labels).forEach(function (key) {
+          labels[key].classList.remove('pn-wx-on');
+          labels[key].style.transform = '';
+        });
+        root.classList.remove('pn-wx-st3-tracking', 'pn-wx-st3-held');
+        if (options.onFail) { options.onFail(); }
+      }
+      function drawSafely(t) {
+        try {
+          draw(t);
+          return true;
+        } catch (e) {
+          broke();
+          return false;
+        }
+      }
+
+      /* ---- Programs and shapes ---- */
+      function shader(type, source) {
+        var s = gl.createShader(type);
+        gl.shaderSource(s, source);
+        gl.compileShader(s);
+        if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) {
+          var log = gl.getShaderInfoLog(s);
+          gl.deleteShader(s);
+          throw new Error('shader: ' + log);
+        }
+        return s;
+      }
+      function program(vertex, fragment) {
+        var v = shader(gl.VERTEX_SHADER, vertex), f;
+        try {
+          f = shader(gl.FRAGMENT_SHADER, fragment);
+        } catch (e) {
+          gl.deleteShader(v);
+          throw e;
+        }
+        var p = gl.createProgram();
+        made.programs.push(p);
+        gl.attachShader(p, v);
+        gl.attachShader(p, f);
+        gl.linkProgram(p);
+        gl.deleteShader(v);
+        gl.deleteShader(f);
+        if (!gl.getProgramParameter(p, gl.LINK_STATUS)) { throw new Error('program: ' + gl.getProgramInfoLog(p)); }
+        var found = { handle: p, spots: {} };
+        found.at = function (name) {
+          if (!(name in found.spots)) { found.spots[name] = gl.getUniformLocation(p, name); }
+          return found.spots[name];
+        };
+        return found;
+      }
+      function buffer(target, data) {
+        var b = gl.createBuffer();
+        made.buffers.push(b);
+        gl.bindBuffer(target, b);
+        gl.bufferData(target, data, gl.STATIC_DRAW);
+        return b;
+      }
+      /* A shape's points go to the card once, under a vertex array that remembers where each kind sits:
+         0 position, 1 normal, 2 uv, 3 colour, 4 distance along a line */
+      function shape(parts) {
+        var vao = gl.createVertexArray();
+        made.arrays.push(vao);
+        gl.bindVertexArray(vao);
+        [['position', 0, 3], ['normal', 1, 3], ['uv', 2, 2], ['color', 3, 3], ['distance', 4, 1]].forEach(function (kind) {
+          var data = parts[kind[0]];
+          if (!data) { return; }
+          buffer(gl.ARRAY_BUFFER, new Float32Array(data));
+          gl.enableVertexAttribArray(kind[1]);
+          gl.vertexAttribPointer(kind[1], kind[2], gl.FLOAT, false, 0, 0);
+        });
+        var out = { vao: vao, count: 0, type: 0, mode: parts.mode === undefined ? gl.TRIANGLES : parts.mode };
+        if (parts.index) {
+          var big = parts.position.length / 3 > 65535;
+          buffer(gl.ELEMENT_ARRAY_BUFFER, big ? new Uint32Array(parts.index) : new Uint16Array(parts.index));
+          out.type = big ? gl.UNSIGNED_INT : gl.UNSIGNED_SHORT;
+          out.count = parts.index.length;
+        } else {
+          out.count = parts.position.length / 3;
+        }
+        out.all = out.count;
+        return out;
+      }
+
+      var earthProgram, cloudProgram, atmosProgram, discProgram, starProgram, spriteProgram, rainProgram, flatProgram, dashProgram, lineProgram;
+      try {
+        earthProgram = program(LIT_VERTEX, EARTH_FRAGMENT);
+        cloudProgram = program(LIT_VERTEX, CLOUD_FRAGMENT);
+        flatProgram = program(flatVertex(false), flatFragment(true, false));
+        rainProgram = program(flatVertex(true), flatFragment(false, true));
+        atmosProgram = program(ATMOS_VERTEX, ATMOS_FRAGMENT);
+        discProgram = program(DISC_VERTEX, DISC_FRAGMENT);
+        starProgram = program(STAR_VERTEX, PLAIN_FRAGMENT);
+        spriteProgram = program(SPRITE_VERTEX, SPRITE_FRAGMENT);
+        dashProgram = program(lineVertex(true), lineFragment(true));
+        lineProgram = program(lineVertex(false), lineFragment(false));
+      } catch (e) {
+        // Not a scene to draw: told as no graphics context is
+        running = false;
+        free();
+        settle();
+        return null;
+      }
+
+      /* ---- Pictures: what is uploaded, and how ---- */
+      var anisotropy = gl.getExtension('EXT_texture_filter_anisotropic');
+      var maxAnisotropy = anisotropy ? gl.getParameter(anisotropy.MAX_TEXTURE_MAX_ANISOTROPY_EXT) : 1;
+      /* A picture goes up the way a picture does for a lit surface: flipped, never premultiplied, four bytes to a
+         pixel, with a full chain of smaller ones and the trilinear filter; a colour picture (`srgb`) is stored as sRGB,
+         which the graphics card turns to linear as it reads, before it blends the pixels together. */
+      function texture(image, options2) {
+        var tex = { image: image, handle: null, srgb: !!options2.srgb, repeat: !!options2.repeat, aniso: options2.aniso || 1 };
+        tex.bind = function (unit) {
+          gl.activeTexture(gl.TEXTURE0 + unit);
+          if (tex.handle === null && tex.image) { upload(tex); }
+          gl.bindTexture(gl.TEXTURE_2D, tex.handle);
+        };
+        return tex;
+      }
+      function upload(tex) {
+        var image = tex.image, handle = gl.createTexture();
+        made.textures.push(handle);
+        gl.bindTexture(gl.TEXTURE_2D, handle);
+        gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+        gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+        gl.pixelStorei(gl.UNPACK_ALIGNMENT, 4);
+        gl.pixelStorei(gl.UNPACK_COLORSPACE_CONVERSION_WEBGL, gl.NONE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, tex.repeat ? gl.REPEAT : gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, tex.repeat ? gl.REPEAT : gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+        if (anisotropy && tex.aniso > 1) {
+          gl.texParameterf(gl.TEXTURE_2D, anisotropy.TEXTURE_MAX_ANISOTROPY_EXT, Math.min(tex.aniso, maxAnisotropy));
+        }
+        var levels = Math.floor(Math.log(Math.max(image.width, image.height)) / Math.LN2) + 1;
+        gl.texStorage2D(gl.TEXTURE_2D, levels, tex.srgb ? gl.SRGB8_ALPHA8 : gl.RGBA8, image.width, image.height);
+        // WebKit refuses here, with "The operation is insecure", where the page may not read the file the picture came from
+        gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, gl.RGBA, gl.UNSIGNED_BYTE, image);
+        gl.generateMipmap(gl.TEXTURE_2D);
+        tex.handle = handle;
+      }
+      function picture(url, srgb, repeat) {
+        var img = new Image();
+        img.crossOrigin = 'anonymous';
+        var tex = texture(null, { srgb: srgb, repeat: repeat, aniso: 8 });
+        img.onload = function () { tex.image = img; loaded(); };
+        img.onerror = loaded;
+        img.src = url;
+        return tex;
+      }
+      var earthMap = picture(base + 'earth.jpg', true, false);
+      var cloudMap = picture(base + 'clouds.jpg', false, true);
+      var topoMap = picture(base + 'topo.jpg', false, false);
+      var waterMap = picture(base + 'water.jpg', false, false);
+      var spiralTex = texture(spiralCanvas(512), {});
+      var dotTex = texture(dotCanvas(64, false), {});
+      var ringTex = texture(dotCanvas(64, true), {});
+
+      /* ---- The scene: things in a tree of places, each drawn by its own function ---- */
+      var nextId = 0, nodes = [];
+      /* A place: where something is (p), how it is turned (q) and how big it is (s), in the place it hangs from if
+         it hangs from one; `world` is the matrix of all that, worked out in settleWorld. */
+      function place(parent) {
+        var node = { id: ++nextId, parent: parent || null, p: vec3(), q: vec4(), s: vSet(vec3(), 1, 1, 1), local: mat4(), world: mat4() };
+        node.q[3] = 1;
+        mFrom(node.world, node.p, node.q, node.s);
+        nodes.push(node);
+        return node;
+      }
+      function settleWorld(node) {
+        mFrom(node.local, node.p, node.q, node.s);
+        if (node.parent === null) { node.world.set(node.local); } else { mMul(node.world, node.parent.world, node.local); }
+      }
+      var things = [];
+      /* How a thing is blended and where it writes: `blend` none, normal or additive; `side` front, back or both;
+         lower `order` is drawn first, and among the see-through things the farther comes first. */
+      function thing(node, how) {
+        how.node = node;
+        how.id = node.id;
+        how.material = ++nextId;
+        how.order = how.order || 0;
+        // what the order of drawing sorts, kept so a frame makes none
+        how.entry = { one: how, z: 0 };
+        things.push(how);
+        return how;
+      }
+
+      // Stars
+      var starAt = [], rs = seeded(9), i;
+      for (i = 0; i < 1800; i++) {
+        var v = vMul(WORK_A, vUnit(WORK_A, vSet(WORK_A, rs() * 2 - 1, rs() * 2 - 1, rs() * 2 - 1)), 80);
+        starAt.push(v[0], v[1], v[2]);
+      }
+      var starShape = shape({ position: starAt, mode: gl.POINTS });
+      var starNode = place();
+      thing(starNode, {
+        shape: starShape, transparent: false, blend: 'none', depthWrite: true, side: 'front',
+        show: function (frame) {
+          gl.useProgram(starProgram.handle);
+          matrices(starProgram, this.node, frame, false);
+          gl.uniform3f(starProgram.at('diffuse'), 0xc9 / 255, 0xd3 / 255, 0xe3 / 255);
+          gl.uniform1f(starProgram.at('opacity'), 1);
+          gl.uniform1f(starProgram.at('size'), 1.3 * RATIO);
+        }
+      });
+
+      // The earth, its satellite clouds with their shadows, and the air's glow
+      var earthShape = shape(sphereShape(1, 160, 120));
+      thing(place(), {
+        shape: earthShape, transparent: false, blend: 'none', depthWrite: true, side: 'front',
+        show: function (frame) {
+          gl.useProgram(earthProgram.handle);
+          matrices(earthProgram, this.node, frame, true);
+          lights(earthProgram, frame);
+          earthMap.bind(0); gl.uniform1i(earthProgram.at('map'), 0);
+          topoMap.bind(1); gl.uniform1i(earthProgram.at('bumpMap'), 1);
+          waterMap.bind(2); gl.uniform1i(earthProgram.at('specularMap'), 2);
+          gl.uniform1f(earthProgram.at('bumpScale'), 0.012);
+          gl.uniform3f(earthProgram.at('specularColor'), 0x18 / 255, 0x20 / 255, 0x2e / 255);
+          gl.uniform1f(earthProgram.at('shininess'), 40);
+        }
+      });
+      var cloudShadowNode = place();
+      thing(cloudShadowNode, {
+        shape: shape(sphereShape(1.0015, 160, 120)), transparent: true, blend: 'normal', depthWrite: false, side: 'front',
+        show: function (frame) {
+          gl.useProgram(flatProgram.handle);
+          matrices(flatProgram, this.node, frame, false);
+          colour(flatProgram.at('diffuse'), K.deep);
+          gl.uniform1f(flatProgram.at('opacity'), 0.42);
+          cloudMap.bind(0); gl.uniform1i(flatProgram.at('alphaMap'), 0);
+        }
+      });
+      var cloudsNode = place();
+      thing(cloudsNode, {
+        shape: shape(sphereShape(1.007, 160, 120)), transparent: true, blend: 'normal', depthWrite: false, side: 'front',
+        show: function (frame) {
+          gl.useProgram(cloudProgram.handle);
+          matrices(cloudProgram, this.node, frame, true);
+          lights(cloudProgram, frame);
+          gl.uniform1f(cloudProgram.at('opacity'), 0.92);
+          cloudMap.bind(0); gl.uniform1i(cloudProgram.at('alphaMap'), 0);
+        }
+      });
+      thing(place(), {
+        shape: shape(sphereShape(1.045, 96, 72)), transparent: true, blend: 'additive', depthWrite: false, side: 'back',
+        show: function (frame) {
+          gl.useProgram(atmosProgram.handle);
+          matrices(atmosProgram, this.node, frame, true);
+          colour(atmosProgram.at('glow'), K.glow);
+          colour(atmosProgram.at('edge'), K.edge);
+        }
+      });
+
+      // The track: dashed ahead, the station's gold behind the storm
+      var N = 160, trackAtPoints = [], along = [], last = null, run = 0;
+      for (i = 0; i <= N; i++) {
+        var p = trackAt(vec3(), i / N, 1.0022);
+        // Float32 here, as the card holds them, so the distances add up as the card's points do
+        vSet(p, Math.fround(p[0]), Math.fround(p[1]), Math.fround(p[2]));
+        if (last !== null) { run += vLen(vSub(WORK_A, p, last)); }
+        along.push(run);
+        trackAtPoints.push(p[0], p[1], p[2]);
+        last = p;
+      }
+      thing(place(), {
+        shape: shape({ position: trackAtPoints, distance: along, mode: gl.LINE_STRIP }), transparent: true, blend: 'normal', depthWrite: true, side: 'front',
+        show: function (frame) {
+          gl.useProgram(dashProgram.handle);
+          matrices(dashProgram, this.node, frame, false);
+          gl.uniform3f(dashProgram.at('diffuse'), 1, 1, 1);
+          gl.uniform1f(dashProgram.at('opacity'), 0.9);
+          gl.uniform1f(dashProgram.at('dashSize'), 0.006);
+          gl.uniform1f(dashProgram.at('cycle'), 0.006 + 0.004);
+        }
+      });
+      var behind = thing(place(), {
+        shape: shape({ position: trackAtPoints, mode: gl.LINE_STRIP }), transparent: false, blend: 'none', depthWrite: true, side: 'front',
+        show: function (frame) {
+          gl.useProgram(lineProgram.handle);
+          matrices(lineProgram, this.node, frame, false);
+          colour(lineProgram.at('diffuse'), K.goldHi);
+          gl.uniform1f(lineProgram.at('opacity'), 1);
+        }
+      });
+
+      // The dots and the target
+      var quad = shape({
+        position: [-0.5, -0.5, 0, 0.5, -0.5, 0, 0.5, 0.5, 0, -0.5, 0.5, 0], uv: [0, 0, 1, 0, 1, 1, 0, 1], index: [0, 1, 2, 0, 2, 3]
+      });
+      function sprite(tex, size, at, tint, order) {
+        var node = place();
+        node.p.set(at);
+        vSet(node.s, size, size, 1);
+        var one = thing(node, {
+          shape: quad, transparent: true, blend: 'normal', depthWrite: false, side: 'front', order: order || 0,
+          show: function (frame) {
+            gl.useProgram(spriteProgram.handle);
+            var world = this.node.world;
+            mPoint(UP_A, frame.view.inverse, vSet(UP_B, world[12], world[13], world[14]));
+            up4(spriteProgram.at('projectionMatrix'), frame.view.projection);
+            gl.uniform3f(spriteProgram.at('centre'), UP_A[0], UP_A[1], UP_A[2]);
+            gl.uniform1f(spriteProgram.at('size'), this.node.s[0]);
+            colour(spriteProgram.at('diffuse'), tint);
+            gl.uniform1f(spriteProgram.at('opacity'), 1);
+            tex.bind(0); gl.uniform1i(spriteProgram.at('map'), 0);
+          }
+        });
+        return one;
+      }
+      [0].concat(marks.map(function (m) { return m.at; })).forEach(function (m) { sprite(dotTex, 0.016, trackAt(vec3(), m, 1.003), [1, 1, 1]); });
+      var target = sprite(ringTex, 0.03, trackAt(vec3(), 1, 1.003), K.breakingHi, -1);
+
+      // The rain the storm leaves behind it: a swath along the track
+      var SW = 120, swPos = [], swCol = [], swIdx = [];
+      for (i = 0; i <= SW; i++) {
+        var s0 = i / SW, a = trackAt(vec3(), Math.max(0, s0 - 0.004), 1.0012), b = trackAt(vec3(), Math.min(1, s0 + 0.004), 1.0012);
+        var c0 = trackAt(vec3(), s0, 1.0012), n0 = vUnit(vec3(), c0);
+        var side = vMul(vec3(), vUnit(WORK_A, vCross(WORK_A, vSub(WORK_B, b, a), n0)), 0.012 + 0.05 * s0);
+        swPos.push(c0[0] + side[0], c0[1] + side[1], c0[2] + side[2], c0[0] - side[0], c0[1] - side[1], c0[2] - side[2]);
+        var col = vLerp(vec3(), K.ready, K.goldHi, s0 * 0.7);
+        swCol.push(col[0], col[1], col[2], col[0], col[1], col[2]);
+        if (i < SW) { var k = i * 2; swIdx.push(k, k + 1, k + 2, k + 1, k + 3, k + 2); }
+      }
+      var swathLook = { opacity: 0.38 };
+      var swath = thing(place(), {
+        shape: shape({ position: swPos, color: swCol, index: swIdx }), transparent: true, blend: 'normal', depthWrite: false, side: 'both',
+        show: function (frame) {
+          gl.useProgram(rainProgram.handle);
+          matrices(rainProgram, this.node, frame, false);
+          gl.uniform3f(rainProgram.at('diffuse'), 1, 1, 1);
+          gl.uniform1f(rainProgram.at('opacity'), swathLook.opacity);
+        }
+      });
+
+      // The storm: the spiral from above, its tops coloured as it strengthens, puffs of cloud standing up from it, its shadow on the sea
+      var stormNode = place();
+      var spinNode = place(stormNode);
+      var discNode = place(spinNode);
+      vSet(discNode.p, 0, 0, 0.004);
+      var shadowNode = place(stormNode);
+      var boltNode = place(stormNode);
+      vSet(boltNode.p, 0, 0, 0.08);
+      var storm = { alpha: 1, flash: 0, shadowOpacity: 0.55, bolt: 0 };
+      thing(discNode, {
+        shape: shape(sheetShape(2, 2, 220, 220)), transparent: true, blend: 'normal', depthWrite: true, side: 'front', order: 2,
+        show: function (frame) {
+          gl.useProgram(discProgram.handle);
+          matrices(discProgram, this.node, frame, false);
+          spiralTex.bind(0); gl.uniform1i(discProgram.at('map'), 0);
+          cloudMap.bind(1); gl.uniform1i(discProgram.at('detail'), 1);
+          gl.uniform1f(discProgram.at('uH'), 0.09);
+          gl.uniform1f(discProgram.at('uFlash'), storm.flash);
+          gl.uniform1f(discProgram.at('uAlpha'), storm.alpha);
+          colour(discProgram.at('uSun'), SUN);
+          colour(discProgram.at('cLit'), K.white);
+          gl.uniform3f(discProgram.at('cShade'), 0x8f / 255, 0x9b / 255, 0xb6 / 255);
+        }
+      });
+      thing(shadowNode, {
+        shape: shape(sheetShape(2, 2, 1, 1)), transparent: true, blend: 'normal', depthWrite: false, side: 'front',
+        show: function (frame) {
+          gl.useProgram(flatProgram.handle);
+          matrices(flatProgram, this.node, frame, false);
+          colour(flatProgram.at('diffuse'), K.deep);
+          gl.uniform1f(flatProgram.at('opacity'), storm.shadowOpacity);
+          spiralTex.bind(0); gl.uniform1i(flatProgram.at('alphaMap'), 0);
+        }
+      });
+
+      var labels = {};
+      Array.prototype.forEach.call(root.querySelectorAll('[data-at]'), function (el) { labels[el.getAttribute('data-at')] = el; });
+      var rows = root.querySelectorAll('[data-row]');
+      // where the labels are pinned, and the names they go by, are the same each frame
+      var LABEL_NOW = trackAt(vec3(), 0, 1.006), LABEL_END = geo(vec3(), END[0] + 2.2, END[1] + 4.6, 1.004);
+      var markAt = marks.map(function (m) { return trackAt(vec3(), m.at, 1.006); });
+      var markName = marks.map(function (m, index) { return 'm' + index; });
+
+      /* ---- A frame ---- */
+      // what a frame works in, made once: the camera and the storm, the places' matrices, what goes to the card
+      var view = newView(W / H);
+      var pose = newCameraPose(), weather = newStormPose();
+      var drawing = { view: view };
+      var spot = { x: 0, y: 0, on: false };
+      var MV = mat4(), NM = new Float64Array(9), SCREEN = mat4();
+      var UP_A = vec3(), UP_B = vec3();
+      var U16 = new Float32Array(16), U9 = new Float32Array(9);
+      function up4(loc, m) { U16.set(m); gl.uniformMatrix4fv(loc, false, U16); }
+      function up3(loc, m) { U9.set(m); gl.uniformMatrix3fv(loc, false, U9); }
+      function colour(loc, c) { gl.uniform3f(loc, c[0], c[1], c[2]); }
+      function matrices(prog, node, frame, withNormal) {
+        mMul(MV, frame.view.inverse, node.world);
+        up4(prog.at('modelViewMatrix'), MV);
+        up4(prog.at('projectionMatrix'), frame.view.projection);
+        if (withNormal) { up3(prog.at('normalMatrix'), mNormal(NM, MV)); }
+        var model = prog.at('modelMatrix');
+        if (model) { up4(model, node.world); }
+      }
+      /* The lights, in the view: the sun, the ambient, and the bolt where the storm is */
+      function lights(prog, frame) {
+        var pi = Math.PI;
+        gl.uniform3f(prog.at('ambientColor'), 0x3a / 255 * 0.6 * pi, 0x44 / 255 * 0.6 * pi, 0x66 / 255 * 0.6 * pi);
+        mDirection(UP_A, frame.view.inverse, SUN_FAR);
+        gl.uniform3f(prog.at('sunDirection'), UP_A[0], UP_A[1], UP_A[2]);
+        gl.uniform3f(prog.at('sunColor'), 1.35 * pi, 1.35 * pi, 1.35 * pi);
+        mPoint(UP_A, frame.view.inverse, vSet(UP_B, boltNode.world[12], boltNode.world[13], boltNode.world[14]));
+        gl.uniform3f(prog.at('boltPosition'), UP_A[0], UP_A[1], UP_A[2]);
+        var power = storm.bolt * pi;
+        gl.uniform3f(prog.at('boltColor'), power, power, power);
+      }
+      function blending(kind) {
+        if (kind === 'none') { gl.disable(gl.BLEND); return; }
+        gl.enable(gl.BLEND);
+        gl.blendEquation(gl.FUNC_ADD);
+        if (kind === 'additive') { gl.blendFunc(gl.SRC_ALPHA, gl.ONE); } else { gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA); }
+      }
+      function paint(one, side, frame) {
+        // The back faces draw by turning which winding counts as the front
+        if (side === 'both') { gl.disable(gl.CULL_FACE); } else {
+          gl.enable(gl.CULL_FACE);
+          gl.cullFace(gl.BACK);
+          gl.frontFace(side === 'back' ? gl.CW : gl.CCW);
+        }
+        blending(one.blend);
+        gl.depthMask(one.depthWrite);
+        one.show(frame);
+        gl.bindVertexArray(one.shape.vao);
+        if (one.shape.type === 0) {
+          gl.drawArrays(one.shape.mode, 0, one.shape.count);
+        } else {
+          gl.drawElements(one.shape.mode, one.shape.count, one.shape.type, 0);
+        }
+      }
+      function paintAll(one, frame) {
+        if (one.shape.count === 0) { return; }
+        if (one.transparent && one.side === 'both') {
+          paint(one, 'back', frame);
+          paint(one, 'front', frame);
+        } else {
+          paint(one, one.side, frame);
+        }
+      }
+      /* The things in the order a frame draws them: the solid ones first, in the order they were made; then the
+         see-through ones, by `order` and then from the farthest to the nearest, where a thing's distance is how far
+         its middle falls in the depth the camera gives. Things whose middles coincide keep the order they were made in.
+         Each key breaks the tie of the one before it. The two lists are kept between frames. */
+      var solid = [], clear = [];
+      function bySolid(a, b) { return (a.one.order - b.one.order) || (a.one.material - b.one.material) || (a.z - b.z) || (a.one.id - b.one.id); }
+      function byClear(a, b) { return (a.one.order - b.one.order) || (b.z - a.z) || (a.one.id - b.one.id); }
+      function ordered(frame) {
+        mMul(SCREEN, frame.view.projection, frame.view.inverse);
+        solid.length = 0;
+        clear.length = 0;
+        for (var n = 0; n < things.length; n++) {
+          var one = things[n], world = one.node.world;
+          one.entry.z = mPoint(UP_A, SCREEN, vSet(UP_B, world[12], world[13], world[14]))[2];
+          (one.transparent ? clear : solid).push(one.entry);
+        }
+        solid.sort(bySolid);
+        clear.sort(byClear);
+      }
+      function render() {
+        // a place is made after the one it hangs from, so they settle in the order they were made
+        for (var n = 0; n < nodes.length; n++) { settleWorld(nodes[n]); }
+        ordered(drawing);
+        gl.viewport(0, 0, cw, ch);
+        gl.disable(gl.SCISSOR_TEST);
+        gl.enable(gl.DEPTH_TEST);
+        gl.depthFunc(gl.LEQUAL);
+        gl.colorMask(true, true, true, true);
+        gl.depthMask(true);
+        gl.clearColor(CLEAR[0], CLEAR[1], CLEAR[2], 1);
+        gl.clearDepth(1);
+        gl.clearStencil(0);
+        gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT | gl.STENCIL_BUFFER_BIT);
+        for (n = 0; n < solid.length; n++) { paintAll(solid[n].one, drawing); }
+        for (n = 0; n < clear.length; n++) { paintAll(clear[n].one, drawing); }
+        gl.depthMask(true);
+      }
+
+      function label(name, at, show) {
+        var el = labels[name];
+        if (!el) { return; }
+        screenPoint(spot, at, view, W, H);
+        el.style.transform = 'translate(' + spot.x.toFixed(1) + 'px,' + spot.y.toFixed(1) + 'px)';
+        el.classList.toggle('pn-wx-on', !!(show && spot.on));
+      }
+      function draw(t) {
+        lookView(view, cameraPose(pose, t));
+        qAboutY(cloudsNode.q, t * 0.006);
+        qAboutY(cloudShadowNode.q, t * 0.006 - 0.003);
+        stormPose(weather, t);
+        stormNode.p.set(weather.position);
+        stormNode.q.set(weather.turn);
+        vSet(stormNode.s, weather.scale, weather.scale, weather.scale);
+        qAboutZ(spinNode.q, weather.spin);
+        shadowNode.p.set(weather.shadow);
+        qAboutZ(shadowNode.q, weather.spin);
+        storm.alpha = weather.formed;
+        storm.shadowOpacity = 0.55 * weather.formed;
+        storm.flash = weather.flash * 0.8;
+        storm.bolt = weather.flash * 3;
+        var s = weather.s;
+        // the swath and the gold track behind it
+        swath.shape.count = Math.floor(s * SW) * 6;
+        swathLook.opacity = 0.24 * weather.formed;
+        behind.shape.count = Math.floor(s * N) + 1;
+        var grow = 0.03 * (1 + (weather.landfall > 0 ? 0.25 * Math.abs(Math.sin(weather.landfall * 5)) : 0));
+        vSet(target.node.s, grow, grow, grow);
+        var ready = t > T_DIVE + 0.3;
+        label('now', LABEL_NOW, ready);
+        for (var m = 0; m < marks.length; m++) {
+          label(markName[m], markAt[m], ready && s >= marks[m].at);
+          if (rows[m]) { rows[m].classList.toggle('pn-wx-on', s >= marks[m].at); }
+        }
+        label('end', LABEL_END, t >= T_LAND + 0.15);
+        if (rows[marks.length]) { rows[marks.length].classList.toggle('pn-wx-on', t >= T_LAND); }
+        root.classList.toggle('pn-wx-st3-tracking', ready);
+        render();
+      }
+      var start = performance.now();
+      function frame() {
+        if (!running) { return; }
+        if (!root.isConnected) { dispose(); return; }
+        // the page may reset the canvas's size attributes when it redraws its markup
+        if (canvas.width !== cw || canvas.height !== ch) { sizeCanvas(); }
+        // one run from mount, then the last picture stays
+        if (!drawSafely(Math.min(DUR, (performance.now() - start) / 1000))) { return; }
+        requestAnimationFrame(frame);
+      }
+      /* Gives back everything the scene holds on the graphics card: the pictures
+         are large, and a new scene comes with each warning and report */
+      function free() {
+        made.programs.forEach(function (p) { gl.deleteProgram(p); });
+        made.textures.forEach(function (t) { gl.deleteTexture(t); });
+        made.arrays.forEach(function (a) { gl.deleteVertexArray(a); });
+        made.buffers.forEach(function (b) { gl.deleteBuffer(b); });
+        made.programs = []; made.textures = []; made.arrays = []; made.buffers = [];
+        var lose = gl.getExtension('WEBGL_lose_context');
+        if (lose) { lose.loseContext(); }
+      }
+      function dispose() {
+        if (!running) { return; }
+        running = false;
+        free();
+        // a still waiting for this scene's picture waits no longer
+        settle();
+      }
+      if (hold === null) { requestAnimationFrame(frame); }
+      // `ready` comes once a held moment has been drawn, so a still can wait for it
+      return { dispose: dispose, ready: hold === null ? Promise.resolve() : finished, drawn: function () { return drawn; } };
+    }
+    stormScene.cameraPose = function (t) {
+      var pose = cameraPose(newCameraPose(), t);
+      return { eye: plain(pose.eye), look: plain(pose.look), up: plain(pose.up) };
+    };
+    stormScene.viewOf = function (pose, aspect) {
+      var view = lookView(newView(aspect), pose);
+      return { eye: plain(view.eye), world: plain(view.world), inverse: plain(view.inverse), projection: plain(view.projection) };
+    };
+    stormScene.screenPoint = function (v, view, width, height) { return screenPoint({ x: 0, y: 0, on: false }, v, view, width, height); };
+    stormScene.stormPose = function (t) {
+      var pose = stormPose(newStormPose(), t);
+      return {
+        s: pose.s, scale: pose.scale, position: plain(pose.position), turn: plain(pose.turn), spin: pose.spin,
+        formed: pose.formed, shadow: plain(pose.shadow), flash: pose.flash, landfall: pose.landfall
+      };
+    };
+    stormScene.trackAt = function (s, radius) { return plain(trackAt(vec3(), s, radius)); };
+    return stormScene;
+  })();
+
+  /* The held pictures not yet drawn: a still waits for them (PipNews.drawn) */
+  var HELD = [];
+  function holdUntilDrawn(promise) {
+    HELD.push(promise);
+    promise.then(function () { HELD.splice(HELD.indexOf(promise), 1); });
+  }
+  function drawn() { return Promise.all(HELD.slice()); }
+  function hasWebGL() { return !!window.WebGL2RenderingContext; }
+
+  /* STORMTRACKER: the globe on the weather wall in BREAKING's red, with its
+     labels over it and TIME OF ARRIVAL listing the marks and the hour the
+     week runs out. Drawn only where WebGL 2 is: without it the globe stays
+     dark, and the list and the OUT tag show at their resting places with
+     every row lit. With `animate` it runs 13 s;
+     without it, or with reduced motion, it holds the last moment. */
+  function Stormtracker(props) {
+    var wx = props.weather || SAMPLES.stormtracker.weather;
+    var track = wx.track || { marks: [], out: '' };
+    var marks = track.marks || [];
+    var animate = bool(props.animate, false);
+    var hold = animate && !reducedMotion() ? null : 10.4;
+    var ref = useRef(null);
+    var failed = useState(false);
+    var plain = failed[0] || !hasWebGL();
+    var marksKey = JSON.stringify(marks);
+    useEffect(function () {
+      var root = ref.current;
+      if (!root || !hasWebGL()) { return undefined; }
+      var scene = null;
+      try {
+        scene = stormScene(root, { textures: props.textures, marks: marks, hold: hold, onFail: function () { failed[1](true); } });
+      } catch (e) {
+        scene = null;
+      }
+      if (!scene) { failed[1](true); return undefined; }
+      if (hold !== null) { holdUntilDrawn(scene.ready); }
+      return function () { scene.dispose(); };
+    }, [hold, marksKey, props.textures]);
+    var said = marks.map(function (m) { return m.share + ' by ' + m.when + ', '; }).join('');
+    return weatherWall('pn-k-breaking', WEATHER.tracker, wx.until, [
+      h('div', { key: 'box', className: 'pn-wx-st3-box' },
+        h('div', {
+          ref: ref,
+          className: cx('pn-wx-st3', plain && 'pn-wx-st3-plain'),
+          role: 'img',
+          'aria-label': 'STORMTRACKER: a storm forms at now and grows as it crosses the Gulf, ' + said + 'and the week runs out at ' + track.out
+        },
+        h('canvas', { width: 1680, height: 612 }),
+        h('i', { className: 'pn-wx-st3-flare', 'aria-hidden': 'true' }),
+        h('div', { className: 'pn-wx-st3-label pn-wx-st3-now', 'data-at': 'now' }, h('span', null, WEATHER.start)),
+        marks.map(function (m, i) {
+          return h('div', { key: 'm' + i, className: 'pn-wx-st3-label pn-wx-st3-mark', 'data-at': 'm' + i }, h('span', null, m.share));
+        }),
+        h('div', { className: 'pn-wx-st3-label pn-wx-st3-out', 'data-at': 'end' }, h('span', null, WEATHER.out + ' · ' + track.out)),
+        h('div', { className: 'pn-wx-st3-toa' },
+          h('b', null, WEATHER.arrival),
+          marks.map(function (m, i) { return h('span', { key: 'r' + i, 'data-row': i }, m.when + '   ' + m.share); }),
+          h('span', { 'data-row': 'end', className: 'pn-wx-st3-hit' }, track.out + '   ' + WEATHER.out))))
+    ]);
+  }
+
+  /* WEATHER ALERT, the open of STORM WARNING. Built as ON THE HOUR is: the
+     station clock's bezel and glossy face on the left holding the storm,
+     the words in chrome on the right, on BREAKING NEWS's glass wall in red.
+     Its motion is the stylesheet's (the bolt flashes, WEATHER and ALERT
+     slam in, the frame flashes white as the thunder breaks), under
+     `.pn-anim`; `progress` is the glass wall's. `outro` runs it out over
+     1.4 s, as the hour's outro runs out the ident: no flash, and the open
+     fades to the board underneath. */
+  function AlertOpen(props) {
+    var outro = bool(props.outro, false);
+    function line(word) { return chromeStill(word, 'pn-stinger-line pn-ident-line pn-wx-alert-line'); }
+    return h('div', {
+      className: cx('pn-wx-alert', outro && 'pn-wx-alert-out', 'pn-k-breaking'),
+      style: { position: 'absolute', left: 0, top: 0, width: STAGE_W + 'px', height: STAGE_H + 'px' }
+    },
+      h(Stinger, { words: [], outro: outro, progress: props.progress, animate: bool(props.animate, false) }),
+      h('div', { className: 'pn-wx-alert-dial' },
+        h('div', { className: 'pn-dial' }, h('div', { className: 'pn-dial-face' }, h(WeatherIcon, { sky: 'storm', bolt: 'pn-wx-alert-bolt' })))),
+      h('div', { className: 'pn-ident-words pn-wx-alert-words' }, WEATHER.alert.map(line)),
+      outro ? null : h('i', { className: 'pn-wx-flash', 'aria-hidden': 'true' }));
+  }
+
   /* The studio: a dusk skyline through the studio window, drawn on the same
      pixel grid as Clawd, and the anchor desk in front of it. The desk is one
      solid piece that overlaps itself, so nothing behind it shows through at
@@ -1437,25 +3162,36 @@
         h(Backdrop, { animate: animate }),
         h(SessionBoard, { sessions: back.sessions, limits: back.limits }),
         h(Ticker, { items: back.ticker, time: back.clock, animate: animate })));
-      parts.push(scene.open === 'hour'
-        ? h(Ident, { key: 'id-out', outro: true, hour: scene.hour, progress: scene.progress, animate: animate })
-        : h(Stinger, { key: 'st', outro: true, progress: scene.progress, animate: animate }));
+      if (scene.open === 'hour') {
+        parts.push(h(Ident, { key: 'id-out', outro: true, hour: scene.hour, progress: scene.progress, animate: animate }));
+      } else if (scene.open === 'alert') {
+        parts.push(h(AlertOpen, { key: 'alert-out', outro: true, progress: scene.progress, animate: animate }));
+      } else {
+        parts.push(h(Stinger, { key: 'st', outro: true, progress: scene.progress, animate: animate }));
+      }
     } else if (mode === 'ident') {
       parts.push(h(Ident, { key: 'id', hour: scene.hour, progress: scene.progress, animate: animate }));
     } else if (mode === 'review') {
       parts.push(h(Backdrop, { key: 'backdrop', animate: animate }));
       parts.push(h(HourReview, { key: 'rv', rows: scene.rows, span: scene.span, label: scene.label, animate: animate }));
+    } else if (mode === 'weather-now' || mode === 'weather-days' || mode === 'stormtracker') {
+      parts.push(h(Backdrop, { key: 'backdrop', animate: animate }));
+      parts.push(mode === 'weather-now' ? h(WeatherNow, { key: 'wx', weather: scene.weather })
+        : mode === 'weather-days' ? h(WeatherDays, { key: 'wx', weather: scene.weather })
+        : h(Stormtracker, { key: 'wx', weather: scene.weather, animate: animate }));
+    } else if (mode === 'alert') {
+      parts.push(h(AlertOpen, { key: 'alert', progress: scene.progress, animate: animate }));
     } else {
       parts.push(h(Backdrop, { key: 'backdrop', animate: animate }));
-      parts.push(h(SessionBoard, { key: 'board', sessions: scene.sessions, limits: scene.limits, animate: animate }));
+      parts.push(h(SessionBoard, { key: 'board', sessions: scene.sessions, limits: scene.limits, forecast: scene.forecast, animate: animate }));
     }
     parts.push(h(TopBand, { key: 'top' }));
-    if (mode !== 'stinger' && mode !== 'outro' && mode !== 'ident') {
+    if (mode !== 'stinger' && mode !== 'outro' && mode !== 'ident' && mode !== 'alert') {
       parts.push(h(Ticker, { key: 'tick', items: scene.ticker, time: scene.clock, label: scene.tickerLabel, offset: scene.tickerOffset, animate: animate }));
     }
     return h('div', {
       key: live ? 'scene-' + live.step : 'scene',
-      className: cx('pn-broadcast', 'pn-mode-' + mode, (mode === 'stinger' || (mode === 'outro' && scene.open !== 'hour')) && 'pn-k-breaking'),
+      className: cx('pn-broadcast', 'pn-mode-' + mode, (mode === 'stinger' || mode === 'alert' || (mode === 'outro' && scene.open !== 'hour')) && 'pn-k-breaking'),
       style: { position: 'absolute', left: 0, top: 0, width: STAGE_W + 'px', height: STAGE_H + 'px' }
     }, parts);
   }
@@ -1957,6 +3693,78 @@
   SAMPLES['hour-outro-1'] = outroOf(SAMPLES['hour-return'], 0.4, 'hour', '15:00');
   SAMPLES['hour-outro-2'] = outroOf(SAMPLES['hour-return'], 0.8, 'hour', '15:00');
 
+  /* KLWD WEATHER: the week on Friday at four, 94 hours in, forecast from its
+     pace so far. At 48% used the clouds gather and it ends near 86%; at 72%
+     it is a storm, which runs out on Sunday at 05:00, passing Friday's close
+     at 78% and Saturday's at 96%. */
+  var WX_SESSIONS = [
+    { id: 'forecast', name: 'Weekly limit forecast (#143)', project: 'pipcast', state: 'working' },
+    { id: 'changelog', name: 'Changelog for 1.3.0', project: 'pipcast', state: 'ready' },
+    { id: 'sync', name: 'Calendar sync retries', project: 'mamatime', state: 'needs-input' }
+  ];
+  var WX_ACTIVITY = 'pipcast: editing packages/director/src/forecast.ts';
+  var WX_HOUR = { lead: 'ON THE HOUR', text: '2 stories since 15:00' };
+  var WX_CLOUDS = {
+    outlook: 'clouds',
+    used: '48%',
+    sky: 'partly',
+    word: 'CLOUDS GATHERING',
+    strap: 'The week ends near 86%',
+    until: 'TO MON 18:00',
+    days: [
+      { name: 'FRI', sky: 'sun', high: '52%', low: '48%' },
+      { name: 'SAT', sky: 'sun', high: '64%', low: '52%' },
+      { name: 'SUN', sky: 'partly', high: '77%', low: '64%' },
+      { name: 'MON', sky: 'partly', high: '86%', low: '77%' }
+    ]
+  };
+  var WX_STORM = {
+    outlook: 'storm',
+    used: '72%',
+    sky: 'storm',
+    word: 'STORM WARNING',
+    strap: 'The week runs out Sun around 05:00',
+    until: 'TO MON 18:00',
+    days: [
+      { name: 'FRI', sky: 'partly', high: '78%', low: '72%' },
+      { name: 'SAT', sky: 'overcast', high: '97%', low: '78%' },
+      { name: 'SUN', sky: 'storm', high: 'OUT', low: '97%', out: true },
+      { name: 'MON', sky: 'storm', high: 'OUT', low: '\u2014', out: true }
+    ],
+    track: { marks: [{ when: 'SAT 00:00', share: '78%', at: 0.23 }, { when: 'SUN 00:00', share: '96%', at: 0.86 }], out: 'SUN 05:00' }
+  };
+  var WX_CLOUDS_LINE = { lead: 'FORECAST', text: 'Clouds gathering: the week ends near 86%, resets Mon 18:00' };
+  var WX_STORM_LINE = { lead: 'FORECAST', text: 'Storm warning: the week runs out Sun around 05:00, resets Mon 18:00' };
+  var WX_WARNING_LINE = { lead: 'STORM WARNING', text: 'in effect until Mon 18:00: at this pace the week runs out Sun around 05:00' };
+  SAMPLES['weather-now'] = { mode: 'weather-now', clock: '16:00', weather: WX_CLOUDS, ticker: [WX_HOUR, WX_CLOUDS_LINE] };
+  SAMPLES['weather-now-storm'] = { mode: 'weather-now', clock: '16:00', weather: WX_STORM, ticker: [WX_HOUR, WX_STORM_LINE] };
+  SAMPLES['weather-days'] = { mode: 'weather-days', clock: '16:00', weather: WX_CLOUDS, ticker: [WX_HOUR, WX_CLOUDS_LINE] };
+  SAMPLES['weather-days-storm'] = { mode: 'weather-days', clock: '16:00', weather: WX_STORM, ticker: [WX_HOUR, WX_STORM_LINE] };
+  /* STORMTRACKER and the board while the warning holds: the warning leads the crawl */
+  SAMPLES.stormtracker = { mode: 'stormtracker', clock: '15:12', weather: WX_STORM, ticker: [WX_WARNING_LINE, WX_ACTIVITY] };
+  SAMPLES.alert = { mode: 'alert', clock: '15:12', progress: 1 };
+  SAMPLES['board-warning'] = {
+    mode: 'board',
+    clock: '15:31',
+    sessions: WX_SESSIONS,
+    limits: [{ kind: 'session', percent: 58 }, { kind: 'week', percent: 72 }],
+    ticker: [WX_WARNING_LINE, WX_ACTIVITY]
+  };
+  /* The board turned to the weekly forecast, as it holds at :15, :30 and :45 */
+  SAMPLES['board-forecast'] = {
+    mode: 'board',
+    clock: '15:15',
+    sessions: WX_SESSIONS,
+    limits: [{ kind: 'session', percent: 58 }, { kind: 'week', percent: 48 }],
+    forecast: WX_CLOUDS,
+    ticker: [WX_CLOUDS_LINE, WX_ACTIVITY]
+  };
+  SAMPLES['alert-outro-1'] = outroOf(SAMPLES['board-warning'], 0.4, 'alert');
+  /* KLWD WEATHER's pages as the report on the hour airs them, at 15:00 */
+  function inReport(scene) {
+    return Object.assign({}, scene, { clock: '15:00', ticker: TICK_HOUR.slice(0, 1) });
+  }
+
   /* The account's usage limits under the listing: well inside both on the
      board of every state; past each step on the board of two pages, beside
      its page tab; and on the board under an outro */
@@ -2016,6 +3824,26 @@
       { scene: SAMPLES['hour-review'], dur: 10 },
       { scene: outroOf(SAMPLES['hour-return'], 1, 'hour', '15:00'), dur: 1.6 },
       { scene: SAMPLES['hour-return'], dur: 5 }
+    ],
+    /* The same report with a storm in the forecast: KLWD WEATHER follows the review, CURRENT CONDITIONS, EXTENDED FORECAST and STORMTRACKER */
+    'hour-weather': [
+      { scene: SAMPLES['hour-board'], dur: 2 },
+      { scene: SAMPLES['hour-ident-2'], dur: 7.5 },
+      { scene: SAMPLES['hour-desk'], dur: 10 },
+      { scene: SAMPLES['hour-review'], dur: 10 },
+      { scene: inReport(SAMPLES['weather-now-storm']), dur: 10 },
+      { scene: inReport(SAMPLES['weather-days-storm']), dur: 10 },
+      { scene: inReport(SAMPLES.stormtracker), dur: 13 },
+      { scene: outroOf(SAMPLES['hour-return'], 1, 'hour', '15:00'), dur: 1.6 },
+      { scene: SAMPLES['hour-return'], dur: 5 }
+    ],
+    /* STORM WARNING as it airs: WEATHER ALERT, STORMTRACKER, the outro, and back to the board, where the warning holds */
+    warning: [
+      { scene: SAMPLES['board-warning'], dur: 2 },
+      { scene: SAMPLES.alert, dur: 1.9 },
+      { scene: SAMPLES.stormtracker, dur: 13 },
+      { scene: outroOf(SAMPLES['board-warning'], 1, 'alert'), dur: 1.4 },
+      { scene: SAMPLES['board-warning'], dur: 8 }
     ],
     /* A quiet hour: the ident, the desk and the outro, no review */
     'quiet-hour': [
@@ -2366,6 +4194,109 @@
     tremolo(m, end, HZ.D4, 1.8, 0.02);
   }
 
+  /* More of the scale for the alert */
+  HZ.Bb2 = 116.54; HZ.E3 = 164.81; HZ.Cs4 = 277.18; HZ.G4 = 392.0; HZ.E5 = 659.26; HZ.Cs5 = 554.37;
+
+  /* An alert tone: a square tone, clipped short and bright, the way a 90s
+     weather bulletin's attention tones cut through a broadcast */
+  function alertTone(m, t, f, dur, vel) {
+    var ctx = m.ctx;
+    var out = voice(m, 1, 0.2);
+    var o = ctx.createOscillator();
+    o.type = 'square';
+    o.frequency.value = f;
+    var lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.value = 2600;
+    var g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(vel, t + 0.005);
+    g.gain.setValueAtTime(vel, t + dur - 0.015);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(lp);
+    lp.connect(g);
+    g.connect(out);
+    o.start(t);
+    o.stop(t + dur + 0.02);
+  }
+  /* Thunder: a crack of bright noise, then the rumble, low noise that
+     swells once more as it rolls away */
+  function thunder(m, t, dur, vel) {
+    var ctx = m.ctx;
+    var out = voice(m, 1, 0.7);
+    var crackSrc = ctx.createBufferSource();
+    crackSrc.buffer = m.white;
+    var hp = ctx.createBiquadFilter();
+    hp.type = 'highpass';
+    hp.frequency.value = 1800;
+    var cg = ctx.createGain();
+    cg.gain.setValueAtTime(0.0001, t);
+    cg.gain.exponentialRampToValueAtTime(vel * 0.7, t + 0.004);
+    cg.gain.exponentialRampToValueAtTime(0.0001, t + 0.22);
+    crackSrc.connect(hp);
+    hp.connect(cg);
+    cg.connect(out);
+    crackSrc.start(t);
+    crackSrc.stop(t + 0.25);
+    var rumbleSrc = ctx.createBufferSource();
+    rumbleSrc.buffer = m.white;
+    rumbleSrc.loop = true;
+    var lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.Q.value = 0.7;
+    lp.frequency.setValueAtTime(420, t);
+    lp.frequency.exponentialRampToValueAtTime(110, t + dur);
+    var rg = ctx.createGain();
+    rg.gain.setValueAtTime(0.0001, t);
+    rg.gain.exponentialRampToValueAtTime(vel, t + 0.05);
+    rg.gain.exponentialRampToValueAtTime(vel * 0.35, t + dur * 0.3);
+    rg.gain.exponentialRampToValueAtTime(vel * 0.6, t + dur * 0.45);
+    rg.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    rumbleSrc.connect(lp);
+    lp.connect(rg);
+    rg.connect(out);
+    rumbleSrc.start(t);
+    rumbleSrc.stop(t + dur + 0.05);
+  }
+
+  /* WEATHER ALERT, 5.2 s, cut to the open's marks (1.6 s). Three pairs of
+     alert tones, high and low on the logo's top notes (D6, A5), as the bolt
+     flashes (0, 0.3, 0.6 s); a timpani roll and a riser (0.6-0.95 s); the
+     logo's four notes on four hits, as BREAKING NEWS has them, but walking
+     into the storm: D minor as WEATHER slams in, B flat as ALERT does, G
+     minor, and the last on A, the dominant, with its seventh: the chord
+     that doesn't come home, as the warning holds until it lifts. Thunder
+     breaks on it with the boom and the crash and rolls away into the map,
+     where the beat comes in under it. */
+  function scoreWeatherAlert(m, t0) {
+    [0, 0.3, 0.6].forEach(function (x) {
+      alertTone(m, t0 + x, HZ.D6, 0.12, 0.09);
+      alertTone(m, t0 + x + 0.14, HZ.A5, 0.12, 0.09);
+    });
+    var roll = [0.6, 0.66, 0.71, 0.755, 0.795, 0.83, 0.86, 0.885, 0.91, 0.93];
+    riser(m, t0 + 0.6, 0.35, 0.12);
+    roll.forEach(function (x, i) { timpani(m, t0 + x, HZ.D2, 0.06 + 0.24 * i / (roll.length - 1), 0.3); });
+    var hits = [
+      { at: 0.95, logo: HZ.A4, chord: [HZ.D3, HZ.F3, HZ.A3, HZ.D4], drum: HZ.D2, dur: 0.12 },
+      { at: 1.15, logo: HZ.D5, chord: [HZ.F3, HZ.Bb3, HZ.D4], drum: HZ.Bb2, dur: 0.12 },
+      { at: 1.35, logo: HZ.A5, chord: [HZ.G3, HZ.Bb3, HZ.D4, HZ.G4], drum: HZ.G2, dur: 0.14 },
+      { at: 1.6, logo: HZ.D6, chord: [HZ.A2, HZ.E3, HZ.A3, HZ.Cs4, HZ.G4], drum: HZ.A2, dur: 1.3 }
+    ];
+    hits.forEach(function (x, i) {
+      var last = i === hits.length - 1;
+      x.chord.forEach(function (f) { brass(m, t0 + x.at, f, x.dur, last ? 0.15 : 0.065, last ? 1.2 : 0.28); });
+      timpani(m, t0 + x.at, x.drum, last ? 1 : 0.35, last ? 1.4 : 0.6);
+      bell(m, t0 + x.at, x.logo, last ? 1.8 : 0.55, last ? 0.28 : 0.17);
+    });
+    boom(m, t0 + 0.95, 0.2);
+    boom(m, t0 + 1.6, 1);
+    crash(m, t0 + 1.6, 0.45);
+    thunder(m, t0 + 1.6, 3.4, 0.5);
+    brass(m, t0 + 1.6, HZ.A2, 1.3, 0.1, 1.2);
+    tremolo(m, t0 + 1.6, HZ.Cs5, 2.2, 0.045);
+    tremolo(m, t0 + 1.6, HZ.E5, 2.2, 0.035);
+  }
+
   /* The station's time signal: a short pure tone on the logo's top note */
   function pip(m, t, dur, vel) {
     var ctx = m.ctx;
@@ -2483,7 +4414,8 @@
     breaking: { duration: 5.8, score: scoreBreaking },
     'breaking-out': { duration: 3.4, score: scoreBreakingOut },
     hour: { duration: 9.6, score: scoreHour },
-    'hour-out': { duration: 3.6, score: scoreHourOut }
+    'hour-out': { duration: 3.6, score: scoreHourOut },
+    'weather-alert': { duration: 5.2, score: scoreWeatherAlert }
   };
 
   /* Plays a jingle now (or at `when`, on the context's clock). Returns a
@@ -2589,7 +4521,8 @@
         var t = ctx.currentTime + at;
         if (mode === 'stinger') { list.push({ name: 'breaking', at: t }); key = 'beat-minor'; }
         if (mode === 'ident') { list.push({ name: 'hour', at: t }); key = 'beat-major'; }
-        if ((mode === 'desk' || mode === 'review') && key && !bed) { bed = { bed: key, at: t }; }
+        if (mode === 'alert') { list.push({ name: 'weather-alert', at: t }); key = 'beat-minor'; }
+        if ((mode === 'desk' || mode === 'review' || mode === 'weather-now' || mode === 'weather-days' || mode === 'stormtracker') && key && !bed) { bed = { bed: key, at: t }; }
         if (mode === 'outro') {
           list.push({ name: step.scene.open === 'hour' ? 'hour-out' : 'breaking-out', at: t });
           if (bed) { bed.until = t; list.push(bed); }
@@ -2696,12 +4629,22 @@
     NewsDesk: NewsDesk,
     OTSBox: OTSBox,
     HourReview: HourReview,
+    WeatherIcon: WeatherIcon,
+    WeatherNow: WeatherNow,
+    WeatherDays: WeatherDays,
+    Stormtracker: Stormtracker,
+    AlertOpen: AlertOpen,
     Clawd: Clawd,
     Mark: Mark,
     Stage: Stage,
     crawlStep: crawlStep,
     crawlRun: crawlRun,
     crawlSpeed: CRAWL_SPEED,
+    weatherIconMarkup: weatherIconMarkup,
+    drawn: drawn,
+    stormScene: stormScene,
+    WEATHER: WEATHER,
+    OUTLOOKS: OUTLOOKS,
     EVENTS: EVENTS,
     STATES: STATES,
     CLAWD_SOURCE: CLAWD_SOURCE,

@@ -1,0 +1,50 @@
+{
+  "scene": {
+    "mode": "weather-now",
+    "clock": "16:00",
+    "weather": {
+      "outlook": "clouds",
+      "used": "48%",
+      "sky": "partly",
+      "word": "CLOUDS GATHERING",
+      "strap": "The week ends near 86%",
+      "until": "TO MON 18:00",
+      "days": [
+        {
+          "name": "FRI",
+          "sky": "sun",
+          "high": "52%",
+          "low": "48%"
+        },
+        {
+          "name": "SAT",
+          "sky": "sun",
+          "high": "64%",
+          "low": "52%"
+        },
+        {
+          "name": "SUN",
+          "sky": "partly",
+          "high": "77%",
+          "low": "64%"
+        },
+        {
+          "name": "MON",
+          "sky": "partly",
+          "high": "86%",
+          "low": "77%"
+        }
+      ]
+    },
+    "ticker": [
+      {
+        "lead": "ON THE HOUR",
+        "text": "2 stories since 15:00"
+      },
+      {
+        "lead": "FORECAST",
+        "text": "Clouds gathering: the week ends near 86%, resets Mon 18:00"
+      }
+    ]
+  }
+}

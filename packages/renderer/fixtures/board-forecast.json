@@ -1,0 +1,77 @@
+{
+  "scene": {
+    "mode": "board",
+    "clock": "15:15",
+    "sessions": [
+      {
+        "id": "forecast",
+        "name": "Weekly limit forecast (#143)",
+        "project": "pipcast",
+        "state": "working"
+      },
+      {
+        "id": "changelog",
+        "name": "Changelog for 1.3.0",
+        "project": "pipcast",
+        "state": "ready"
+      },
+      {
+        "id": "sync",
+        "name": "Calendar sync retries",
+        "project": "mamatime",
+        "state": "needs-input"
+      }
+    ],
+    "limits": [
+      {
+        "kind": "session",
+        "percent": 58
+      },
+      {
+        "kind": "week",
+        "percent": 48
+      }
+    ],
+    "ticker": [
+      {
+        "lead": "FORECAST",
+        "text": "Clouds gathering: the week ends near 86%, resets Mon 18:00"
+      },
+      "pipcast: editing packages/director/src/forecast.ts"
+    ],
+    "forecast": {
+      "outlook": "clouds",
+      "used": "48%",
+      "sky": "partly",
+      "word": "CLOUDS GATHERING",
+      "strap": "The week ends near 86%",
+      "until": "TO MON 18:00",
+      "days": [
+        {
+          "name": "FRI",
+          "sky": "sun",
+          "high": "52%",
+          "low": "48%"
+        },
+        {
+          "name": "SAT",
+          "sky": "sun",
+          "high": "64%",
+          "low": "52%"
+        },
+        {
+          "name": "SUN",
+          "sky": "partly",
+          "high": "77%",
+          "low": "64%"
+        },
+        {
+          "name": "MON",
+          "sky": "partly",
+          "high": "86%",
+          "low": "77%"
+        }
+      ]
+    }
+  }
+}

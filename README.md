@@ -89,6 +89,22 @@ Stories air one after another, in the order they land, and nothing cuts in. KLWD
 
 At the top of every hour, the station clock strikes, Clawd reads the headlines, and THE HOUR IN REVIEW shows what each session did: the lines it changed, or how long it has been waiting on you. If you're in Claude as the hour strikes, that hour is skipped, and the next report covers it.
 
+### KLWD WEATHER
+
+KLWD forecasts whether your week's usage limit lasts until it resets, with your usage as the weather. It goes by your week so far: the hours of the day you use Claude, how much, and how that has changed lately, with the most recent days counting most.
+
+| Outlook | Means |
+| --- | --- |
+| **CLEAR SKIES** | The week ends below 70% |
+| **CLOUDS GATHERING** | The week ends between 70% and 99% |
+| **STORM WARNING** | The week is more likely than not to run out before it resets |
+
+The FORECAST line on the crawl says how the week ends and when it resets. The report on the hour adds two pages after THE HOUR IN REVIEW: CURRENT CONDITIONS, the week used so far, and EXTENDED FORECAST, a day each until the reset, with where the week will be at the end of each day. In the week's first day there isn't enough to go on, and the crawl says when the outlook starts. Once the week is used up, the crawl says so until it resets.
+
+At :15, :30 and :45 the board turns to EXTENDED FORECAST for 10 seconds and back, the way it turns between pages of sessions. It's no segment, with no jingle, and it never brings a tucked-away window out. It's skipped while the window is hidden or tucked into the side, and in the week's first day, when there's no outlook. A turn that comes due while a segment is on air waits for it, and is dropped if the quarter hour ends first. The top of the hour is the report on the hour, as ever.
+
+When the week looks like running out first, STORM WARNING breaks in with its own alert, and STORMTRACKER follows the storm across the map to the hour it's forecast to hit. It airs at most once an hour, and only while the forecast still says so; the report on the hour shows STORMTRACKER too.
+
 ## The window
 
 ![The window's controls on hover; the window dragged to the top-left corner; tucked into the side of the screen, leaving a small tab; back out of the side for BREAKING NEWS; staying put while another desktop slides in; and faded to 40% over a browser](assets/screenshots/window.jpg)
@@ -149,7 +165,7 @@ What it reads about a session goes only into that session's file, for the statio
 - `mkdir`, `mv`, `rm` and `chmod`, on its own files
 - the station
 
-**The station** is a small macOS app that comes with Pipcast: the program `station/pipcast-station` in the plugin, built from the Swift source in Pipcast's repository. The mod starts it when the first session goes on air, and it quits a few seconds after the last one goes off. It reads the sessions' files, shows the broadcast in its window, a web page that comes with the plugin, and plays the jingles and the beat in `station/sounds`. It checks which app is in front, to hide while Claude is, and where the pointer is, to show the window's controls. Its window never takes the keyboard, so macOS treats the station as an app in the background, and three private macOS switches, looked up as it runs, make up for that: one draws the window's glass controls as an active window's, one lets the station set the pointer for resizing, and one keeps the window off Claude's full-screen desktop. For Pipcast's own checks, it has a `snapshot` command that draws a still of its page, and it saves a picture of its own window, and no other, when `PIPCAST_SELF_CAPTURE` is set. It asks for no permission: no screen recording, no accessibility, no automation.
+**The station** is a small macOS app that comes with Pipcast: the program `station/pipcast-station` in the plugin, built from the Swift source in Pipcast's repository. The mod starts it when the first session goes on air, and it quits a few seconds after the last one goes off. It reads the sessions' files, shows the broadcast in its window, a web page that comes with the plugin, and plays the jingles and the beat in `station/sounds`. It works out the weekly forecast itself, from the usage limits in the sessions' files, and draws STORMTRACKER's globe in its web page with WebGL, on NASA's Blue Marble pictures of the Earth in `station/web/textures`. It checks which app is in front, to hide while Claude is, and where the pointer is, to show the window's controls. Its window never takes the keyboard, so macOS treats the station as an app in the background, and three private macOS switches, looked up as it runs, make up for that: one draws the window's glass controls as an active window's, one lets the station set the pointer for resizing, and one keeps the window off Claude's full-screen desktop. One more private switch, in WebKit and looked up as it runs too, lets its page hand the pictures of the Earth beside it to STORMTRACKER's globe, which WebKit otherwise refuses. For Pipcast's own checks, it has a `snapshot` command that draws a still of its page, and it saves a picture of its own window, and no other, when `PIPCAST_SELF_CAPTURE` is set. It asks for no permission: no screen recording, no accessibility, no automation.
 
 Neither part makes a network request, and neither downloads or installs anything.
 
@@ -161,6 +177,7 @@ It keeps its files in one folder, `~/Library/Application Support/Pipcast`, which
 
 - a file for each session on air, with its project's folder name, its title, its state, what Claude is doing, the question Claude asked or what a permission is for, Claude's last words when a turn ends, the lines and files it changed in each hour, and your account's usage limits. A session deletes its file when it goes off the air or ends. A file left behind by a session that stopped without ending, as when Claude Code is force-quit, is deleted the next time a session goes on air, once it's an hour old.
 - the window's corner and size, whether it's tucked into the side, whether sound is on, when the hour last aired, when the window was last closed, **Transparent window**, and the station's process number and version
+- your week's usage, as the share used at times since the week's limit last reset, at most one reading each hour, for the weekly forecast, and when the last storm warning aired. The readings start over when the week resets.
 - the station's own log of what its window did, for fixing problems, cut back at 1 MB
 
 Claude Code keeps Pipcast's two settings with your other plugins' options.

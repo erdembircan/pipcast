@@ -29,6 +29,7 @@ const SHIPS = [
   'station/sounds/breaking-out.m4a',
   'station/sounds/hour.m4a',
   'station/sounds/hour-out.m4a',
+  'station/sounds/weather-alert.m4a',
   'station/sounds/beat-minor.caf',
   'station/sounds/beat-major.caf',
   'station/web/',

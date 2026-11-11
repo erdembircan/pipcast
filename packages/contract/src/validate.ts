@@ -2,7 +2,7 @@
 // program, so each reader takes `unknown` and returns a well-formed value or
 // a safe default. The rest are the small rules about who is on air.
 
-import { MAX_ACTIVITY, MAX_HOURS, MAX_STORIES, MIN_SCALE, STALE_MS, STATION_STALE_MS } from './constants.ts'
+import { MAX_ACTIVITY, MAX_HOURS, MAX_STORIES, MIN_SCALE, STALE_MS, STATION_STALE_MS, WEATHER_MAX_POINTS } from './constants.ts'
 import type {
   Activity,
   HourStats,
@@ -17,6 +17,7 @@ import type {
   Story,
   StoryKind,
   UsageLimit,
+  WeatherMemory,
 } from './types.ts'
 
 const SESSION_STATES: readonly string[] = ['working', 'needs-input', 'ready', 'error']
@@ -245,4 +246,37 @@ export function parseSharedOptions(value: unknown): SharedOptions | null {
     return null
   }
   return { v: 1, transparent: value.transparent }
+}
+
+// weather.json, or null when it is missing or not one. The station sends
+// whatever its file holds, so the points are checked here: the well-formed
+// ones, a percent held to 0..100, each later than the one before, the newest
+// WEATHER_MAX_POINTS of them.
+export function parseWeather(value: unknown): WeatherMemory | null {
+  if (!isObject(value) || value.v !== 1) {
+    return null
+  }
+  const points: [number, number][] = []
+  if (Array.isArray(value.points)) {
+    for (const entry of value.points) {
+      if (!Array.isArray(entry) || entry.length !== 2) {
+        continue
+      }
+      const [at, percent] = entry as unknown[]
+      if (!isNumber(at) || !isNumber(percent)) {
+        continue
+      }
+      const last = points[points.length - 1]
+      if (last !== undefined && at <= last[0]) {
+        continue
+      }
+      points.push([at, Math.min(100, Math.max(0, percent))])
+    }
+  }
+  return {
+    v: 1,
+    resetsAt: isNumber(value.resetsAt) ? value.resetsAt : null,
+    points: points.slice(-WEATHER_MAX_POINTS),
+    warnedAt: isNumber(value.warnedAt) ? value.warnedAt : null,
+  }
 }

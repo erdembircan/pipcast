@@ -1,18 +1,28 @@
 import { describe, expect, it } from 'vitest'
 import {
   BAND_ALT,
+  LEAD,
+  OUTLOOK_WORDS,
+  WEATHER,
   ERROR_WORDS,
   afterReportLine,
   deskLine,
   doing,
   errorWords,
   fallbackTitle,
+  forecastLine,
+  forecastOutLine,
+  forecastStartsLine,
   hourHeadline,
   hourSoFarLine,
   hourStrap,
+  outTag,
   reviewDetail,
   stillWaitingLine,
   storyLine,
+  untilTab,
+  warningLine,
+  weatherStrap,
 } from '@pipcast/contract'
 
 describe('the ticker', () => {
@@ -106,5 +116,52 @@ describe('the report on the hour', () => {
     expect(reviewDetail({ kind: 'error' })).toBe('Stopped on an error')
     expect(reviewDetail({ kind: 'lines', added: 182, removed: 40 })).toBe('+182 −40')
     expect(reviewDetail({ kind: 'lines', added: 0, removed: 0 })).toBe('No changes this hour')
+  })
+})
+
+describe('the weekly forecast', () => {
+  it('has a lead for the forecast and for the storm warning', () => {
+    expect(LEAD.forecast).toBe('FORECAST')
+    expect(LEAD.stormWarning).toBe('STORM WARNING')
+  })
+
+  it('names the three outlooks', () => {
+    expect(OUTLOOK_WORDS).toEqual({ clear: 'CLEAR SKIES', clouds: 'CLOUDS GATHERING', storm: 'STORM WARNING' })
+  })
+
+  it("writes the crawl's FORECAST line", () => {
+    expect(forecastLine('clouds', 86, 'Mon 18:00')).toBe('Clouds gathering: the week ends near 86%, resets Mon 18:00')
+    expect(forecastLine('clear', 64, 'Mon 18:00')).toBe('Clear skies: the week ends near 64%, resets Mon 18:00')
+  })
+
+  it("says when the outlook starts in the week's first day", () => {
+    expect(forecastStartsLine('Tue 18:00')).toBe('The week’s outlook starts Tue 18:00')
+  })
+
+  it('says the week is used up, with when it resets', () => {
+    expect(forecastOutLine('Mon 18:00')).toBe('The week is used up until it resets Mon 18:00')
+  })
+
+  it('writes the line after the STORM WARNING lead', () => {
+    expect(warningLine('Sun around 05:00', 'Mon 18:00')).toBe('in effect until Mon 18:00: at this pace the week runs out Sun around 05:00')
+  })
+
+  it('writes the strap under the pages', () => {
+    expect(weatherStrap('clouds', 86, 'Sun around 05:00')).toBe('The week ends near 86%')
+    expect(weatherStrap('clear', 64, 'Sun around 05:00')).toBe('The week ends near 64%')
+    expect(weatherStrap('storm', 100, 'Sun around 05:00')).toBe('The week runs out Sun around 05:00')
+  })
+
+  it('writes the tab and the tag', () => {
+    expect(untilTab('Mon 18:00')).toBe('TO MON 18:00')
+    expect(outTag('SUN 05:00')).toBe('OUT · SUN 05:00')
+  })
+
+  it('keeps the words of the pages', () => {
+    expect(WEATHER.now).toBe('CURRENT CONDITIONS')
+    expect(WEATHER.days).toBe('EXTENDED FORECAST')
+    expect(WEATHER.tracker).toBe('STORMTRACKER')
+    expect(WEATHER).not.toHaveProperty('warningLabel')
+    expect(WEATHER.alert).toEqual(['WEATHER', 'ALERT'])
   })
 })

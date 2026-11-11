@@ -18,5 +18,7 @@ let package = Package(
         .executableTarget(name: "station-inspect", dependencies: ["StationCore"]),
         .testTarget(name: "StationCoreTests", dependencies: ["StationCore"]),
         .testTarget(name: "StationSoundTests", dependencies: ["StationSound", "StationCore"]),
+        // The messages the page posts, as the app reads them.
+        .testTarget(name: "PipcastStationTests", dependencies: ["PipcastStation", "StationSound", "StationCore"]),
     ]
 )

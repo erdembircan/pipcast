@@ -83,3 +83,21 @@ export function waited(ms: number): string {
   const hours = Math.floor(minutes / 60)
   return rest === 0 ? `${hours} h` : `${hours} h ${rest} min`
 }
+
+const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+
+// "Mon 18:00": a day of the coming week and a time
+export function dayTime(ms: number): string {
+  return `${DAYS[new Date(ms).getDay()]} ${clock(ms)}`
+}
+
+// "Sun around 05:00": a time the forecast gives, to the nearest hour
+export function aroundTime(ms: number): string {
+  const hour = hourStart(ms + 30 * 60_000)
+  return `${DAYS[new Date(hour).getDay()]} around ${hourLabel(hour)}`
+}
+
+// "MON": the day that holds `ms`, as a panel of the forecast names it
+export function dayName(ms: number): string {
+  return (DAYS[new Date(ms).getDay()] ?? '').toUpperCase()
+}

@@ -58,7 +58,7 @@ else
   echo "info installed at ${plugin#"$config"/}"
   check "station/pipcast-station is executable" test -x "$plugin/station/pipcast-station"
   check "station/web/index.html" test -f "$plugin/station/web/index.html"
-  for name in breaking breaking-out hour hour-out; do
+  for name in breaking breaking-out hour hour-out weather-alert; do
     check "station/sounds/$name.m4a" test -f "$plugin/station/sounds/$name.m4a"
   done
   check "hooks/hooks.json" test -f "$plugin/hooks/hooks.json"

@@ -91,3 +91,25 @@ public func onAir(_ records: [RecordFile], now: Double) -> [RecordFile] {
         .filter { isLive($0.summary, now: now) }
         .sorted { precedes($0.summary, $1.summary) }
 }
+
+/// Counts the changes to what the page's weather reads of the sessions on air: who is on air, and the `limits` each
+/// one's record holds. A session's check-in, which rewrites its record every few seconds, and any other field of a
+/// record, do not count. Every snapshot carries the count as `limits`, so the page looks through the sessions for the
+/// week's reading only when it moves.
+public struct LimitsCounter {
+    public private(set) var count = 0
+    private var seen: NSArray = []
+
+    public init() {}
+
+    /// Looks at the sessions on air. Raises the count, and says so, when who is on air or the limits any of them
+    /// holds is not what it was.
+    @discardableResult
+    public mutating func update(_ air: [RecordFile]) -> Bool {
+        let now = air.map { ["id": $0.summary.id, "limits": $0.json["limits"] ?? NSNull()] as NSDictionary } as NSArray
+        guard !seen.isEqual(now) else { return false }
+        seen = now
+        count += 1
+        return true
+    }
+}

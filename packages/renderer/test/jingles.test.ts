@@ -147,6 +147,7 @@ interface Beat {
 interface Renderer {
   renderJingle: (name: string, sampleRate?: number) => Promise<FakeBuffer>
   beat: Beat
+  jingles: string[]
 }
 
 const news = (): Renderer => (window as unknown as { PipNews: Renderer }).PipNews
@@ -242,6 +243,39 @@ describe('the BREAKING NEWS intro, for contrast', () => {
   it('takes the logo up, with a riser, a roll, a boom and a crash', async () => {
     const score = await render('breaking')
     expect(bells(score).map((b) => b.note)).toEqual([440, 587.33, 880, 1174.66])
+    expect(riser(score)).toBe(true)
+    expect(roll(score)).toBe(true)
+    expect(boom(score)).toBe(true)
+    expect(crash(score)).toBe(true)
+  })
+})
+
+describe('the WEATHER ALERT jingle', () => {
+  it('is one of the jingles, 5.2 s long', async () => {
+    expect(news().jingles).toContain('weather-alert')
+    expect((await news().renderJingle('weather-alert', 8000)).length).toBe(Math.ceil(8000 * 5.2))
+  })
+
+  it('opens with three pairs of alert tones, high then low, on the logo’s top notes', async () => {
+    const score = await render('weather-alert')
+    const tones = score.oscillators.filter((o) => o.type === 'square').sort((a, b) => a.startedAt - b.startedAt)
+    expect(tones.map((o) => [Math.round((o.startedAt - T0) * 1000) / 1000, o.frequency.value])).toEqual([
+      [0, 1174.66],
+      [0.14, 880],
+      [0.3, 1174.66],
+      [0.44, 880],
+      [0.6, 1174.66],
+      [0.74, 880],
+    ])
+  })
+
+  it('takes the logo up on four hits, walking into the storm, and breaks thunder on the last', async () => {
+    const score = await render('weather-alert')
+    const played = bells(score)
+    expect(played.map((b) => b.note)).toEqual([440, 587.33, 880, 1174.66])
+    expect(played.map((b) => Math.round(b.at * 1000) / 1000)).toEqual([0.95, 1.15, 1.35, 1.6])
+    // The last chord is the dominant with its seventh, which does not come home
+    expect(brassAt(score, 1.6)).toEqual([110, 164.81, 220, 277.18, 392])
     expect(riser(score)).toBe(true)
     expect(roll(score)).toBe(true)
     expect(boom(score)).toBe(true)

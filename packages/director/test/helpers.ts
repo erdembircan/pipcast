@@ -1,4 +1,4 @@
-import type { Jingle, SessionRecord, Snapshot, Sound, Story } from '@pipcast/contract'
+import type { Jingle, SessionRecord, Snapshot, Sound, Story, UsageLimit, WeatherMemory } from '@pipcast/contract'
 import { createDirector } from '@pipcast/director'
 import type { DirectorOptions, Program } from '@pipcast/director'
 
@@ -34,7 +34,17 @@ export interface World {
   visible: boolean
   windowOut?: boolean
   lastReportAt: number | null
+  // The station's weather.json, sent with every snapshot: null is no memory,
+  // undefined leaves it out of the snapshots, as the station does once the page has it
+  weather?: WeatherMemory | null
+  // The station's counter of changes to the on-air sessions' limits, when a test
+  // sets it itself; otherwise it rises as the station's does, when who is on air
+  // or the limits any of them holds change, and not when a session only checks in
+  limits?: number
 }
+
+// What the station's counter follows: each on-air session's id and its limits
+export const limitsOf = (sessions: readonly SessionRecord[]): string => JSON.stringify(sessions.map((one) => [one.id, one.limits ?? null]))
 
 export interface Sample {
   now: number
@@ -49,17 +59,26 @@ export function jingles(program: Program | undefined): Jingle[] {
 // A director with a world it reads from, and a clock that moves in 250 ms ticks
 export function harness(start: number, sessions: SessionRecord[] = [], options: DirectorOptions = {}) {
   const director = createDirector(options)
-  const world: World = { sessions, visible: true, lastReportAt: null }
+  const world: World = { sessions, visible: true, lastReportAt: null, weather: null }
   let now = start - 250
   const history: Sample[] = []
+  let limits = 0
+  let seen = limitsOf(sessions)
 
   function tick(): Sample {
+    const signature = limitsOf(world.sessions)
+    if (signature !== seen) {
+      seen = signature
+      limits += 1
+    }
     const snapshot: Snapshot = {
       now,
+      limits: world.limits ?? limits,
       visible: world.visible,
       ...(world.windowOut === undefined ? {} : { windowOut: world.windowOut }),
       sessions: world.sessions,
       lastReportAt: world.lastReportAt,
+      ...(world.weather === undefined ? {} : { weather: world.weather }),
     }
     const sample = { now, program: director.tick({ now, snapshot }) }
     history.push(sample)
@@ -106,5 +125,39 @@ export function harness(start: number, sessions: SessionRecord[] = [], options: 
     keys(): string[] {
       return [...new Set(history.map((sample) => sample.program.key))]
     },
+  }
+}
+
+// What the station was told to keep, with the tick it came on
+export function posts(history: Sample[]) {
+  return history.flatMap((sample) => (sample.program.weather === null ? [] : [{ now: sample.now, memory: sample.program.weather }]))
+}
+
+// The week the weather tests go by resets Mon 16 Nov 2026 at 18:00, local time,
+// so they hold in any time zone
+export const RESET = new Date(2026, 10, 16, 18, 0).getTime()
+export const WEEK_START = RESET - 7 * 24 * 3_600_000
+
+export const local = (day: number, hour: number, minute = 0, second = 0): number =>
+  new Date(2026, 10, day, hour, minute, second).getTime()
+
+// A steady week up to `until`: `rate` percent an hour from 09:00 to 21:00
+// local, a point every hour (the desk keeps one an hour) or, with `step`, at
+// finer times. Its memory, and the week limit a session would read at the last
+// point.
+export function steadyWeek(rate: number, until: number, step = 3_600_000): { memory: WeatherMemory; limit: UsageLimit } {
+  const points: [number, number][] = []
+  let cum = 0
+  for (let t = WEEK_START; t + step <= until; t += step) {
+    const hour = new Date(t).getHours()
+    if (hour >= 9 && hour < 21) {
+      cum += (rate * step) / 3_600_000
+    }
+    points.push([t + step, Math.round(cum * 10) / 10])
+  }
+  const last = points[points.length - 1] as [number, number]
+  return {
+    memory: { v: 1, resetsAt: RESET, points, warnedAt: null },
+    limit: { kind: 'week', percentUsed: last[1], resetsAt: RESET, at: last[0] },
   }
 }

@@ -1,13 +1,19 @@
 #!/usr/bin/env node
-// Cues a segment in the development build of the station: BREAKING NEWS, or
-// the report on the next hour, from the sessions on air or with words and
-// figures of your own. scripts/live.sh story, hour and cue run it, from the
-// live checkout, whose development build is the only one that takes a cue.
+// Cues a segment in the development build of the station: BREAKING NEWS, the
+// report on the next hour, or STORM WARNING, from the sessions on air or with
+// words and figures of your own; or the board's turn to the weekly forecast,
+// which is no segment. scripts/live.sh story, hour, warning, forecast and cue
+// run it, from the live checkout, whose development build is the only one that
+// takes a cue.
 //
 //   story [<kind>] [options]   BREAKING NEWS: needs-input, ready (the
 //                              default), complete or error
 //   hour [--sessions <n>] [--quiet]
 //                              the report on the next hour
+//   warning [--used <n>]       STORM WARNING, with a week forecast to run out
+//   forecast [--weather clear|clouds|storm] [--used <n>]
+//                              the board's turn to the weekly forecast, on the
+//                              real week unless a week is made up for it
 //   cue <file>|-               what a JSON file holds, or the input
 //
 // A cue is a JSON file in the store's dev folder, written through a temporary
@@ -25,7 +31,9 @@ import { join } from 'node:path'
 const USAGE = `usage: scripts/live.sh story [<kind>] [--title <text>] [--project <text>] [--session <id or title>]
                              [--command <text>] [--quote <text>] [--added <n>] [--removed <n>]
                              [--files <n>] [--minutes <n>]
-       scripts/live.sh hour [--sessions <1 to 7>] [--quiet]
+       scripts/live.sh warning [--used <1 to 99>]
+       scripts/live.sh forecast [--weather clear|clouds|storm] [--used <1 to 99>]
+       scripts/live.sh hour [--sessions <1 to 7>] [--quiet] [--weather clear|clouds|storm] [--used <1 to 99>]
        scripts/live.sh cue <file>|-`
 
 function fail(message) {
@@ -265,22 +273,55 @@ function story(args) {
   send({ segment: 'story', stories: [input] }, `BREAKING NEWS, ${KINDS[input.kind]}${on}`)
 }
 
+// A whole number option, or the reason it is refused
+function whole(value, name) {
+  if (!/^\d+$/.test(value)) {
+    fail(`--${name} takes a whole number.`)
+  }
+  return Number(value)
+}
+
 function hour(args) {
-  const given = options(args, ['sessions'], ['quiet'])
+  const given = options(args, ['sessions', 'weather', 'used'], ['quiet'])
   const cue = { segment: 'hour' }
   if (given.sessions !== undefined) {
-    if (!/^\d+$/.test(given.sessions)) {
-      fail('--sessions takes a whole number.')
-    }
-    cue.samples = Number(given.sessions)
+    cue.samples = whole(given.sessions, 'sessions')
   }
   if (given.quiet === true) {
     cue.samples ??= 4
     cue.quiet = true
   }
+  if (given.weather !== undefined) {
+    cue.weather = given.weather
+  }
+  if (given.used !== undefined) {
+    cue.used = whole(given.used, 'used')
+  }
   const from =
     cue.samples === undefined ? 'the sessions on air' : cue.samples === 1 ? '1 sample session' : `${cue.samples} sample sessions`
-  send(cue, `the report on the next hour${cue.quiet ? ', a quiet one,' : ','} from ${from}`)
+  const weather = cue.weather === undefined ? '' : `, with KLWD WEATHER on a week of ${cue.weather}`
+  send(cue, `the report on the next hour${cue.quiet ? ', a quiet one,' : ','} from ${from}${weather}`)
+}
+
+function warning(args) {
+  const given = options(args, ['used'])
+  const cue = { segment: 'warning' }
+  if (given.used !== undefined) {
+    cue.used = whole(given.used, 'used')
+  }
+  send(cue, `STORM WARNING${cue.used === undefined ? '' : `, on a week ${cue.used}% used`}`)
+}
+
+function forecast(args) {
+  const given = options(args, ['weather', 'used'])
+  const cue = { segment: 'forecast' }
+  if (given.weather !== undefined) {
+    cue.weather = given.weather
+  }
+  if (given.used !== undefined) {
+    cue.used = whole(given.used, 'used')
+  }
+  send(cue, `the board's turn to the weekly forecast, on ${cue.weather === undefined ? 'the real week' : `a week of ${cue.weather}`}`)
 }
 
 function cueFile(args) {
@@ -302,7 +343,16 @@ function cueFile(args) {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {
     fail('A cue is a JSON object.')
   }
-  send(value, value.segment === 'hour' ? 'the report on the next hour' : 'BREAKING NEWS')
+  send(
+    value,
+    value.segment === 'hour'
+      ? 'the report on the next hour'
+      : value.segment === 'warning'
+        ? 'STORM WARNING'
+        : value.segment === 'forecast'
+          ? "the board's turn to the weekly forecast"
+          : 'BREAKING NEWS',
+  )
 }
 
 const [command, ...rest] = process.argv.slice(2)
@@ -312,6 +362,12 @@ switch (command) {
     break
   case 'hour':
     hour(rest)
+    break
+  case 'warning':
+    warning(rest)
+    break
+  case 'forecast':
+    forecast(rest)
     break
   case 'cue':
     cueFile(rest)
