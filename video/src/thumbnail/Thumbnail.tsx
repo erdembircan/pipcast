@@ -2,7 +2,7 @@
 // under it, centred on the paper. scripts/thumbnail.mjs renders it into
 // assets/youtube-thumbnail.jpg at the repository's root, and the same picture
 // as YouTube's embedded player shows it into assets/youtube-thumbnail-play.jpg,
-// which the README shows as its link to the video.
+// which the README shows as its link to Pipcast's playlist on YouTube.
 import icon from '../../../assets/icon-1024.png'
 import { INK, INK_SOFT, PAPER, SANS, SERIF } from '../look/theme.ts'
 import { YouTubeOverlay } from './YouTubeOverlay.tsx'
