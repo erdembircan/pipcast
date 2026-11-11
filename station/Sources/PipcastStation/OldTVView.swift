@@ -114,7 +114,17 @@ final class OldTVView: NSView {
         if on { install() } else { remove() }
     }
 
+    /// Core Image filters on the web view's layer are drawn only while both layers allow them, so they are allowed
+    /// while Old TV is on and not otherwise: with it off the window is set up as it always was.
+    private func allowFilters(_ allowed: Bool) {
+        guard let web else { return }
+        if allowed { web.wantsLayer = true }
+        web.layerUsesCoreImageFilters = allowed
+        superview?.layerUsesCoreImageFilters = allowed
+    }
+
     private func install() {
+        allowFilters(true)
         withoutActions {
             fitLayers()
             for layer in [lines, corners, rim, sheen] { layer.isHidden = false }
@@ -139,6 +149,7 @@ final class OldTVView: NSView {
             for layer in [grain, chroma, dropout, lines, corners, rim, sheen] { layer.isHidden = true }
             releaseNoise()
         }
+        allowFilters(false)
     }
 
     /// Frees the grain, the colour noise and the dropout.

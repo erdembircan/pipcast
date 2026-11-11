@@ -114,6 +114,19 @@ import Testing
         #expect(OldTVImages.grain(width: 0, height: 5, random: &random) == nil)
     }
 
+    @Test func streaksAreLitPixelsWhoseColourIsNeverBrighterThanTheirAlpha() throws {
+        var random = OldTVRandom(seed: 4)
+        let streaks = try #require(OldTVImages.streaks(width: 200, height: 20, random: &random))
+        let data = try bytes(of: streaks)
+        var lit = 0
+        for i in 0 ..< 200 * 20 {
+            let r = data[i * 4], g = data[i * 4 + 1], b = data[i * 4 + 2], a = data[i * 4 + 3]
+            #expect(r <= a && g <= a && b <= a)
+            if a > 0 { lit += 1; #expect(a >= 90 && a < 210) }
+        }
+        #expect(lit > 100)
+    }
+
     @Test func grainIsWhiteAboveTheMiddleAndBlackBelowWithAlphaToMatch() throws {
         var random = OldTVRandom(seed: 3)
         let grain = try #require(OldTVImages.grain(width: 40, height: 40, random: &random))

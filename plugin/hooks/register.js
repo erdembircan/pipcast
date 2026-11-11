@@ -1221,6 +1221,10 @@ var OLD_TV_KEY = "oldTv";
 function needsSharing(file, wanted) {
   return file === null || file.transparent !== wanted.transparent || file.oldTv !== wanted.oldTv;
 }
+function mergedOptions(file, own, key, enabled) {
+  const base = file === null ? own : { transparent: file.transparent, oldTv: file.oldTv };
+  return key === TRANSPARENT_KEY ? { ...base, transparent: enabled } : { ...base, oldTv: enabled };
+}
 function parseRequest(args) {
   const typed = args.trim().split(/\s+/).filter((word) => word !== "");
   const [first, value, ...rest] = typed.map((word) => word.toLowerCase());
@@ -2132,10 +2136,15 @@ async function setOption($, option, enabled) {
     if (!saved) {
       return OPTION_REPLY.cannotSave(option.word, enabled);
     }
-    if (option.key === TRANSPARENT_KEY) {
-      await shareStationOptions($, { transparent: enabled, oldTv });
-    } else if (option.key === OLD_TV_KEY) {
-      await shareStationOptions($, { transparent: transparentWindow, oldTv: enabled });
+    if (option.key === TRANSPARENT_KEY || option.key === OLD_TV_KEY) {
+      const io = ioFor($);
+      let file = null;
+      try {
+        file = await readSharedOptions(io, await io.storeHome());
+      } catch {
+        file = null;
+      }
+      await shareStationOptions($, mergedOptions(file, { transparent: transparentWindow, oldTv }, option.key, enabled));
     }
     return optionState(option.word, enabled);
   } catch (error) {

@@ -214,10 +214,12 @@ public enum OldTVImages {
                 }
                 run -= 1
                 guard lit else { continue }
-                data[i * 4] = 230
-                data[i * 4 + 1] = 230
-                data[i * 4 + 2] = 240
-                data[i * 4 + 3] = UInt8(90 + random.next() * 120)
+                // Premultiplied: each colour is its value times the alpha
+                let alpha = Double(UInt8(90 + random.next() * 120))
+                data[i * 4] = UInt8((230 * alpha / 255).rounded())
+                data[i * 4 + 1] = UInt8((230 * alpha / 255).rounded())
+                data[i * 4 + 2] = UInt8((240 * alpha / 255).rounded())
+                data[i * 4 + 3] = UInt8(alpha)
             }
         }
     }

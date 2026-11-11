@@ -4,6 +4,7 @@ import type { EngineInterface, On, PluginOptions, RenderElement, Timer } from 'c
 import { ACTIVITY_WRITE_MS, HEARTBEAT_MS } from '../../contract/src/constants.ts'
 import { COMMAND_ARGUMENT_HINT, COMMAND_DESCRIPTION, COMMAND_NAME, OPTION_REPLY, REPLY, TOAST_CANNOT_START, fallbackTitle, optionState } from '../../contract/src/copy.ts'
 import { defaultHome, storePaths } from '../../contract/src/paths.ts'
+import type { SharedOptions } from '../../contract/src/types.ts'
 import { parseSessionRecord } from '../../contract/src/validate.ts'
 import { startKind } from './core/auto.ts'
 import { BAND_HEIGHT, REACH, band, blankLabel } from './core/band.ts'
@@ -17,7 +18,7 @@ import type { Reading } from './core/ledger.ts'
 import { limitsMoved, readLimits } from './core/limits.ts'
 import * as record from './core/model.ts'
 import type { SessionModel } from './core/model.ts'
-import { OLD_TV_KEY, TRANSPARENT_KEY, needsSharing, parseRequest } from './core/options.ts'
+import { OLD_TV_KEY, TRANSPARENT_KEY, mergedOptions, needsSharing, parseRequest } from './core/options.ts'
 import type { OptionSpec } from './core/options.ts'
 import { lookAtShells, lookDue, stillWorking } from './core/shells.ts'
 import { waitsOn } from './core/wake.ts'
@@ -817,7 +818,7 @@ async function showOption($: EngineInterface, option: OptionSpec): Promise<strin
 
 // /pipcast <option> on|off: saved with Claude Code's own command, after which
 // every session reloads the mod with the new value. Transparent window and Old TV also
-// reach the station at once, through options.json.
+// reach the station at once, through options.json, which keeps the other one as the file holds it.
 async function setOption($: EngineInterface, option: OptionSpec, enabled: boolean): Promise<string> {
   try {
     const home = await optionsHomeOf($)
@@ -825,10 +826,15 @@ async function setOption($: EngineInterface, option: OptionSpec, enabled: boolea
     if (!saved) {
       return OPTION_REPLY.cannotSave(option.word, enabled)
     }
-    if (option.key === TRANSPARENT_KEY) {
-      await shareStationOptions($, { transparent: enabled, oldTv })
-    } else if (option.key === OLD_TV_KEY) {
-      await shareStationOptions($, { transparent: transparentWindow, oldTv: enabled })
+    if (option.key === TRANSPARENT_KEY || option.key === OLD_TV_KEY) {
+      const io = ioFor($)
+      let file: SharedOptions | null = null
+      try {
+        file = await readSharedOptions(io, await io.storeHome())
+      } catch {
+        file = null
+      }
+      await shareStationOptions($, mergedOptions(file, { transparent: transparentWindow, oldTv }, option.key, enabled))
     }
     return optionState(option.word, enabled)
   } catch (error) {

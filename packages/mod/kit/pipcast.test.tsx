@@ -1358,11 +1358,32 @@ scenario('/pipcast tv on and off save the setting and tell the station at once, 
   expect(w.launched.length).toBe(0)
 })
 
-scenario('each of the two options the station follows keeps the other as the session has it', { settings: { transparentWindow: true, oldTv: true } }, async (w, $) => {
+scenario('with no options.json, each of the two options the station follows keeps the other as the session has it', { settings: { transparentWindow: true, oldTv: true } }, async (w, $) => {
+  await option($, 'tv off')
+  expect(w.shared()).toEqual({ v: 1, transparent: true, oldTv: false })
+})
+
+scenario('a change made after another in the same load keeps the first, which the load does not know of yet', {}, async (w, $) => {
+  await option($, 'tv on')
+  expect(w.shared()).toEqual({ v: 1, transparent: false, oldTv: true })
+  await option($, 'transparency on')
+  expect(w.shared()).toEqual({ v: 1, transparent: true, oldTv: true })
   await option($, 'tv off')
   expect(w.shared()).toEqual({ v: 1, transparent: true, oldTv: false })
   await option($, 'transparency off')
-  expect(w.shared()).toEqual({ v: 1, transparent: false, oldTv: true })
+  expect(w.shared()).toEqual({ v: 1, transparent: false, oldTv: false })
+})
+
+scenario('a change keeps the other option as options.json holds it, over what the load has', { settings: { transparentWindow: true } }, async (w, $) => {
+  w.files.set(OPTIONS_FILE, JSON.stringify({ v: 1, transparent: false, oldTv: true }))
+  await option($, 'tv off')
+  expect(w.shared()).toEqual({ v: 1, transparent: false, oldTv: false })
+})
+
+scenario('with options.json unreadable, a change falls back to the load\'s own values', { settings: { transparentWindow: true } }, async (w, $) => {
+  w.files.set(OPTIONS_FILE, 'not json')
+  await option($, 'tv on')
+  expect(w.shared()).toEqual({ v: 1, transparent: true, oldTv: true })
 })
 
 scenario('a save Claude Code refuses for Old TV tells the station nothing', { configureFails: true }, async (w, $) => {

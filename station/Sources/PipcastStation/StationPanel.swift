@@ -205,8 +205,6 @@ final class ChromeView: NSView {
         oldTV = OldTVView(web: web)
         super.init(frame: NSRect(x: 0, y: 0, width: 320, height: 180))
         wantsLayer = true
-        // Core Image filters on the web view's layer, which Old TV puts there, are drawn only when both layers allow them.
-        layerUsesCoreImageFilters = true
         layer?.backgroundColor = NSColor.black.cgColor
         layer?.cornerRadius = Self.cornerRadius
         layer?.masksToBounds = true
@@ -215,8 +213,6 @@ final class ChromeView: NSView {
         layer?.borderColor = NSColor.white.withAlphaComponent(0.16).cgColor
 
         web.frame = bounds
-        web.wantsLayer = true
-        web.layerUsesCoreImageFilters = true
         addSubview(web)
 
         oldTV.frame = bounds

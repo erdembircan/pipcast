@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { OPTIONS, installedId, needsSharing, parseRequest, readBoolean, wasSaved } from '../src/core/options.ts'
+import { OPTIONS, installedId, mergedOptions, needsSharing, parseRequest, readBoolean, wasSaved } from '../src/core/options.ts'
 
 const auto = OPTIONS.find((option) => option.word === 'auto')
 const transparency = OPTIONS.find((option) => option.word === 'transparency')
@@ -85,5 +85,20 @@ describe('needsSharing', () => {
     expect(needsSharing({ v: 1, transparent: false, oldTv: false }, wanted(false, true))).toBe(true)
     expect(needsSharing({ v: 1, transparent: false, oldTv: true }, wanted(false, true))).toBe(false)
     expect(needsSharing({ v: 1, transparent: true, oldTv: true }, wanted(true, false))).toBe(true)
+  })
+})
+
+describe('mergedOptions', () => {
+  const own = { transparent: true, oldTv: false }
+
+  it('replaces only the key that was set, keeping the other as the file holds it', () => {
+    const file = { v: 1 as const, transparent: false, oldTv: true }
+    expect(mergedOptions(file, own, 'oldTv', false)).toEqual({ transparent: false, oldTv: false })
+    expect(mergedOptions(file, own, 'transparentWindow', true)).toEqual({ transparent: true, oldTv: true })
+  })
+
+  it('falls back to this load\'s values for the other key when there is no file', () => {
+    expect(mergedOptions(null, own, 'oldTv', true)).toEqual({ transparent: true, oldTv: true })
+    expect(mergedOptions(null, own, 'transparentWindow', false)).toEqual({ transparent: false, oldTv: false })
   })
 })
