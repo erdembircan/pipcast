@@ -701,15 +701,25 @@
 
   /* What a paged graphic shows now: its items as they were at the last
      turn, the page in view, the page before while its turn runs, and how
-     many turns there have been, for keys */
-  function usePages(items, pageMs, animate) {
+     many turns there have been, for keys. The board can also turn to the
+     weekly forecast (`forecast`, a WeatherScene) and back, by the same turn:
+     the forecast is a page of its own, with no tab, and the listing comes
+     back on its first page, held its whole time. A forecast asked for while
+     a turn runs waits for it to finish. */
+  function usePages(items, pageMs, animate, forecast) {
     var latest = React.useRef(items);
     latest.current = items;
-    var shown = React.useRef({ items: items, page: 0 });
+    var wanted = React.useRef(false);
+    wanted.current = !!forecast;
+    var shown = React.useRef({ items: items, page: 0, forecast: false });
     var turn = React.useRef({ prev: null, n: 0 });
+    var sync = React.useRef(null);
     var redraw = useState(0)[1];
     if (items.length <= PAGE_ROWS && shown.current.items.length <= PAGE_ROWS) {
-      shown.current = { items: items, page: 0 };
+      shown.current = { items: items, page: 0, forecast: shown.current.forecast };
+    }
+    if (!animate && shown.current.forecast !== !!forecast) {
+      shown.current = { items: shown.current.items, page: shown.current.page, forecast: !!forecast };
     }
     useEffect(function () {
       if (!animate) { return undefined; }
@@ -717,38 +727,75 @@
       var next;
       var settle;
       function later() {
+        clearTimeout(next);
         next = setTimeout(step, pageMs - ((Date.now() - begun) % pageMs));
       }
+      function turned(to) {
+        var from = shown.current;
+        shown.current = to;
+        /* With reduced motion a turn is a cut: nothing is under way after it */
+        if (reducedMotion()) {
+          turn.current = { prev: null, n: turn.current.n + 1 };
+          return;
+        }
+        turn.current = { prev: from, n: turn.current.n + 1 };
+        clearTimeout(settle);
+        settle = setTimeout(function () {
+          turn.current = { prev: null, n: turn.current.n };
+          redraw(function (k) { return k + 1; });
+          sync.current();
+        }, TURN_MS);
+      }
       function step() {
+        if (shown.current.forecast) {
+          later();
+          return;
+        }
         var from = shown.current;
         var to = latest.current;
         if (to.length <= PAGE_ROWS && from.items.length <= PAGE_ROWS) {
-          shown.current = { items: to, page: 0 };
+          shown.current = { items: to, page: 0, forecast: false };
         } else {
           var page = from.page + 1;
-          shown.current = { items: to, page: page >= pageCount(to.length) ? 0 : page };
-          turn.current = { prev: from, n: turn.current.n + 1 };
-          clearTimeout(settle);
-          settle = setTimeout(function () {
-            turn.current = { prev: null, n: turn.current.n };
-            redraw(function (k) { return k + 1; });
-          }, TURN_MS);
+          turned({ items: to, page: page >= pageCount(to.length) ? 0 : page, forecast: false });
         }
         redraw(function (k) { return k + 1; });
         later();
       }
+      /* The board goes to the forecast, or back from it, once no turn is under way */
+      sync.current = function () {
+        if (turn.current.prev !== null || shown.current.forecast === wanted.current) { return; }
+        if (wanted.current) {
+          turned({ items: shown.current.items, page: shown.current.page, forecast: true });
+        } else {
+          begun = Date.now();
+          turned({ items: latest.current, page: 0, forecast: false });
+          later();
+        }
+        redraw(function (k) { return k + 1; });
+      };
       later();
-      return function () { clearTimeout(next); clearTimeout(settle); };
+      sync.current();
+      return function () { sync.current = null; clearTimeout(next); clearTimeout(settle); };
     }, [animate, pageMs]);
+    useEffect(function () {
+      if (sync.current) { sync.current(); }
+    }, [!!forecast]);
     var pushing = animate && !reducedMotion();
-    return { items: shown.current.items, page: shown.current.page, prev: pushing ? turn.current.prev : null, n: turn.current.n };
+    return {
+      items: shown.current.items,
+      page: shown.current.page,
+      forecast: shown.current.forecast,
+      prev: pushing ? turn.current.prev : null,
+      n: turn.current.n
+    };
   }
 
   /* Each slot of a page: the row in view, and while a turn runs the row
      of the page before leaving it, each on its turn's clock */
   function pageSlots(view, slotClass, rowClass, content) {
-    var cur = pageItems(view.items, view.page);
-    var before = view.prev ? pageItems(view.prev.items, view.prev.page) : [];
+    var cur = view.forecast ? [] : pageItems(view.items, view.page);
+    var before = view.prev && !view.prev.forecast ? pageItems(view.prev.items, view.prev.page) : [];
     var slots = [];
     for (var r = 0; r < Math.max(cur.length, before.length); r += 1) {
       var faces = [];
@@ -774,8 +821,8 @@
   /* Which page of how many, on the ticker clock's blue tab; only with two
      pages or more. It turns after the rows. */
   function pageTab(view, tabClass) {
-    var pages = pageCount(view.items.length);
-    var before = view.prev ? pageCount(view.prev.items.length) : 1;
+    var pages = view.forecast ? 1 : pageCount(view.items.length);
+    var before = view.prev && !view.prev.forecast ? pageCount(view.prev.items.length) : 1;
     if (pages < 2 && before < 2) { return null; }
     var faces = [];
     if (view.prev && before > 1) {
@@ -833,7 +880,14 @@
       h('span', { className: 'pn-limit-track' }, h('i', { className: 'pn-limit-fill', style: { width: percent + '%' } })),
       h('span', { className: 'pn-limit-figure' }, percent + '%')));
     });
-    return meters.length ? h('div', { className: 'pn-board-limits' }, meters) : null;
+    var face = props.face;
+    if (face === 'none') { return null; }
+    return meters.length
+      ? h('div', {
+        className: cx('pn-board-limits', face && face.className),
+        style: face ? { animationDelay: face.delay + 'ms' } : undefined
+      }, meters)
+      : null;
   }
 
   /* The listing, as the first station sketch drew it: a glossy row per
@@ -849,20 +903,60 @@
         return (STATES[a.state] || STATES.working).priority - (STATES[b.state] || STATES.working).priority;
       });
     }
-    var view = usePages(list, BOARD_PAGE_MS, bool(props.animate, false));
+    /* The forecast the board turns to, kept while it turns back, when the
+       scene no longer carries it */
+    var given = props.forecast || scene.forecast;
+    var kept = React.useRef(null);
+    if (given) { kept.current = given; }
+    var view = usePages(list, BOARD_PAGE_MS, bool(props.animate, false), given);
+    var slots = pageSlots(view, 'pn-board-slot', 'pn-row', function (s) {
+      return [
+        /* The project leads the row on a plate, as chosen on PiP
+           Newsroom · Project in the listing; a session without one has
+           no plate */
+        s.project ? h('span', { key: 'project', className: 'pn-row-project' }, h('span', null, s.project)) : null,
+        h('span', { key: 'name', className: 'pn-row-name' }, s.name),
+        h(StatePill, { key: 'pill', state: s.state })
+      ];
+    });
     return h('div', { className: cx('pn-board', props.inline && 'pn-inline') },
-      pageSlots(view, 'pn-board-slot', 'pn-row', function (s) {
-        return [
-          /* The project leads the row on a plate, as chosen on PiP
-             Newsroom · Project in the listing; a session without one has
-             no plate */
-          s.project ? h('span', { key: 'project', className: 'pn-row-project' }, h('span', null, s.project)) : null,
-          h('span', { key: 'name', className: 'pn-row-name' }, s.name),
-          h(StatePill, { key: 'pill', state: s.state })
-        ];
-      }),
+      slots,
       pageTab(view, 'pn-board-tab'),
-      h(LimitMeters, { limits: props.limits || scene.limits }));
+      h(LimitMeters, { limits: props.limits || scene.limits, face: limitsFace(view) }),
+      forecastFaces(view, kept.current));
+  }
+
+  /* The weekly forecast as a page of the board: EXTENDED FORECAST's wall in
+     the listing's place. It slides in from the left once the rows have gone,
+     and leaves to the right as they do. */
+  function forecastFaces(view, weather) {
+    if (!weather) { return null; }
+    var faces = [];
+    if (view.prev && view.prev.forecast) {
+      faces.push(h('div', { key: 'out:' + view.n, className: 'pn-board-forecast pn-turn-leave' }, h(WeatherDays, { weather: weather })));
+    }
+    if (view.forecast) {
+      faces.push(h('div', {
+        key: 'in:' + view.n,
+        className: cx('pn-board-forecast', view.prev && 'pn-turn-enter'),
+        style: view.prev ? { animationDelay: PAGE_ROWS * TURN.stagger + TURN.leave + 'ms' } : undefined
+      }, h(WeatherDays, { weather: weather })));
+    }
+    return faces;
+  }
+
+  /* The usage limits turn with the tab: they leave after the rows, and come
+     back after the forecast has gone. null while they stay put, 'none' while
+     the forecast is up. */
+  function limitsFace(view) {
+    if (view.forecast) {
+      return view.prev && !view.prev.forecast
+        ? { className: 'pn-turn-leave', delay: PAGE_ROWS * TURN.stagger }
+        : 'none';
+    }
+    return view.prev && view.prev.forecast
+      ? { className: 'pn-turn-enter', delay: PAGE_ROWS * TURN.stagger + TURN.leave }
+      : null;
   }
 
   /* The lower third. Every story wears the red BREAKING tab; only the hour
@@ -3089,7 +3183,7 @@
       parts.push(h(AlertOpen, { key: 'alert', progress: scene.progress, animate: animate }));
     } else {
       parts.push(h(Backdrop, { key: 'backdrop', animate: animate }));
-      parts.push(h(SessionBoard, { key: 'board', sessions: scene.sessions, limits: scene.limits, animate: animate }));
+      parts.push(h(SessionBoard, { key: 'board', sessions: scene.sessions, limits: scene.limits, forecast: scene.forecast, animate: animate }));
     }
     parts.push(h(TopBand, { key: 'top' }));
     if (mode !== 'stinger' && mode !== 'outro' && mode !== 'ident' && mode !== 'alert') {
@@ -3655,6 +3749,15 @@
     sessions: WX_SESSIONS,
     limits: [{ kind: 'session', percent: 58 }, { kind: 'week', percent: 72 }],
     ticker: [WX_WARNING_LINE, WX_ACTIVITY]
+  };
+  /* The board turned to the weekly forecast, as it holds at :15, :30 and :45 */
+  SAMPLES['board-forecast'] = {
+    mode: 'board',
+    clock: '15:15',
+    sessions: WX_SESSIONS,
+    limits: [{ kind: 'session', percent: 58 }, { kind: 'week', percent: 48 }],
+    forecast: WX_CLOUDS,
+    ticker: [WX_CLOUDS_LINE, WX_ACTIVITY]
   };
   SAMPLES['alert-outro-1'] = outroOf(SAMPLES['board-warning'], 0.4, 'alert');
   /* KLWD WEATHER's pages as the report on the hour airs them, at 15:00 */

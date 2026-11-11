@@ -292,6 +292,11 @@
    it is drawn */
 .pn-anim .pn-turn-leave { animation: pn-turn-leave 420ms cubic-bezier(0.65, 0, 0.35, 1) both; }
 .pn-anim .pn-turn-enter { animation: pn-slide 460ms cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+/* The weekly forecast as a page of the board, EXTENDED FORECAST's wall in
+   the listing's place, x 40–920, y 84–470: it turns in and out by the
+   same push, as one piece */
+.pn-board-forecast { position: absolute; left: 0; top: -8px; width: 880px; height: 386px; }
+.pn-board-forecast > .pn-wx-wall { left: 0; top: 0; }
 
 /* The account's usage limits, under the listing on the page tab's line,
    y 422–462 from x 48, as chosen on PiP Newsroom · Usage limits: each

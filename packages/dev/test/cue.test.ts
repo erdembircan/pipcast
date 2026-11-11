@@ -39,7 +39,7 @@ describe('checkCue', () => {
     ['not an object', [], 'a cue is a JSON object'],
     ['no id', { segment: 'story', stories: [ready] }, 'id must be 1 to 64 letters, digits, - or _'],
     ['an id with a space', { id: 'a b', segment: 'story', stories: [ready] }, 'id must be 1 to 64 letters, digits, - or _'],
-    ['another segment', { id: 'c1', segment: 'news' }, 'segment must be story, hour or warning'],
+    ['another segment', { id: 'c1', segment: 'news' }, 'segment must be story, hour, warning or forecast'],
     ['no stories', { id: 'c1', segment: 'story', stories: [] }, 'stories must be a list of 1 to 8 stories'],
     ['nine stories', { id: 'c1', segment: 'story', stories: nineReady }, 'stories must be a list of 1 to 8 stories'],
     ['a story that is no object', { id: 'c1', segment: 'story', stories: ['x'] }, 'stories[0] must be an object'],
@@ -121,6 +121,10 @@ describe('checkCue', () => {
     ['a warning used out of range', { id: 'c1', segment: 'warning', used: 120 }, 'used must be a whole number from 1 to 99'],
     ['sessions on a warning', { id: 'c1', segment: 'warning', sessions: [] }, 'unknown field sessions'],
     ['weather on a warning', { id: 'c1', segment: 'warning', weather: 'storm' }, 'unknown field weather'],
+    ['sessions on a forecast', { id: 'c1', segment: 'forecast', sessions: [] }, 'unknown field sessions'],
+    ['another outlook for a forecast', { id: 'c1', segment: 'forecast', weather: 'sunny' }, 'weather must be clear, clouds or storm'],
+    ['used on a forecast alone', { id: 'c1', segment: 'forecast', used: 50 }, 'used goes with weather'],
+    ['a forecast used out of range', { id: 'c1', segment: 'forecast', weather: 'storm', used: 100 }, 'used must be a whole number from 1 to 99'],
   ])('says what is wrong with %s', (_name, input, problem) => {
     expect(checkCue(input)).toEqual({ problem })
   })
@@ -133,7 +137,11 @@ describe('parseCue', () => {
 
   it('checks the cue in the text', () => {
     expect(parseCue('{"id":"h","segment":"hour"}')).toEqual({ cue: { id: 'h', segment: 'hour' } })
-    expect(parseCue('{"id":"h","segment":"news"}')).toEqual({ problem: 'segment must be story, hour or warning' })
+    expect(parseCue('{"id":"h","segment":"news"}')).toEqual({ problem: 'segment must be story, hour, warning or forecast' })
     expect(parseCue('{"id":"w","segment":"warning","used":55}')).toEqual({ cue: { id: 'w', segment: 'warning', used: 55 } })
+    expect(parseCue('{"id":"f","segment":"forecast"}')).toEqual({ cue: { id: 'f', segment: 'forecast' } })
+    expect(parseCue('{"id":"f","segment":"forecast","weather":"clouds","used":60}')).toEqual({
+      cue: { id: 'f', segment: 'forecast', weather: 'clouds', used: 60 },
+    })
   })
 })

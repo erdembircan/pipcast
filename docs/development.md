@@ -139,7 +139,13 @@ scripts/live.sh warning
 
 cues STORM WARNING, on a made-up week forecast to run out, 72% used unless `--used` says otherwise.
 
-A cue waits until the window shows and nothing else is on air or due, so you can cue it from Claude and then switch to another app. It waits five minutes at most. Then it airs as the real thing does: the same open, desk, review and outro, the jingles and the beat, and the window out of the side for it. Hiding the window cuts it, as it cuts any segment. Nothing it airs is kept: the report on the next hour still comes at the hour, covering the whole hour, and a story that lands while a cue is on air waits its turn and airs after it. With no cue, the development build airs what a release does.
+```bash
+scripts/live.sh forecast
+```
+
+turns the board to the weekly forecast, now, as it turns at :15, :30 and :45: EXTENDED FORECAST for 10 seconds, and back. It is no segment, so it has no jingle and brings no window out of the side. It goes by your real week and its real reset, and says in the log, `turned to nothing`, when the forecast has no outlook yet (the week's first day, or a week used up). `--weather clear`, `clouds` or `storm` goes by a week made up for the cue instead, as the report's does, and `--used` sets how much of it is used, from 1 to 99.
+
+A cue waits until the window shows and nothing else is on air or due (a forecast cue also waits for the window to be out of the side), so you can cue it from Claude and then switch to another app. It waits five minutes at most. Then it airs as the real thing does: the same open, desk, review and outro, the jingles and the beat, and the window out of the side for it. Hiding the window cuts it, as it cuts any segment. Nothing it airs is kept: the report on the next hour still comes at the hour, covering the whole hour, and a story that lands while a cue is on air waits its turn and airs after it. With no cue, the development build airs what a release does.
 
 ### The cue
 
@@ -171,7 +177,7 @@ An hour cue's report covers the sessions you give it, 1 to 24, in place of the o
 }
 ```
 
-An hour cue with `weather`, `clear`, `clouds` or `storm`, adds KLWD WEATHER to its report, and `used`, 1 to 99, sets the made-up week's share. A warning cue is `{ "segment": "warning" }`, with `used` as well if you want.
+An hour cue with `weather`, `clear`, `clouds` or `storm`, adds KLWD WEATHER to its report, and `used`, 1 to 99, sets the made-up week's share. A warning cue is `{ "segment": "warning" }`, with `used` as well if you want. A forecast cue is `{ "segment": "forecast" }`, with `weather` and `used` if you want a week made up.
 
 `packages/dev/src/cue.ts` says what each field takes. `scripts/live.sh` checks a cue with it before it sends one, and says what is wrong with one the page would drop. The development build logs each cue it takes in `station.log`, with every sound and window the page asks for, so the log also says what aired.
 

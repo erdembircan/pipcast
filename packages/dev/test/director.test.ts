@@ -12,9 +12,19 @@ import {
   LEAD,
   quietStrap,
 } from '../../contract/src/index.ts'
-import type { Snapshot } from '../../contract/src/types.ts'
+import type { Snapshot, UsageLimit, WeatherMemory } from '../../contract/src/types.ts'
 import { createDirector } from '../../director/src/director.ts'
-import { ALERT_MS, ALERT_OUTRO_MS, DESK_MS, GAP_MS, IDENT_MS, REVIEW_MS, STINGER_MS, STORMTRACKER_MS } from '../../director/src/timing.ts'
+import {
+  ALERT_MS,
+  ALERT_OUTRO_MS,
+  DESK_MS,
+  GAP_MS,
+  IDENT_MS,
+  REVIEW_MS,
+  STINGER_MS,
+  STORMTRACKER_MS,
+  WEATHER_PAGE_MS,
+} from '../../director/src/timing.ts'
 
 import { CUE_WAIT_MS, createDevDirector } from '../src/director.ts'
 import { DEFAULTS, T0, at, cue, devHarness, jingles, keys, session, story } from './helpers.ts'
@@ -414,6 +424,113 @@ describe('an hour cue with weather', () => {
   })
 })
 
+// The real week the page holds: four days in, a steady half a point an hour in
+// the working hours, resetting three days on
+function pageWeek(): { memory: WeatherMemory; limit: UsageLimit } {
+  const resetsAt = at(14, 30) + 3 * 24 * 3_600_000
+  const points: [number, number][] = []
+  let used = 0
+  for (let hour = resetsAt - 7 * 24 * 3_600_000 + 3_600_000; hour <= T0; hour += 3_600_000) {
+    if (new Date(hour).getUTCHours() >= 9 && new Date(hour).getUTCHours() < 21) {
+      used += 0.5
+    }
+    points.push([hour, used])
+  }
+  const last = points[points.length - 1] as [number, number]
+  return {
+    memory: { v: 1, resetsAt, points, warnedAt: null },
+    limit: { kind: 'week', percentUsed: last[1], resetsAt, at: last[0] },
+  }
+}
+
+describe('a forecast cue', () => {
+  it('turns the board to the forecast on the real week, holds it, and turns back: no segment, no sound, no window', () => {
+    const { memory, limit } = pageWeek()
+    const h = devHarness(T0, [session('a', { limits: [limit] })], { weather: memory })
+    h.until(T0 + 3000)
+    h.dev.cue(cue({ id: 'f1', segment: 'forecast' }))
+    const first = h.step()
+    const turned = h.until(first.now + 500)
+    expect(turned.program.key).toBe('board')
+    expect(turned.program.scene.mode).toBe('board')
+    const forecast = turned.program.scene.forecast
+    expect(forecast?.outlook).toBe('clear')
+    // The real reset, three days on: Sat 24 Oct 14:30 UTC
+    expect(forecast?.until).toBe('TO SAT 14:30')
+    expect(forecast?.days.map((day) => day.name)).toEqual(['WED', 'THU', 'FRI', 'SAT'])
+    const rest = h.until(first.now + WEATHER_PAGE_MS - 250)
+    expect(rest.program.scene.forecast).toBe(forecast)
+    const after = h.until(first.now + WEATHER_PAGE_MS + 1_000)
+    expect(after.program.scene.forecast).toBeUndefined()
+    h.until(first.now + 60_000)
+    expect(h.lines).toEqual(['dev: f1 waits for the window to show and the air to clear', 'dev: f1 on air', 'dev: f1 off air'])
+    expect(h.history.every((sample) => sample.program.sounds.length === 0 && !sample.program.wantsWindow)).toBe(true)
+    expect(h.history.every((sample) => sample.program.reported === null && sample.program.weather === null)).toBe(true)
+  })
+
+  it('goes by a week made up for it when it names an outlook, and takes the share from the cue', () => {
+    const h = devHarness(T0, [session('a')])
+    h.until(T0 + 3000)
+    h.dev.cue(cue({ id: 'f2', segment: 'forecast', weather: 'storm', used: 80 }))
+    h.step()
+    const turned = h.until(T0 + 3000 + 1_000)
+    expect(turned.program.scene.forecast).toMatchObject({ outlook: 'storm', used: '80%' })
+  })
+
+  it('turns to nothing when the forecast has no outlook, and says so', () => {
+    const h = devHarness(T0, [session('a')])
+    h.until(T0 + 3000)
+    h.dev.cue(cue({ id: 'f3', segment: 'forecast' }))
+    h.until(T0 + 10_000)
+    expect(h.history.every((sample) => sample.program.scene.forecast === undefined)).toBe(true)
+    expect(h.lines).toEqual([
+      'dev: f3 waits for the window to show and the air to clear',
+      'dev: f3 on air',
+      'dev: f3 turned to nothing: the forecast has no outlook',
+      'dev: f3 off air',
+    ])
+  })
+
+  it('waits for the window to be out of the side, and for the window to show', () => {
+    const { memory, limit } = pageWeek()
+    const h = devHarness(T0, [session('a', { limits: [limit] })], { weather: memory })
+    h.world.windowOut = false
+    h.until(T0 + 3000)
+    h.dev.cue(cue({ id: 'f4', segment: 'forecast' }))
+    h.until(T0 + 60_000)
+    expect(h.history.every((sample) => sample.program.scene.forecast === undefined)).toBe(true)
+    h.world.windowOut = true
+    h.until(T0 + 60_000 + 1_000)
+    expect(h.history[h.history.length - 1]?.program.scene.forecast).toBeDefined()
+  })
+
+  it('is cut when the window hides, and never turns again', () => {
+    const { memory, limit } = pageWeek()
+    const h = devHarness(T0, [session('a', { limits: [limit] })], { weather: memory })
+    h.until(T0 + 3000)
+    h.dev.cue(cue({ id: 'f5', segment: 'forecast' }))
+    h.until(T0 + 3000 + 3_000)
+    expect(h.history[h.history.length - 1]?.program.scene.forecast).toBeDefined()
+    h.world.visible = false
+    h.until(T0 + 3000 + 4_000)
+    h.world.visible = true
+    const shown = h.history.length
+    h.until(T0 + 3000 + 60_000)
+    expect(h.history.slice(shown).every((sample) => sample.program.scene.forecast === undefined)).toBe(true)
+  })
+
+  it('leaves the real quarter hours as they were: the station’s own director turns for them', () => {
+    const { memory, limit } = pageWeek()
+    const start = at(14, 44, 50)
+    const h = devHarness(start, [session('a', { limits: [limit] })], { weather: memory })
+    h.until(start + 5_000)
+    expect(h.history.some((sample) => sample.program.scene.forecast !== undefined)).toBe(false)
+    h.until(start + 12_000)
+    expect(h.history.some((sample) => sample.program.scene.forecast !== undefined)).toBe(true)
+    expect(h.lines).toEqual([])
+  })
+})
+
 describe('the dev director', () => {
   it('with no cue, airs what the director does, tick for tick', () => {
     const plain = createDirector()
@@ -437,7 +554,7 @@ describe('the dev director', () => {
     h.dev.cue(cue({ id: 'c2', segment: 'story', stories: [{ kind: 'ready' }] }))
     expect(h.lines).toEqual([
       'dev: a cue was dropped: not JSON',
-      'dev: a cue was dropped: segment must be story, hour or warning',
+      'dev: a cue was dropped: segment must be story, hour, warning or forecast',
       'dev: c2 waits for the window to show and the air to clear',
       'dev: c2 came twice; the second was dropped',
     ])

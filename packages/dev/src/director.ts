@@ -1,7 +1,8 @@
 // The development build's director: the station's own director, with cues in
 // front of it. A cue waits until the window shows and nothing is on air or
 // due, then airs on a director of its own, which starts BREAKING NEWS, the
-// report on the next hour or STORM WARNING at once. Meanwhile the station's own
+// report on the next hour or STORM WARNING at once, or, no segment, turns the
+// board to the weekly forecast, as it turns at :15, :30 and :45. Meanwhile the station's own
 // director sees every snapshot with the window held to the side, so it starts
 // nothing: a story that lands meanwhile waits its turn and airs after the cue's
 // segment, and the hour comes due for it as ever. Nothing a cue airs is kept.
@@ -74,6 +75,10 @@ interface Run {
   // then and not on every tick
   limits: number
   seen: number | undefined
+  // A forecast cue: whether its director has been told the quarter hour has
+  // begun, whether the board has turned to the forecast, and how often it has
+  // ticked
+  forecast: { armed: boolean; shown: boolean; ticks: number } | null
 }
 
 export function createDevDirector(options: DevDirectorOptions): DevDirector {
@@ -148,6 +153,15 @@ export function createDevDirector(options: DevDirectorOptions): DevDirector {
     if (snapshot === null) {
       return current.director.tick({ now, snapshot: null })
     }
+    const made = runStep(current, now, snapshot)
+    if (current.forecast !== null) {
+      current.forecast.ticks += 1
+      current.forecast.shown ||= made.scene.forecast !== undefined
+    }
+    return made
+  }
+
+  function runStep(current: Run, now: number, snapshot: Snapshot): Program {
     const next = current.toLand.shift()
     if (next !== undefined) {
       const index = current.landed.length
@@ -169,13 +183,19 @@ export function createDevDirector(options: DevDirectorOptions): DevDirector {
     const week =
       cue.segment === 'warning'
         ? syntheticWeek('storm', cue.used, now)
-        : cue.segment === 'hour' && cue.weather !== undefined
+        : (cue.segment === 'hour' || cue.segment === 'forecast') && cue.weather !== undefined
           ? syntheticWeek(cue.weather, cue.used, now)
           : null
+    const forecast = cue.segment === 'forecast' ? { armed: false, shown: false, ticks: 0 } : null
     const current: Run = {
       cue,
-      // On a made-up week the desk is handed its readings; else the memory the page has
-      director: createDirector({ reducedMotion, weather: week === null ? memory : week.memory }),
+      // On a made-up week the desk is handed its readings; else the memory the page has. A
+      // forecast cue's director has the quarter hour begin once it is armed
+      director: createDirector({
+        reducedMotion,
+        weather: week === null ? memory : week.memory,
+        ...(forecast === null ? {} : { quarters: () => (forecast.armed ? now : null) }),
+      }),
       frozen: new Set(snapshot.sessions.flatMap((session) => session.stories.map((story) => story.id))),
       toLand: cue.segment === 'story' ? [...cue.stories] : [],
       landed: [],
@@ -183,6 +203,7 @@ export function createDevDirector(options: DevDirectorOptions): DevDirector {
       week,
       limits: 0,
       seen: snapshot.limits,
+      forecast,
     }
     // Its first tick, with the window hidden, sees every story there is and
     // queues none. A warning cue's week is not read yet: a storm that came due
@@ -193,6 +214,12 @@ export function createDevDirector(options: DevDirectorOptions): DevDirector {
     current.director.tick({ now, snapshot: { ...view(current, snapshot, now, cue.segment !== 'warning'), visible: false } })
     // The week's limit comes on the sessions now, for a warning cue
     current.limits += 1
+    // A forecast cue's quarter hour begins now: its director has read the week
+    // with the window hidden, and on its next tick finds the quarter begun and
+    // turns the board
+    if (forecast !== null) {
+      forecast.armed = true
+    }
     if (cue.segment === 'hour') {
       // The next hour comes due, as it does five seconds before it: its
       // report joins the queue and waits, the window held to the side. From
@@ -220,11 +247,21 @@ export function createDevDirector(options: DevDirectorOptions): DevDirector {
       const own = main.tick({ now, snapshot: held(snapshot) })
       remember(snapshot, own)
       const program = runTick(current, now, snapshot)
+      // A forecast cue is over when the board has turned back, or when it
+      // turned to nothing; its scene is the board's all along
+      const forecast = current.forecast
       const over =
         snapshot === null ||
         !snapshot.visible ||
-        (current.toLand.length === 0 && program.key === 'board' && !program.wantsWindow)
+        (forecast === null
+          ? current.toLand.length === 0 && program.key === 'board' && !program.wantsWindow
+          : forecast.shown
+            ? program.scene.forecast === undefined
+            : forecast.ticks >= 2)
       if (over) {
+        if (forecast !== null && !forecast.shown) {
+          log(`dev: ${current.cue.id} turned to nothing: the forecast has no outlook`)
+        }
         log(`dev: ${current.cue.id} off air`)
         run = null
         idleSince = now
@@ -248,6 +285,7 @@ export function createDevDirector(options: DevDirectorOptions): DevDirector {
       next === undefined ||
       snapshot === null ||
       !snapshot.visible ||
+      (next.cue.segment === 'forecast' && snapshot.windowOut === false) ||
       now < heldUntil ||
       idleSince === null ||
       now - idleSince < GAP_MS

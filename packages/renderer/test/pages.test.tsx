@@ -219,4 +219,121 @@ describe("the listing's pages", () => {
     draw(sample('hour-review'))
     expect(container.querySelector('.pn-review-tab')).toBeNull()
   })
+
+  describe('the weekly forecast', () => {
+    const forecast = sample('board-forecast').forecast
+    if (forecast === undefined) {
+      throw new Error('the sample board-forecast has no forecast')
+    }
+    // Seven sessions on two pages, with the usage limits under the listing
+    const listing = (): Scene => ({ ...sample('board-limits-near') })
+    const withForecast = (): Scene => ({ ...listing(), forecast })
+
+    const wall = (): HTMLElement | null => container.querySelector('.pn-board-forecast:not(.pn-turn-leave)')
+    const leavingWall = (): HTMLElement | null => container.querySelector('.pn-board-forecast.pn-turn-leave')
+    const meters = (): HTMLElement | null => container.querySelector('.pn-board-limits')
+
+    it('turns the listing out and EXTENDED FORECAST in, by the page turn: the rows leave right, the wall comes in last', () => {
+      draw(listing())
+      advance(1000)
+      draw(withForecast())
+      expect(leaving().map((row) => row.name)).toEqual(FIRST)
+      expect(leaving().map((row) => row.delay)).toEqual(['0ms', '110ms', '220ms', '330ms'])
+      expect(entering()).toEqual([])
+      // The tab and the meters leave after the rows; the wall comes in once they have gone
+      expect((container.querySelector('.pn-board-tab .pn-page.pn-turn-leave') as HTMLElement).style.animationDelay).toBe('440ms')
+      expect(meters()?.classList.contains('pn-turn-leave')).toBe(true)
+      expect(meters()?.style.animationDelay).toBe('440ms')
+      expect(wall()?.classList.contains('pn-turn-enter')).toBe(true)
+      expect(wall()?.style.animationDelay).toBe('860ms')
+      expect(wall()?.textContent).toContain('EXTENDED FORECAST')
+      expect(wall()?.textContent).toContain(forecast.until)
+
+      advance(TURN)
+      expect(turning()).toBe(0)
+      expect(container.querySelectorAll('.pn-row')).toHaveLength(0)
+      expect(container.querySelector('.pn-board-tab')).toBeNull()
+      expect(meters()).toBeNull()
+      expect(wall()?.textContent).toContain('EXTENDED FORECAST')
+    })
+
+    it('does not page while the forecast is up, and turns back to the first page on a clock of its own', () => {
+      draw(listing())
+      draw(withForecast())
+      advance(TURN)
+      advance(60_000)
+      expect(container.querySelectorAll('.pn-row')).toHaveLength(0)
+      expect(wall()).not.toBeNull()
+
+      draw(listing())
+      expect(leavingWall()).not.toBeNull()
+      expect(entering().map((row) => row.name)).toEqual(FIRST)
+      expect(entering().map((row) => row.delay)).toEqual(['420ms', '530ms', '640ms', '750ms'])
+      expect(meters()?.classList.contains('pn-turn-enter')).toBe(true)
+      expect(meters()?.style.animationDelay).toBe('860ms')
+      advance(TURN)
+      expect(turning()).toBe(0)
+      expect(leavingWall()).toBeNull()
+      expect(wall()).toBeNull()
+      expect(rows()).toEqual(FIRST)
+      expect(tab()).toBe('1 OF 2')
+      expect(meters()?.classList.contains('pn-turn-enter')).toBe(false)
+      // A page is read for its 8 s again, from the moment the listing came back
+      advance(8_000 - TURN - 100)
+      expect(rows()).toEqual(FIRST)
+      advance(200)
+      expect(rows()).toEqual(LAST)
+    })
+
+    it('waits for a page turn already under way, then turns', () => {
+      draw(listing())
+      advance(8000)
+      expect(leaving().map((row) => row.name)).toEqual(FIRST)
+      draw(withForecast())
+      advance(500)
+      expect(wall()).toBeNull()
+      advance(TURN - 500)
+      // The page turn is over: the second page is up, and the forecast turns in now
+      expect(leaving().map((row) => row.name)).toEqual(LAST)
+      expect(wall()?.classList.contains('pn-turn-enter')).toBe(true)
+      advance(TURN)
+      expect(container.querySelectorAll('.pn-row')).toHaveLength(0)
+      expect(wall()).not.toBeNull()
+    })
+
+    it('shows at once when drawn with the forecast, and still, for a picture', () => {
+      draw(sample('board-forecast'), false)
+      expect(container.querySelectorAll('.pn-row')).toHaveLength(0)
+      expect(container.querySelector('.pn-board-tab')).toBeNull()
+      expect(wall()?.textContent).toContain('EXTENDED FORECAST')
+      expect(turning()).toBe(0)
+    })
+
+    it('cuts with reduced motion', () => {
+      window.matchMedia = ((query: string) => ({
+        matches: query === '(prefers-reduced-motion: reduce)',
+        media: query,
+        addEventListener: () => undefined,
+        removeEventListener: () => undefined,
+        addListener: () => undefined,
+        removeListener: () => undefined,
+      })) as unknown as typeof window.matchMedia
+      draw(listing())
+      draw(withForecast())
+      expect(turning()).toBe(0)
+      expect(container.querySelectorAll('.pn-row')).toHaveLength(0)
+      expect(wall()).not.toBeNull()
+      draw(listing())
+      expect(turning()).toBe(0)
+      expect(wall()).toBeNull()
+      expect(rows()).toEqual(FIRST)
+    })
+
+    it('keeps the ticker of the board, and the board under an outro is the plain one', () => {
+      draw(withForecast())
+      expect(container.querySelector('.pn-ticker')).not.toBeNull()
+      draw({ mode: 'outro', clock: '14:40', progress: 1, board: listing() })
+      expect(container.querySelector('.pn-board-under .pn-board-forecast')).toBeNull()
+    })
+  })
 })

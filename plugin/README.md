@@ -30,7 +30,7 @@ A session that was already open, or one you resume, goes on air when you press *
 
 **On the hour**, the station clock strikes, Clawd reads the headlines, and THE HOUR IN REVIEW shows what each session did: the lines it changed, or how long it has been waiting on you.
 
-**KLWD WEATHER** forecasts whether your week's usage limit lasts until it resets, with your usage as the weather: the crawl says how the week ends, the report on the hour adds the current conditions and the extended forecast, and when the week looks like running out first, STORM WARNING breaks in, at most once an hour, and STORMTRACKER follows the storm to the hour it hits.
+**KLWD WEATHER** forecasts whether your week's usage limit lasts until it resets, with your usage as the weather: the crawl says how the week ends, the report on the hour adds the current conditions and the extended forecast, and when the week looks like running out first, STORM WARNING breaks in, at most once an hour, and STORMTRACKER follows the storm to the hour it hits. At :15, :30 and :45 the board turns to EXTENDED FORECAST for 10 seconds and back, the way it turns between pages of sessions.
 
 ## The window
 

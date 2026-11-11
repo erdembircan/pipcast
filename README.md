@@ -101,6 +101,8 @@ KLWD forecasts whether your week's usage limit lasts until it resets, with your 
 
 The FORECAST line on the crawl says how the week ends and when it resets. The report on the hour adds two pages after THE HOUR IN REVIEW: CURRENT CONDITIONS, the week used so far, and EXTENDED FORECAST, a day each until the reset, with where the week will be at the end of each day. In the week's first day there isn't enough to go on, and the crawl says when the outlook starts. Once the week is used up, the crawl says so until it resets.
 
+At :15, :30 and :45 the board turns to EXTENDED FORECAST for 10 seconds and back, the way it turns between pages of sessions. It's no segment, with no jingle, and it never brings a tucked-away window out. It's skipped while the window is hidden or tucked into the side, and in the week's first day, when there's no outlook. A turn that comes due while a segment is on air waits for it, and is dropped if the quarter hour ends first. The top of the hour is the report on the hour, as ever.
+
 When the week looks like running out first, STORM WARNING breaks in with its own alert, and STORMTRACKER follows the storm across the map to the hour it's forecast to hit. It airs at most once an hour, and only while the forecast still says so; the report on the hour shows STORMTRACKER too.
 
 ## The window

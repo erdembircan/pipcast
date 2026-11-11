@@ -4,7 +4,7 @@
 # hold the files plugin/ holds, with a station that says +dev and a page with
 # the dev director, while plugin/ stays as built. Then scripts/cue.mjs runs
 # against a throwaway store: what it says with no station on air, or one that
-# takes no cues, and the cue that story, hour, warning and cue each write into the
+# takes no cues, and the cue that story, hour, warning, forecast and cue each write into the
 # store's dev folder beside a stand-in for the development build and a session
 # on air, or why they write none. No station starts and no window shows. The
 # temporary folder is removed on exit.
@@ -194,6 +194,18 @@ on_air
 check "warning --used sets the share used" field_is used 40
 check "warning --used past 99 is refused, with the reason the page would drop it" grep -qF "That cue would be dropped: used must be a whole number from 1 to 99." <<<"$("${cue[@]}" warning --used 120 2>&1 || true)"
 check "warning takes no other option" grep -qF "Unknown option --weather." <<<"$("${cue[@]}" warning --weather storm 2>&1 || true)"
+
+on_air
+"${cue[@]}" forecast >/dev/null
+check "forecast cues the board's turn to the weekly forecast" field_is segment '"forecast"'
+check "on the real week" lacks weather
+on_air
+"${cue[@]}" forecast --weather clouds --used 60 >/dev/null
+check "forecast --weather makes up a week of that outlook" field_is weather '"clouds"'
+check "forecast --used sets the share of the made-up week used" field_is used 60
+check "forecast --weather takes only clear, clouds or storm" grep -qF "That cue would be dropped: weather must be clear, clouds or storm." <<<"$("${cue[@]}" forecast --weather sunny 2>&1 || true)"
+check "forecast --used with no weather is refused, with the reason the page would drop it" grep -qF "That cue would be dropped: used goes with weather." <<<"$("${cue[@]}" forecast --used 50 2>&1 || true)"
+check "forecast takes no other option" grep -qF "Unknown option --sessions." <<<"$("${cue[@]}" forecast --sessions 3 2>&1 || true)"
 
 on_air
 printf '{"segment":"story","stories":[{"kind":"error","quote":"Claude is overloaded right now."}]}' >"$tmp/error.json"

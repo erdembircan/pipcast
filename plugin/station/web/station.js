@@ -401,6 +401,7 @@
   var STORMTRACKER_MS = 13e3;
   var ALERT_MS = 1900;
   var ALERT_OUTRO_MS = 1400;
+  var QUARTER_MS = 15 * 6e4;
   var REDUCED_OPENER_MS = 1e3;
   var GAP_MS = 2e3;
   var IDENT_LEAD_MS = 5e3;
@@ -409,6 +410,11 @@
   var LAST_REPORT_KEEP_MS = 24 * 60 * 6e4;
   var HOUR_MS = 60 * 6e4;
   var WARNING_EVERY_MS = 60 * 6e4;
+  function quarterOf(now) {
+    const hour = hourStart(now);
+    const index = Math.floor((now - hour) / QUARTER_MS);
+    return index >= 1 && index <= 3 ? hour + index * QUARTER_MS : null;
+  }
 
   // packages/director/src/story.ts
   function newest(stories, kind) {
@@ -1503,6 +1509,7 @@
   // packages/director/src/director.ts
   function createDirector(options = {}) {
     const reducedMotion = options.reducedMotion === true;
+    const quarters = options.quarters ?? quarterOf;
     const desk = createWeatherDesk({
       ...options.forecastWeek === void 0 ? {} : { forecastWeek: options.forecastWeek },
       ...options.weekReading === void 0 ? {} : { weekReading: options.weekReading },
@@ -1517,6 +1524,9 @@
     let lastReport = null;
     let reportEndedAt = null;
     let scheduledHour = 0;
+    let servedQuarter = 0;
+    let dueQuarter = null;
+    let turn = null;
     function boardState() {
       const story = onAir?.item.kind === "story" ? onAir.item.story : null;
       return {
@@ -1614,6 +1624,7 @@
             }
           }
           scheduledHour = hourStart(now);
+          servedQuarter = quarters(now) ?? 0;
           if (snapshot.lastReportAt !== null && now - snapshot.lastReportAt <= LAST_REPORT_KEEP_MS) {
             lastReport = { hour: snapshot.lastReportAt, stories: 0 };
           }
@@ -1648,15 +1659,27 @@
             desk.markDue(now);
           }
         }
+        const quarter = quarters(now);
+        if (quarter !== null && quarter > servedQuarter) {
+          servedQuarter = quarter;
+          dueQuarter = quarter;
+        }
+        if (dueQuarter !== null && (quarter !== dueQuarter || !hasOutlook(desk.forecast()))) {
+          dueQuarter = null;
+        }
       }
       if (!visible) {
         end(now, false);
         if (dropWaitingStories()) {
           desk.markDue(now);
         }
+        turn = null;
+        dueQuarter = null;
       } else if (!windowOut) {
         end(now, false);
         dropMovedOnStories(snapshot);
+        turn = null;
+        dueQuarter = null;
       } else {
         while (onAir !== null) {
           const { item, segment, index, stepStartedAt } = onAir;
@@ -1716,6 +1739,19 @@
             enter(0, now);
           }
         }
+        if (onAir !== null) {
+          turn = null;
+        } else if (turn !== null) {
+          if (now - turn.startedAt >= WEATHER_PAGE_MS) {
+            turn = null;
+          }
+        } else if (dueQuarter !== null && queue.length === 0 && (lastEnded === null || now - lastEnded >= GAP_MS)) {
+          const forecast = desk.forecast();
+          if (hasOutlook(forecast)) {
+            turn = { weather: weatherScene(forecast, now), startedAt: now };
+          }
+          dueQuarter = null;
+        }
       }
       const due = queue.length > 0 && (lastEnded === null || now - lastEnded >= GAP_MS);
       const wantsWindow = visible && (onAir !== null || due || windowOut && queue.length > 0);
@@ -1724,7 +1760,8 @@
       const current = onAir;
       const step = current?.segment.steps[current.index];
       if (current === null || step === void 0) {
-        return { scene: board, key: "board", sounds, reported, wantsWindow, weather };
+        const scene = turn === null ? board : { ...board, forecast: turn.weather };
+        return { scene, key: "board", sounds, reported, wantsWindow, weather };
       }
       const extra = current.segment.ticker;
       const atDesk = step.role === "desk" || step.role === "review" || step.role === "weather";

@@ -77,6 +77,8 @@ export interface Scene {
   label?: string;
   /** KLWD WEATHER's pages and STORMTRACKER: the weekly forecast they draw. */
   weather?: WeatherScene;
+  /** The board: the weekly forecast it turns to, EXTENDED FORECAST, in place of the listing. The board pushes the listing out and the forecast in as it turns between pages, and back when this goes. */
+  forecast?: WeatherScene;
 }
 
 /** A sky on KLWD WEATHER: by the share of the week a day's high reaches, sun below 70%, partly cloudy to 89%, overcast to 99%, storms at 100%. */

@@ -1,15 +1,15 @@
 import { hourStart, STORY_FRESH_MS } from '@pipcast/contract'
 import type { Bed, SessionRecord, Snapshot, Sound, Story, WeatherMemory } from '@pipcast/contract'
-import type { Scene } from '@pipcast/design'
+import type { Scene, WeatherScene } from '@pipcast/design'
 
 import { boardScene, boardTicker } from './board.ts'
 import type { Forecast, WeekHistory, WeekReading } from './forecast.ts'
 import { hourReport } from './hour.ts'
 import { movedOn, storySegment } from './story.ts'
 import type { Segment } from './story.ts'
-import { GAP_MS, HOUR_MS, IDENT_LEAD_MS, LAST_REPORT_KEEP_MS } from './timing.ts'
+import { GAP_MS, HOUR_MS, IDENT_LEAD_MS, LAST_REPORT_KEEP_MS, quarterOf, WEATHER_PAGE_MS } from './timing.ts'
 import type { BoardState, Carried, QueueItem, ReportMemory } from './types.ts'
-import { createWeatherDesk, hasOutlook, warningSegment } from './weather.ts'
+import { createWeatherDesk, hasOutlook, warningSegment, weatherScene } from './weather.ts'
 
 export interface DirectorOptions {
   reducedMotion?: boolean
@@ -23,6 +23,10 @@ export interface DirectorOptions {
   // memory from the first snapshot that carries one, and takes no readings
   // until it has one
   weather?: WeatherMemory | null
+  // Tests and the development build say which quarter hour a moment is in, as
+  // the moment it began, or null for none; the release passes nothing, and has
+  // :15, :30 and :45 on the clock
+  quarters?: (now: number) => number | null
 }
 
 export interface Tick {
@@ -61,6 +65,7 @@ interface OnAir {
 
 export function createDirector(options: DirectorOptions = {}): { tick(input: Tick): Program } {
   const reducedMotion = options.reducedMotion === true
+  const quarters = options.quarters ?? quarterOf
   const desk = createWeatherDesk({
     ...(options.forecastWeek === undefined ? {} : { forecastWeek: options.forecastWeek }),
     ...(options.weekReading === undefined ? {} : { weekReading: options.weekReading }),
@@ -76,6 +81,12 @@ export function createDirector(options: DirectorOptions = {}): { tick(input: Tic
   let lastReport: ReportMemory | null = null
   let reportEndedAt: number | null = null
   let scheduledHour = 0
+  // The board's turn to the weekly forecast, no segment: the last quarter hour
+  // dealt with; the one that is due and waits to start, if one is; and the
+  // turn on the board now, its forecast made as it started
+  let servedQuarter = 0
+  let dueQuarter: number | null = null
+  let turn: { weather: WeatherScene; startedAt: number } | null = null
 
   function boardState(): BoardState {
     const story = onAir?.item.kind === 'story' ? onAir.item.story : null
@@ -194,6 +205,8 @@ export function createDirector(options: DirectorOptions = {}): { tick(input: Tic
           }
         }
         scheduledHour = hourStart(now)
+        // A quarter hour that has begun is not one to turn for
+        servedQuarter = quarters(now) ?? 0
         if (snapshot.lastReportAt !== null && now - snapshot.lastReportAt <= LAST_REPORT_KEEP_MS) {
           lastReport = { hour: snapshot.lastReportAt, stories: 0 }
         }
@@ -242,6 +255,18 @@ export function createDirector(options: DirectorOptions = {}): { tick(input: Tic
           desk.markDue(now)
         }
       }
+
+      // The quarter hours. Each :15, :30 and :45 is dealt with once, at the
+      // moment it begins; one that is due is dropped when its quarter is over, or
+      // when the forecast has no outlook
+      const quarter = quarters(now)
+      if (quarter !== null && quarter > servedQuarter) {
+        servedQuarter = quarter
+        dueQuarter = quarter
+      }
+      if (dueQuarter !== null && (quarter !== dueQuarter || !hasOutlook(desk.forecast()))) {
+        dueQuarter = null
+      }
     }
 
     if (!visible) {
@@ -252,6 +277,8 @@ export function createDirector(options: DirectorOptions = {}): { tick(input: Tic
       if (dropWaitingStories()) {
         desk.markDue(now)
       }
+      turn = null
+      dueQuarter = null
     } else if (!windowOut) {
       // 5. Minimized to the side, or on its way out or in: a segment on air
       // is cut, as when the window hides, and not restarted. What waits
@@ -259,6 +286,8 @@ export function createDirector(options: DirectorOptions = {}): { tick(input: Tic
       // nothing starts until the window is out
       end(now, false)
       dropMovedOnStories(snapshot)
+      turn = null
+      dueQuarter = null
     } else {
       // 6. Advance
       while (onAir !== null) {
@@ -324,6 +353,24 @@ export function createDirector(options: DirectorOptions = {}): { tick(input: Tic
           enter(0, now)
         }
       }
+
+      // The weekly forecast on the board. A segment on air cuts the turn. One
+      // that is due starts when nothing is on air or waiting, the gap since the
+      // last segment having passed, and only if the desk holds a forecast with
+      // an outlook: it is the one the desk holds, none is worked out for it
+      if (onAir !== null) {
+        turn = null
+      } else if (turn !== null) {
+        if (now - turn.startedAt >= WEATHER_PAGE_MS) {
+          turn = null
+        }
+      } else if (dueQuarter !== null && queue.length === 0 && (lastEnded === null || now - lastEnded >= GAP_MS)) {
+        const forecast = desk.forecast()
+        if (hasOutlook(forecast)) {
+          turn = { weather: weatherScene(forecast, now), startedAt: now }
+        }
+        dueQuarter = null
+      }
     }
 
     // 8. Whether a segment needs the window out. False in the tick the last
@@ -337,7 +384,8 @@ export function createDirector(options: DirectorOptions = {}): { tick(input: Tic
     const current: OnAir | null = onAir
     const step = current?.segment.steps[current.index]
     if (current === null || step === undefined) {
-      return { scene: board, key: 'board', sounds, reported, wantsWindow, weather }
+      const scene: Scene = turn === null ? board : { ...board, forecast: turn.weather }
+      return { scene, key: 'board', sounds, reported, wantsWindow, weather }
     }
     // At the desk, the review and the weather pages the ticker also carries the
     // segment's own line
