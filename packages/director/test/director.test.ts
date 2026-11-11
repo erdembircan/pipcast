@@ -340,27 +340,6 @@ describe('when the window is hidden', () => {
     ])
   })
 
-  it('drops a report still waiting, the window minimized to the side, when the next one comes due', () => {
-    const h = harness(at(14, 59, 0), [session('a'), session('b')])
-    h.world.lastReportAt = at(14)
-    h.land([asking('a', at(14, 59, 50)), session('b')], at(14, 59, 50))
-    expect(lines(h.until(at(14, 59, 58)).program)).toContain('COMING UP The 15:00 report')
-
-    h.world.windowOut = false
-    expect(lines(h.until(at(15, 30, 0)).program)).toContain('COMING UP The 15:00 report')
-    h.until(at(15, 59, 56))
-
-    h.world.windowOut = true
-    const ident = h.until(at(15, 59, 56) + 250).program
-    expect(jingles(ident)).toEqual(['hour'])
-    expect(ident.reported).toBe(at(16))
-    const desk = h.until(at(16, 0, 4)).program
-    expect(desk.scene).toMatchObject({ mode: 'desk', event: { foot: '14:00 to 16:00' } })
-    expect(h.history.filter((sample) => sample.program.reported !== null).map((sample) => sample.program.reported)).toEqual([
-      at(16),
-    ])
-  })
-
   it('cuts a segment on air when it hides and does not air it again', () => {
     const h = harness(T0, [session('a')])
     h.land([asking('a', T0 + 1000)], T0 + 1000)
@@ -493,6 +472,27 @@ describe('a window minimized to the side', () => {
     expect(start.key).toBe('story:a:1:0')
     expect(jingles(start)).toEqual(['breaking'])
     expect(start.wantsWindow).toBe(true)
+  })
+
+  it('drops a report still waiting, the window minimized to the side, when the next one comes due', () => {
+    const h = harness(at(14, 59, 0), [session('a'), session('b')])
+    h.world.lastReportAt = at(14)
+    h.land([asking('a', at(14, 59, 50)), session('b')], at(14, 59, 50))
+    expect(lines(h.until(at(14, 59, 58)).program)).toContain('COMING UP The 15:00 report')
+
+    h.world.windowOut = false
+    expect(lines(h.until(at(15, 30, 0)).program)).toContain('COMING UP The 15:00 report')
+    h.until(at(15, 59, 56))
+
+    h.world.windowOut = true
+    const ident = h.until(at(15, 59, 56) + 250).program
+    expect(jingles(ident)).toEqual(['hour'])
+    expect(ident.reported).toBe(at(16))
+    const desk = h.until(at(16, 0, 4)).program
+    expect(desk.scene).toMatchObject({ mode: 'desk', event: { foot: '14:00 to 16:00' } })
+    expect(h.history.filter((sample) => sample.program.reported !== null).map((sample) => sample.program.reported)).toEqual([
+      at(16),
+    ])
   })
 })
 
