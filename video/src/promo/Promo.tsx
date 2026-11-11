@@ -18,6 +18,8 @@ import { PipNews } from '../design/pipnews.ts'
 import type { Scene } from '../design/pipnews.ts'
 import { PipWindow } from '../design/PipWindow.tsx'
 import { clamp01, ease, mix, seg } from '../lib/anim.ts'
+import { Paper } from '../look/Paper.tsx'
+import { INK, INK_SOFT, MONO, SANS } from '../look/theme.ts'
 import { Cards } from './Cards.tsx'
 import { PromoSound } from './PromoSound.tsx'
 import { CLEAR, DURATION, FEATURES, FLIP, FPS, NAME_HITS, SCENES, WINDOW } from './timeline.ts'
@@ -319,18 +321,15 @@ function Name({ T }: { T: number }) {
           </div>
         ))}
       </div>
-      <div style={{ marginTop: 22, font: 'italic 800 40px/1 "Archivo", sans-serif', letterSpacing: '0.02em', color: '#ffe08a', textShadow: '0 3px 0 rgba(6,18,51,0.7)', ...rise(b) }}>
-        YOUR USAGE, AS THE WEATHER · NEW IN PIPCAST
-      </div>
+      <div style={{ marginTop: 24, font: `400 38px/1.2 ${SANS}`, letterSpacing: '-0.015em', color: INK_SOFT, ...rise(b) }}>Your usage, as the weather. New in Pipcast.</div>
       <div
         style={{
-          marginTop: 30,
-          padding: '13px 26px 14px',
-          borderRadius: 12,
-          background: 'rgba(6, 18, 51, 0.8)',
-          boxShadow: 'inset 0 0 0 2px rgba(201, 211, 227, 0.35), 0 10px 24px rgba(0, 0, 0, 0.4)',
-          font: '600 30px/1 "IBM Plex Mono", ui-monospace, Menlo, monospace',
-          color: '#ffffff',
+          marginTop: 28,
+          padding: '14px 22px',
+          borderRadius: 14,
+          background: 'rgba(20, 20, 19, 0.05)',
+          font: `500 26px/1 ${MONO}`,
+          color: INK,
           ...rise(c),
         }}
       >
@@ -360,15 +359,22 @@ export function Promo() {
   const y0 = H / 2 - cam.y * cam.s
   const tile = clearing ? { x0, y0, x1: x0 + 1024 * cam.s, y1: y0 + 1024 * cam.s, r: 228 * cam.s } : undefined
   const shadow = ease.inOut(seg(T, CLEAR.tile, CLEAR.name))
+  const paper = ease.inOut(seg(T, SCENES.clear + 0.6, CLEAR.tile + 0.6))
   const fadeIn = ease.inOut(seg(T, 0, 1.2))
   const fadeOut = 1 - ease.inOut(seg(T, CLEAR.end, DURATION))
   return (
     <AbsoluteFill style={{ background: '#000000' }}>
       <DesignStyles />
       <AbsoluteFill style={{ opacity: fadeIn * fadeOut }}>
-        {clearing ? <AbsoluteFill style={{ background: 'radial-gradient(ellipse 80% 80% at 50% 40%, #0b2260 0%, #061233 60%, #01030a 100%)' }} /> : null}
+        {clearing ? (
+          <>
+            <AbsoluteFill style={{ background: 'radial-gradient(ellipse 80% 80% at 50% 40%, #0b2260 0%, #061233 60%, #01030a 100%)' }} />
+            {/* As the sky clears, the ground turns to the demo video's paper */}
+            <Paper style={{ opacity: paper }} />
+          </>
+        ) : null}
         {tile ? (
-          <div style={{ position: 'absolute', left: tile.x0, top: tile.y0, width: tile.x1 - tile.x0, height: tile.y1 - tile.y0, borderRadius: tile.r, boxShadow: `0 30px 90px rgba(0, 0, 0, ${0.55 * shadow})` }} />
+          <div style={{ position: 'absolute', left: tile.x0, top: tile.y0, width: tile.x1 - tile.x0, height: tile.y1 - tile.y0, borderRadius: tile.r, boxShadow: `0 36px 90px rgba(40, 32, 60, ${0.3 * shadow}), 0 10px 26px rgba(40, 32, 20, ${0.14 * shadow})` }} />
         ) : null}
         <AbsoluteFill style={{ filter: behind > 0.01 ? `blur(${3 * behind}px)` : undefined }}>
           <World T={T} cam={cam} clear={clearing ? clear : 0} rain={rain} tile={tile} dim={dim} steady={clearing} />
