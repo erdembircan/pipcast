@@ -6,7 +6,7 @@ Start Claude on something, switch to another app, and keep an eye on it from the
 
 What plays in the window is KLWD, a local TV news channel for your sessions, styled as a 1990s local news broadcast. Most of the time it shows a live board of your sessions. When something happens, KLWD cuts to BREAKING NEWS and Clawd reads the story from the anchor desk. Every hour on the hour, it airs a short report on what each session did.
 
-Watch the demo on YouTube (1:44): https://youtu.be/WZc3zm6nB9g
+Watch Pipcast's videos on YouTube, starting with the demo: https://www.youtube.com/watch?v=WZc3zm6nB9g&list=PLCbk0boCLtOs
 
 ## Requirements
 

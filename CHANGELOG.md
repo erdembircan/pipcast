@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-11-12
+
 ### Added
 
 - KLWD WEATHER: a forecast of whether your week's usage limit lasts until it resets, with your usage as the weather. A FORECAST line on the crawl says how the week ends, and the report on the hour adds CURRENT CONDITIONS and EXTENDED FORECAST.
@@ -45,7 +47,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - The window never takes the keyboard and hides while Claude is in front. Drag it to another corner, resize it, tuck it into the side of the screen, or let it fade with **Transparent window**. Hover over it for **Close**, **Mute** and **Back to Claude**.
 - **TUNE IN** and **TUNE OUT** in the band above the prompt box, and `/pipcast`, `/pipcast auto` and `/pipcast transparency`. **Tune in every new session** is on by default.
 
-[Unreleased]: https://github.com/erdembircan/pipcast/compare/v1.2.0...HEAD
+[Unreleased]: https://github.com/erdembircan/pipcast/compare/v1.3.0...HEAD
+[1.3.0]: https://github.com/erdembircan/pipcast/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/erdembircan/pipcast/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/erdembircan/pipcast/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/erdembircan/pipcast/releases/tag/v1.0.0
