@@ -1818,9 +1818,15 @@
      compressors of the master chain, bus: { bell: { delay: 0 } } overrides
      entries of BUS }. */
   function renderSoundtrack(plan, sampleRate, opts) {
+    return renderScore(buildScore(plan), sampleRate, opts);
+  }
+
+  /* Any score, as buildScore makes one ({ duration, step, events, duck,
+     cutoff, fade }), through the same synth and mix: the promo's
+     (scripts/music/storm.js) is written by hand, not from sections */
+  function renderScore(sc, sampleRate, opts) {
     opts = opts || {};
     const sr = sampleRate || 48000;
-    const sc = buildScore(plan);
     const ctx = offlineContext(2, Math.ceil(sr * (sc.duration + 0.25)), sr);
     const m = makeMixer(ctx, sc, opts);
     automate(m, sc);
@@ -2024,5 +2030,11 @@
   root.renderSoundtrack = renderSoundtrack;
   root.renderSfx = renderSfx;
   root.buildScore = buildScore;
+  /* What another score needs to play through this synth: scripts/music/storm.js
+     adds its own buses and instruments to these before it renders */
+  root.scoreKit = {
+    renderScore: renderScore, PLAYERS: PLAYERS, STEM: STEM, BUS: BUS, TARGET: TARGET,
+    voice: voice, noiseAt: noiseAt, biquad: biquad, mtof: mtof, seeded: seeded, hash01: hash01, clamp: clamp
+  };
   root.scoreTools = { CHORDS: CHORDS, LOOPS: LOOPS, allowedPcs: allowedPcs, loudness: loudness, SFX: Object.keys(SFX) };
 })();

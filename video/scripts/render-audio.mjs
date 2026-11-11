@@ -9,7 +9,12 @@
 // passed to the page as JSON.
 //
 //   node scripts/render-audio.mjs        renders everything
-//   import { renderAudio } from './render-audio.mjs'
+//   node scripts/render-audio.mjs storm  renders the promo's storm.wav
+//   import { renderAudio, renderStorm } from './render-audio.mjs'
+//
+// The promo's sound (src/promo/timeline.ts) plays through the same synth:
+// scripts/music/storm.js writes its score and adds the rain and the thunder,
+// and the page renders it into storm.wav.
 import { spawn } from 'node:child_process'
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { createServer } from 'node:http'
@@ -17,6 +22,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import * as timeline from '../src/timeline.ts'
+import * as promo from '../src/promo/timeline.ts'
 
 const video = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const chrome = process.env.CHROME_BIN ?? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
@@ -77,9 +83,25 @@ renderSoundtrack(plan, ${sampleRate}).then(function (buf) {
 </script></body></html>
 `
 
-export async function renderAudio() {
-  const plan = JSON.parse(JSON.stringify({ ...timeline }))
-  const files = ['music', ...sfxNames.map((name) => `sfx-${name}`)]
+// The promo's page: the storm and its score, as one stem
+const stormPage = (plan) => page(plan)
+  .replace('<script src="/score.js"></script>', '<script src="/score.js"></script><script src="/storm.js"></script>')
+  .replace(/var plan = [\s\S]*?\}\)\.catch\(fail\);/, `var plan = ${JSON.stringify(plan)};
+var started = Date.now();
+renderStorm(plan, ${sampleRate}).then(function (buf) {
+  var r = window.mixReport || {};
+  return fetch('/log', { method: 'POST', body: 'storm.wav rendered in ' + ((Date.now() - started) / 1000).toFixed(1) + ' s (mix ' + r.measuredLufs + ' LUFS, set ' + r.gainDb + ' dB, limiter at most ' + r.limiterDb + ' dB, result ' + r.resultLufs + ' LUFS)' })
+    .then(function () { return post('storm.wav', buf); });
+}).catch(fail);`)
+
+export function renderStorm() {
+  return renderAudio({ plan: JSON.parse(JSON.stringify({ ...promo })), files: ['storm'], html: stormPage })
+}
+
+export async function renderAudio(options = {}) {
+  const plan = options.plan ?? JSON.parse(JSON.stringify({ ...timeline }))
+  const files = options.files ?? ['music', ...sfxNames.map((name) => `sfx-${name}`)]
+  const html = options.html ?? page
   const work = mkdtempSync(join(tmpdir(), 'pipcast-audio-'))
   const received = new Map()
   let browser = null
@@ -150,12 +172,12 @@ export async function renderAudio() {
           })
           return
         }
-        if (url.pathname === '/score.js') {
+        if (url.pathname === '/score.js' || url.pathname === '/storm.js') {
           res.setHeader('content-type', 'text/javascript')
-          res.end(readFileSync(join(video, 'scripts/music/score.js')))
+          res.end(readFileSync(join(video, `scripts/music${url.pathname}`)))
         } else {
           res.setHeader('content-type', 'text/html')
-          res.end(page(plan))
+          res.end(html(plan))
         }
       })
       server.listen(0, '127.0.0.1', () => {
@@ -200,5 +222,5 @@ export async function renderAudio() {
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
-  await renderAudio()
+  await (process.argv[2] === 'storm' ? renderStorm() : renderAudio())
 }

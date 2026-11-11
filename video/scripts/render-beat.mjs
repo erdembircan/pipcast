@@ -8,6 +8,7 @@
 // the video mixes as the station does. macOS's afconvert decodes the loops.
 //
 //   node scripts/render-beat.mjs        lays the beat
+//   node scripts/render-beat.mjs promo  lays the promo's, from src/promo/timeline.ts, into promo-beat.wav
 //   import { renderBeat } from './render-beat.mjs'
 import { execFileSync } from 'node:child_process'
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
@@ -15,7 +16,8 @@ import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { BED_IN_MS, BED_OUT_MS, HUSH_MS } from '../../packages/contract/src/constants.ts'
-import { BEDS, DURATION } from '../src/timeline.ts'
+import * as demo from '../src/timeline.ts'
+import * as promo from '../src/promo/timeline.ts'
 
 const video = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const root = resolve(video, '..')
@@ -76,7 +78,7 @@ function write(path, [left, right]) {
   writeFileSync(path, b)
 }
 
-export function renderBeat() {
+export function renderBeat({ BEDS, DURATION } = demo, file = 'beat.wav') {
   const work = mkdtempSync(join(tmpdir(), 'pipcast-beat-'))
   try {
     const loops = {}
@@ -104,10 +106,17 @@ export function renderBeat() {
         track[1][i] += gain * loop[1][at]
       }
     }
-    write(join(video, 'public/audio/beat.wav'), track)
+    write(join(video, `public/audio/${file}`), track)
   } finally {
     rmSync(work, { recursive: true, force: true })
   }
 }
 
-if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) renderBeat()
+export function renderPromoBeat() {
+  renderBeat(promo, 'promo-beat.wav')
+}
+
+if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
+  if (process.argv[2] === 'promo') renderPromoBeat()
+  else renderBeat()
+}

@@ -9,6 +9,8 @@ Config.setCodec('h264')
 Config.setCrf(16)
 Config.setPixelFormat('yuv420p')
 Config.setOverwriteOutput(true)
+// STORMTRACKER's globe is WebGL 2: the GPU through ANGLE, as Chrome draws it on this Mac
+Config.setChromiumOpenGlRenderer('angle')
 
 // The fonts, jingles and icon layers come from the repository, outside video/.
 // The Studio names assets by their path, which for those climbs out of the

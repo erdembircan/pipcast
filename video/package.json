@@ -2,7 +2,7 @@
   "name": "pipcast-video",
   "version": "0.1.0",
   "private": true,
-  "description": "The Pipcast demo video, made with Remotion from the product's own graphics, jingles and icon layers",
+  "description": "Pipcast's videos, made with Remotion from the product's own graphics, jingles and icon layers: the demo and KLWD WEATHER's promo",
   "license": "MIT",
   "type": "module",
   "scripts": {
@@ -13,6 +13,8 @@
     "thumbnail": "node scripts/prepare.mjs --picture && node scripts/thumbnail.mjs",
     "render": "node scripts/prepare.mjs && remotion render src/index.ts Pipcast out/pipcast.mp4",
     "render:4k": "node scripts/prepare.mjs && remotion render src/index.ts Pipcast out/pipcast-4k.mp4 --scale=2",
+    "render:weather": "node scripts/prepare.mjs && remotion render src/index.ts KlwdWeather out/klwd-weather.mp4",
+    "render:weather:4k": "node scripts/prepare.mjs && remotion render src/index.ts KlwdWeather out/klwd-weather-4k.mp4 --scale=2",
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {

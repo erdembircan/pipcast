@@ -12,11 +12,11 @@ if (!id || !outDir || times.length === 0) {
 }
 const browserExecutable = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
 const serveUrl = await bundle({ entryPoint: resolve('src/index.ts') })
-const composition = await selectComposition({ serveUrl, id, browserExecutable })
+const composition = await selectComposition({ serveUrl, id, browserExecutable, chromiumOptions: { gl: 'angle' } })
 mkdirSync(outDir, { recursive: true })
 for (const t of times) {
   const frame = Math.min(composition.durationInFrames - 1, Math.round(Number(t) * composition.fps))
   const output = join(outDir, `${id}-${String(t).replace('.', '_')}.png`)
-  await renderStill({ serveUrl, composition, frame, output, browserExecutable, scale: Number(process.env.SCALE ?? 1) })
+  await renderStill({ serveUrl, composition, frame, output, browserExecutable, chromiumOptions: { gl: 'angle' }, scale: Number(process.env.SCALE ?? 1) })
   console.log(output)
 }
