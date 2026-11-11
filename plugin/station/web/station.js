@@ -1543,15 +1543,9 @@
         forecast: desk.forecast()
       };
     }
-    function dropWaitingStories() {
-      let warning = false;
-      for (let index = queue.length - 1; index >= 0; index -= 1) {
-        const kind = queue[index]?.kind;
-        if (kind === "story" || kind === "warning") {
-          warning = warning || kind === "warning";
-          queue.splice(index, 1);
-        }
-      }
+    function dropWaiting() {
+      const warning = queue.some((item) => item.kind === "warning");
+      queue.length = 0;
       return warning;
     }
     function dropMovedOnStories(snapshot) {
@@ -1675,7 +1669,7 @@
       }
       if (!visible) {
         end(now, false);
-        if (dropWaitingStories()) {
+        if (dropWaiting()) {
           desk.markDue(now);
         }
         turn = null;

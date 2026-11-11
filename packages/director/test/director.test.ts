@@ -289,7 +289,7 @@ describe('when the window is hidden', () => {
     expect(h.cues()).toEqual([{ now: T0 + 1000, jingle: 'breaking' }])
   })
 
-  it('keeps the report on the hour waiting, and drops the stories around it', () => {
+  it('drops the report on the hour waiting its turn when the window hides, with the stories around it', () => {
     const h = harness(at(14, 59, 0), [session('a'), session('b')])
     h.land([asking('a', at(14, 59, 50)), session('b')], at(14, 59, 50))
     h.land([asking('a', at(14, 59, 50)), asking('b', at(14, 59, 57))], at(14, 59, 57))
@@ -299,29 +299,58 @@ describe('when the window is hidden', () => {
 
     h.world.visible = false
     const hidden = h.until(at(15, 2, 0)).program
-    expect(lines(hidden)).toContain('COMING UP The 15:00 report')
+    expect(lines(hidden)).not.toContain('COMING UP The 15:00 report')
     expect(lines(hidden)).not.toContain('COMING UP Title b needs your input')
 
     h.world.visible = true
-    const ident = h.until(at(15, 2, 0) + 250).program
-    expect(jingles(ident)).toEqual(['hour'])
-    expect(ident.reported).toBe(at(15))
-    h.until(at(15, 3, 0))
+    const back = h.until(at(15, 3, 0)).program
+    expect(lines(back)).not.toContain('COMING UP The 15:00 report')
+    expect(h.history.some((sample) => sample.program.reported !== null)).toBe(false)
     expect(h.keys().some((key) => key.startsWith('story:b'))).toBe(false)
-    expect(h.cues().map((cue) => cue.jingle)).toEqual(['breaking', 'hour', 'hour-out'])
+    expect(h.cues().map((cue) => cue.jingle)).toEqual(['breaking'])
   })
 
-  it('drops a report still waiting when the next one comes due', () => {
+  it('does not take the report back when the window shows again before the hour', () => {
+    const h = harness(at(14, 59, 0), [session('a')])
+    h.land([asking('a', at(14, 59, 50))], at(14, 59, 50))
+    expect(lines(h.until(at(14, 59, 56)).program)).toContain('COMING UP The 15:00 report')
+
+    h.world.visible = false
+    h.until(at(14, 59, 57))
+    h.world.visible = true
+    const back = h.until(at(15, 1, 0)).program
+    expect(lines(back)).not.toContain('COMING UP The 15:00 report')
+    expect(h.history.some((sample) => sample.program.reported !== null)).toBe(false)
+    expect(h.cues().map((cue) => cue.jingle)).not.toContain('hour')
+  })
+
+  it('covers the dropped report’s hour in the next report', () => {
+    const h = harness(at(14, 59, 0), [session('a')])
+    h.world.lastReportAt = at(14)
+    h.land([asking('a', at(14, 59, 50))], at(14, 59, 50))
+    expect(lines(h.until(at(14, 59, 58)).program)).toContain('COMING UP The 15:00 report')
+
+    h.world.visible = false
+    h.until(at(15, 1, 0))
+    h.world.visible = true
+    const desk = h.until(at(16, 0, 4)).program
+    expect(desk.scene).toMatchObject({ mode: 'desk', event: { foot: '14:00 to 16:00' } })
+    expect(h.history.filter((sample) => sample.program.reported !== null).map((sample) => sample.program.reported)).toEqual([
+      at(16),
+    ])
+  })
+
+  it('drops a report still waiting, the window minimized to the side, when the next one comes due', () => {
     const h = harness(at(14, 59, 0), [session('a'), session('b')])
     h.world.lastReportAt = at(14)
     h.land([asking('a', at(14, 59, 50)), session('b')], at(14, 59, 50))
     expect(lines(h.until(at(14, 59, 58)).program)).toContain('COMING UP The 15:00 report')
 
-    h.world.visible = false
+    h.world.windowOut = false
     expect(lines(h.until(at(15, 30, 0)).program)).toContain('COMING UP The 15:00 report')
     h.until(at(15, 59, 56))
 
-    h.world.visible = true
+    h.world.windowOut = true
     const ident = h.until(at(15, 59, 56) + 250).program
     expect(jingles(ident)).toEqual(['hour'])
     expect(ident.reported).toBe(at(16))

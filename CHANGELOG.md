@@ -13,6 +13,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - At :15, :30 and :45 the board turns to EXTENDED FORECAST for 10 seconds and back, the way it turns between pages of sessions. It's no segment: no jingle, and it never brings a tucked-away window out. It's skipped while the window is hidden or tucked into the side, and when the forecast has no outlook yet, and a turn that comes due while a segment is on air waits for it, and is dropped if the quarter hour ends first.
 - **Old TV**, a new setting, off by default: KLWD plays as a 1990s broadcast taped and played back on an old television, with a soft picture, grain and colour noise, wobbling lines, a torn bottom edge, and now and then a tracking slip. Turn it on in Pipcast's settings or with `/pipcast oldtv on`. With Reduce Motion on, only the soft picture and the tube stay.
 
+### Changed
+
+- If you switch to Claude while the report on the hour waits its turn, that hour's report is skipped, like the stories waiting with it, and the next report covers it. It used to air when you came back.
+
 ## [1.2.0] - 2026-11-02
 
 ### Changed

@@ -29,7 +29,7 @@ Every story's desk runs 10 s.
 - A story that is cut off is not restarted. If you answer while a question's desk is on air, that story ends there, and the next one, or the board, follows.
 - First come, first served, with no roundups: stories that land together or during another story wait in the ticker as COMING UP and air one by one, each with its own BREAKING NEWS, in the order they landed.
 - A story whose session has moved on before it airs (you answered it in Claude) is dropped.
-- Only what lands while you are away from Claude airs. While Claude is in front the window is hidden, and Claude shows every story itself: a segment on air when you switch to Claude is cut there, the stories waiting as COMING UP are dropped, and a story that lands while you are in Claude never airs. Back in another app, the board and the ticker show where every session stands, and the next BREAKING NEWS is the next story to land.
+- Only what lands while you are away from Claude airs. While Claude is in front the window is hidden, and Claude shows every story itself: a segment on air when you switch to Claude is cut there, the stories waiting as COMING UP are dropped, and so is a report on the hour waiting with them, and a story that lands while you are in Claude never airs. Back in another app, the board and the ticker show where every session stands, and the next BREAKING NEWS is the next story to land.
 
 ## On the hour
 
@@ -48,4 +48,4 @@ Every hour on the hour the channel airs a short report on the sessions, the way 
 - **Its own outro.** The report ends on the ident run out, after THE HOUR IN REVIEW or, in a quiet hour, after the desk; a story waiting as COMING UP airs once it ends.
 - **Nothing tracked:** no report, and no window.
 - **Every hour the same:** no report is special, 18:00 included.
-- **The window is hidden at the hour** (Claude is in front): that hour's report is skipped. The report joins the queue only if the window shows as the hour strikes, in the five seconds of its countdown, so a window that shows, or a session that tunes in, after the hour never brings it back. A report already waiting its turn behind a story keeps its place if the window hides, and airs when the window shows again, unless the next report has come due by then. The next report covers everything since the last one that aired.
+- **The window is hidden at the hour** (Claude is in front): that hour's report is skipped. The report joins the queue only if the window shows as the hour strikes, in the five seconds of its countdown, so a window that shows, or a session that tunes in, after the hour never brings it back. A report already waiting its turn behind a story is dropped if the window hides, like the story, and does not air when the window shows again: that hour's report is skipped. The next report covers everything since the last one that aired.
