@@ -17,8 +17,8 @@
    Two new instruments, in the jingles' manner (noise through filters):
      rain     a bed of rain from a list of levels: the hiss of the drops, the
               body of the downpour, and a patter of single drops
-     thunder  a crack for a strike close by, then the rumble rolling away in
-              lumps
+     thunder  the rumble rolling away in lumps, each swelling in (no crack,
+              no hit: nothing in it lands as a punch)
 */
 (function () {
   'use strict';
@@ -121,23 +121,6 @@
     pan.pan.value = (rnd() - 0.5) * 0.8;
     pan.connect(out);
     const t = e.t, v = e.v, far = e.far, d = e.d;
-    if (far < 0.4) {
-      /* the crack: a tearing burst, twice */
-      [0, 0.055 + 0.03 * rnd()].forEach(function (off, k) {
-        const n = loopNoise(m, 931 + k + (e.seed || 0), 0.6);
-        const hp = filt(ctx, 'highpass', 900, 0.5);
-        const bp = filt(ctx, 'bandpass', 2600, 0.6);
-        bp.frequency.setValueAtTime(5200, t + off);
-        bp.frequency.exponentialRampToValueAtTime(700, t + off + 0.4);
-        const g = ctx.createGain();
-        g.gain.setValueAtTime(0.0001, t + off);
-        g.gain.exponentialRampToValueAtTime(v * (k ? 0.7 : 1) * 0.9, t + off + 0.004);
-        g.gain.exponentialRampToValueAtTime(v * 0.25, t + off + 0.09);
-        g.gain.exponentialRampToValueAtTime(0.0001, t + off + 0.55);
-        n.connect(hp); hp.connect(bp); bp.connect(g); g.connect(pan);
-        n.start(t + off); n.stop(t + off + 0.6);
-      });
-    }
     /* the rumble, rolling away in lumps */
     const n = loopNoise(m, 941 + (e.seed || 0), 4.3);
     const lp = filt(ctx, 'lowpass', 520 - 330 * far, 0.6);
@@ -150,7 +133,7 @@
     const lumps = [];
     let at = 0;
     for (let k = 0; k < 7; k++) {
-      lumps.push({ at: at, a: (k === 0 ? 1 : 0.35 + 0.65 * rnd()) * Math.exp(-k * 0.28), rise: 0.06 + 0.25 * rnd() + 0.2 * far, fall: 0.5 + 0.9 * rnd() });
+      lumps.push({ at: at, a: (k === 0 ? 1 : 0.35 + 0.65 * rnd()) * Math.exp(-k * 0.28), rise: 0.35 + 0.35 * rnd() + 0.2 * far, fall: 0.5 + 0.9 * rnd() });
       at += 0.25 + 0.7 * rnd();
     }
     for (let i = 0; i < N; i++) {
@@ -229,8 +212,9 @@
         put('trem', c.at + 0.65, { m: 76, d: 2.6, v: 0.035 });
         put('pad', c.at + 0.65, { ms: A7, d: c.until - c.at - 0.4, a: 0.05, r: 1.0, v: 0.45 });
       } else {
-        hit(c.at, Dm, 38, 69, false);
-        hit(c.at + 0.2, Dm, 38, null, false);
+        /* brass and the bell only: no drum on the words */
+        Dm.forEach(function (m) { put('brass', c.at, { m: m, d: 0.5, v: 0.07, rel: 0.8 }); });
+        put('bell', c.at, { m: 69, d: 0.9, v: 0.2 });
         put('pad', c.at, { ms: Dm, d: c.until - c.at - 0.2, a: 0.03, r: 0.8, v: 0.36 });
       }
     });
