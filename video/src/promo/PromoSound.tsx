@@ -18,12 +18,17 @@ const BEAT_VOLUME = 1.25
 
 export function PromoSound() {
   const files = getStaticFiles()
-  const storm = files.some((file) => file.name === 'audio/storm.wav')
-  const beat = files.some((file) => file.name === 'audio/promo-beat.wav')
+  // Each file's URL carries when it was last made, so the Studio never plays a copy it cached before the sound was rendered again
+  const url = (name: string) => {
+    const file = files.find((f) => f.name === name)
+    return file ? `${staticFile(name)}?v=${file.lastModified}` : null
+  }
+  const storm = url('audio/storm.wav')
+  const beat = url('audio/promo-beat.wav')
   return (
     <>
-      {storm ? <Html5Audio src={staticFile('audio/storm.wav')} volume={STORM_VOLUME} /> : null}
-      {beat ? <Html5Audio src={staticFile('audio/promo-beat.wav')} volume={BEAT_VOLUME} /> : null}
+      {storm ? <Html5Audio src={storm} volume={STORM_VOLUME} /> : null}
+      {beat ? <Html5Audio src={beat} volume={BEAT_VOLUME} /> : null}
       {JINGLES.map((j) => (
         <Sequence key={`${j.name}-${j.at}`} from={Math.round(j.at * FPS)} layout="none" name={`jingle: ${j.name}`}>
           <Html5Audio src={FILES[j.name]!} trimBefore={Math.round(j.from * FPS)} volume={JINGLE_VOLUME} />
