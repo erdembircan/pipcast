@@ -59,7 +59,7 @@ runs every check: lint, types, the unit tests of each part, the station's Swift 
 scripts/verify.sh
 ```
 
-runs the whole thing for real, with no window of yours involved: a headless Claude Code session tunes in, the station starts and shows its window, the session tunes out, and the station quits. With **Transparent window** on, the window server has to show that window at 40%, or whole while the pointer is on it, and whole once it is off. Another session is renamed on air, off air and after the window's close, and its title on air has to follow each time. One more, with nothing saved for **Tune in every new session**, which leaves it on, has to stay off the air until a stand-in for the desktop app shows it, then tune in by itself, and again after a `/clear`. An install into a throwaway configuration then has to hold exactly the files in `plugin/`, with no source or test among them. There `/pipcast auto` has to say **Tune in every new session** is on before anything is saved, and `/pipcast auto` and `/pipcast transparency` have to turn both settings on and off, each value landing where Claude Code keeps plugin options, and the second in the file the station reads as well.
+runs the whole thing for real, with no window of yours involved: a headless Claude Code session tunes in, the station starts and shows its window, the session tunes out, and the station quits. With **Transparent window** on, the window server has to show that window at 40%, or whole while the pointer is on it, and whole once it is off. Another session is renamed on air, off air and after the window's close, and its title on air has to follow each time. One more, with nothing saved for **Tune in every new session**, which leaves it on, has to stay off the air until a stand-in for the desktop app shows it, then tune in by itself, and again after a `/clear`. An install into a throwaway configuration then has to hold exactly the files in `plugin/`, with no source or test among them. There `/pipcast auto` has to say **Tune in every new session** is on before anything is saved, and `/pipcast auto`, `/pipcast transparency` and `/pipcast oldtv` have to turn all three settings on and off, each value landing where Claude Code keeps plugin options, and the last two in the file the station reads as well. The station's own checks end with one more: a station starts with **Old TV** on, and two pictures of its window a moment apart have to differ, since the grain moves; started with it off, they have to match. With Reduce Motion on, that check is skipped.
 
 ## Try a change in the desktop app
 
@@ -261,7 +261,7 @@ A session on air starts the station again from the copy it runs, and an installe
      ps -axo command | grep '[p]ipcast-station serve'
      ```
 
-   - Pipcast's page in **Customize > Plugins** has a **Settings** tab, with **Tune in every new session** and **Transparent window**
+   - Pipcast's page in **Customize > Plugins** has a **Settings** tab, with **Tune in every new session**, **Transparent window** and **Old TV**
 
 4. When you're done, remove the upload in **Customize > Plugins**, stop the station again, install again any other copy you uninstalled, and put the live checkout back, on the commit from step 1:
 

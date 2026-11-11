@@ -314,8 +314,14 @@ describe('the station files', () => {
 
 describe('the options the station follows', () => {
   it('reads options.json, keeping only what it knows', () => {
-    expect(parseSharedOptions({ v: 1, transparent: true })).toEqual({ v: 1, transparent: true })
-    expect(parseSharedOptions({ v: 1, transparent: false, extra: 3 })).toEqual({ v: 1, transparent: false })
+    expect(parseSharedOptions({ v: 1, transparent: true, oldTv: false })).toEqual({ v: 1, transparent: true, oldTv: false })
+    expect(parseSharedOptions({ v: 1, transparent: false, oldTv: true, extra: 3 })).toEqual({ v: 1, transparent: false, oldTv: true })
+  })
+
+  it('reads Old TV as off when the file has none or it is not a boolean', () => {
+    expect(parseSharedOptions({ v: 1, transparent: true })).toEqual({ v: 1, transparent: true, oldTv: false })
+    expect(parseSharedOptions({ v: 1, transparent: true, oldTv: 'yes' })).toEqual({ v: 1, transparent: true, oldTv: false })
+    expect(parseSharedOptions({ v: 1, transparent: false, oldTv: 1 })).toEqual({ v: 1, transparent: false, oldTv: false })
   })
 
   it('gives null for anything that is not options.json', () => {

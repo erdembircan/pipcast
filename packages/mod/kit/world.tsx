@@ -108,7 +108,7 @@ export function world(on: On, options: WorldOptions = {}) {
   // The engine the mod finds, the options Claude Code has saved, and every
   // command the mod gives the engine
   const engine = options.env?.CLAUDE_CODE_EXECPATH ?? (options.engine === null ? null : (options.engine ?? ENGINE))
-  const saved: Record<string, string> = { autoTuneIn: 'true', transparentWindow: 'false', ...options.saved }
+  const saved: Record<string, string> = { autoTuneIn: 'true', transparentWindow: 'false', oldTv: 'false', ...options.saved }
   const engineCalls: { argv: readonly string[]; stdin: string | undefined }[] = []
   // What the engine reports of the account's usage limits when asked; a test can change it as it goes
   const engineLimits = { reported: [...(options.limits ?? [])] }

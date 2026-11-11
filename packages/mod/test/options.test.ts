@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest'
 
-import { OPTIONS, installedId, needsSharing, parseRequest, readBoolean, wasSaved } from '../src/core/options.ts'
+import { OPTIONS, installedId, mergedOptions, needsSharing, parseRequest, readBoolean, wasSaved } from '../src/core/options.ts'
 
 const auto = OPTIONS.find((option) => option.word === 'auto')
 const transparency = OPTIONS.find((option) => option.word === 'transparency')
+const oldtv = OPTIONS.find((option) => option.word === 'oldtv')
 
 describe('parseRequest', () => {
   it('reads /pipcast on its own as tuning in or out', () => {
@@ -21,6 +22,13 @@ describe('parseRequest', () => {
     expect(parseRequest('transparency')).toEqual({ kind: 'show', option: transparency })
     expect(parseRequest('Transparency ON')).toEqual({ kind: 'set', option: transparency, enabled: true })
     expect(parseRequest('transparency off')).toEqual({ kind: 'set', option: transparency, enabled: false })
+  })
+
+  it('reads oldtv the same way', () => {
+    expect(parseRequest('oldtv')).toEqual({ kind: 'show', option: oldtv })
+    expect(parseRequest('OldTV On')).toEqual({ kind: 'set', option: oldtv, enabled: true })
+    expect(parseRequest('oldtv off')).toEqual({ kind: 'set', option: oldtv, enabled: false })
+    expect(oldtv?.key).toBe('oldTv')
   })
 
   it('reads the words in any case and spacing', () => {
@@ -69,9 +77,28 @@ describe('what claude plugin configure answers', () => {
 
 describe('needsSharing', () => {
   it('writes options.json when it is missing or says otherwise, and leaves it when it agrees', () => {
-    expect(needsSharing(null, false)).toBe(true)
-    expect(needsSharing({ v: 1, transparent: true }, false)).toBe(true)
-    expect(needsSharing({ v: 1, transparent: false }, false)).toBe(false)
-    expect(needsSharing({ v: 1, transparent: true }, true)).toBe(false)
+    const wanted = (transparent: boolean, oldTv: boolean) => ({ transparent, oldTv })
+    expect(needsSharing(null, wanted(false, false))).toBe(true)
+    expect(needsSharing({ v: 1, transparent: true, oldTv: false }, wanted(false, false))).toBe(true)
+    expect(needsSharing({ v: 1, transparent: false, oldTv: false }, wanted(false, false))).toBe(false)
+    expect(needsSharing({ v: 1, transparent: true, oldTv: false }, wanted(true, false))).toBe(false)
+    expect(needsSharing({ v: 1, transparent: false, oldTv: false }, wanted(false, true))).toBe(true)
+    expect(needsSharing({ v: 1, transparent: false, oldTv: true }, wanted(false, true))).toBe(false)
+    expect(needsSharing({ v: 1, transparent: true, oldTv: true }, wanted(true, false))).toBe(true)
+  })
+})
+
+describe('mergedOptions', () => {
+  const own = { transparent: true, oldTv: false }
+
+  it('replaces only the key that was set, keeping the other as the file holds it', () => {
+    const file = { v: 1 as const, transparent: false, oldTv: true }
+    expect(mergedOptions(file, own, 'oldTv', false)).toEqual({ transparent: false, oldTv: false })
+    expect(mergedOptions(file, own, 'transparentWindow', true)).toEqual({ transparent: true, oldTv: true })
+  })
+
+  it('falls back to this load\'s values for the other key when there is no file', () => {
+    expect(mergedOptions(null, own, 'oldTv', true)).toEqual({ transparent: true, oldTv: true })
+    expect(mergedOptions(null, own, 'transparentWindow', false)).toEqual({ transparent: false, oldTv: false })
   })
 })

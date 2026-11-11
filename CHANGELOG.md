@@ -11,6 +11,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - KLWD WEATHER: a forecast of whether your week's usage limit lasts until it resets, with your usage as the weather. A FORECAST line on the crawl says how the week ends, and the report on the hour adds CURRENT CONDITIONS and EXTENDED FORECAST.
 - STORM WARNING: when the week looks like running out before it resets, a weather alert breaks in, with a jingle of its own, and STORMTRACKER follows the storm over the Gulf of Mexico to the hour it's forecast to hit. It airs at most once an hour, and the report on the hour shows STORMTRACKER too.
 - At :15, :30 and :45 the board turns to EXTENDED FORECAST for 10 seconds and back, the way it turns between pages of sessions. It's no segment: no jingle, and it never brings a tucked-away window out. It's skipped while the window is hidden or tucked into the side, and when the forecast has no outlook yet, and a turn that comes due while a segment is on air waits for it, and is dropped if the quarter hour ends first.
+- **Old TV**, a new setting, off by default: KLWD plays as a 1990s broadcast taped and played back on an old television, with a soft picture, grain and colour noise, wobbling lines, a torn bottom edge, and now and then a tracking slip. Turn it on in Pipcast's settings or with `/pipcast oldtv on`. With Reduce Motion on, only the soft picture and the tube stay.
 
 ## [1.2.0] - 2026-11-02
 

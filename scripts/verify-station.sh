@@ -204,4 +204,35 @@ grep -q ' out for a segment$' "$home/station.log" || die "the station never logg
 grep -q ' back to the side$' "$home/station.log" || die "the station never logged the window going back to the side"
 echo "ok   the window came out for a story and went back into the side"
 
+step "Old TV"
+# A fresh station on the test page, which holds still, with Old TV on or off. It takes two pictures of its own window
+# a moment apart: the grain moves with Old TV on, and with it off nothing does. Reduce Motion takes the grain away.
+kill "$keeper" 2>/dev/null || true
+wait "$keeper" 2>/dev/null || true
+keeper=""
+rm -f "$home/sessions/verify.json"
+"$station" stop --home "$home" >/dev/null 2>&1 || true
+if [[ "$(defaults read com.apple.universalaccess reduceMotion 2>/dev/null || true)" == "1" ]]; then
+  echo "skipped: Reduce Motion is on (Old TV)"
+elif $locked; then
+  echo "skipped: screen locked (Old TV)"
+else
+  old_tv_pair() { # <true|false>: <work>/tv-<value>-a.png and -b.png, the window's two pictures
+    local home="$work/tv-$1"
+    mkdir -p "$home/sessions"
+    printf '{"v":1,"transparent":false,"oldTv":%s}\n' "$1" > "$home/options.json"
+    write_record "$(now_ms)"
+    PIPCAST_SELF_CAPTURE_PAIR="$work/tv-$1" "$station" launch --home "$home" --assets "$assets" \
+      --target-bundle-id com.example.pipcast.never-frontmost >/dev/null
+    wait_for 10 "the station's two pictures with Old TV $1" bash -c "[[ -s '$work/tv-$1-b.png' ]]"
+    "$station" stop --home "$home" >/dev/null
+  }
+  old_tv_pair true
+  cmp -s "$work/tv-true-a.png" "$work/tv-true-b.png" && die "Old TV on: the picture did not move"
+  echo "ok   Old TV on: the picture moves"
+  old_tv_pair false
+  cmp -s "$work/tv-false-a.png" "$work/tv-false-b.png" || die "Old TV off: the picture moved"
+  echo "ok   Old TV off: the picture holds still"
+fi
+
 echo "verify-station: all checks passed"

@@ -41,9 +41,14 @@ export const OPTION_WORDS: Record<string, OptionWords> = {
     on: 'KLWD fades to 40% while the pointer is elsewhere, so what is under it shows through.',
     off: 'KLWD stays solid.',
   },
+  oldtv: {
+    title: 'Old TV',
+    on: 'KLWD plays as a 1990s broadcast taped and played back on an old television.',
+    off: 'KLWD comes through sharp and clean.',
+  },
 }
 
-// What the slash menu shows after /pipcast: "[auto|transparency on|off]"
+// What the slash menu shows after /pipcast: "[auto|transparency|oldtv on|off]"
 export const COMMAND_ARGUMENT_HINT = `[${Object.keys(OPTION_WORDS).join('|')} on|off]`
 
 // "Tune in every new session is on. Each new session in the desktop app tunes in to KLWD as it opens."

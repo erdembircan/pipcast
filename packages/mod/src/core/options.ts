@@ -14,15 +14,31 @@ export interface OptionSpec {
 export const OPTIONS: readonly OptionSpec[] = [
   { word: 'auto', key: 'autoTuneIn' },
   { word: 'transparency', key: 'transparentWindow' },
+  { word: 'oldtv', key: 'oldTv' },
 ]
 
-// The one option the station follows, through options.json
+// The options the station follows, through options.json
 export const TRANSPARENT_KEY = 'transparentWindow'
+export const OLD_TV_KEY = 'oldTv'
 
 // Whether a session that tunes in, or reloads while tuned in, writes its own
 // value to options.json: when the file is missing, cannot be read or says otherwise
-export function needsSharing(file: SharedOptions | null, transparent: boolean): boolean {
-  return file === null || file.transparent !== transparent
+export function needsSharing(file: SharedOptions | null, wanted: { transparent: boolean; oldTv: boolean }): boolean {
+  return file === null || file.transparent !== wanted.transparent || file.oldTv !== wanted.oldTv
+}
+
+// What options.json should hold once a command sets one of the two options the
+// station follows: the file as it stands with only that key replaced, so a
+// change made by another command in the same load is kept. With no file to go
+// by, this load's values stand in for the other key.
+export function mergedOptions(
+  file: SharedOptions | null,
+  own: { transparent: boolean; oldTv: boolean },
+  key: string,
+  enabled: boolean,
+): { transparent: boolean; oldTv: boolean } {
+  const base = file === null ? own : { transparent: file.transparent, oldTv: file.oldTv }
+  return key === TRANSPARENT_KEY ? { ...base, transparent: enabled } : { ...base, oldTv: enabled }
 }
 
 // What the words after /pipcast ask for
