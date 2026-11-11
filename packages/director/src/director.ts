@@ -100,18 +100,12 @@ export function createDirector(options: DirectorOptions = {}): { tick(input: Tic
     }
   }
 
-  // Takes every story and STORM WARNING out of the queue and leaves the report
-  // on the hour. Says whether a warning went. In place: the board reads this
-  // same array.
-  function dropWaitingStories(): boolean {
-    let warning = false
-    for (let index = queue.length - 1; index >= 0; index -= 1) {
-      const kind = queue[index]?.kind
-      if (kind === 'story' || kind === 'warning') {
-        warning = warning || kind === 'warning'
-        queue.splice(index, 1)
-      }
-    }
+  // Empties the queue: every story, STORM WARNING and report on the hour
+  // waiting its turn. Says whether a warning went. In place: the board reads
+  // this same array.
+  function dropWaiting(): boolean {
+    const warning = queue.some((item) => item.kind === 'warning')
+    queue.length = 0
     return warning
   }
 
@@ -233,8 +227,9 @@ export function createDirector(options: DirectorOptions = {}): { tick(input: Tic
 
       // 3. The hour. Its report joins the queue only while the window shows
       // in the five seconds before the hour, as its ident is due; a window
-      // hidden all that time skips the hour. A report still waiting when the
-      // next one comes due is dropped
+      // hidden all that time skips the hour, and so does one that hides before
+      // the report airs (4). A report still waiting when the next one comes due
+      // is dropped
       dropMissedReports(now)
       const next = hourStart(now) + HOUR_MS
       if (visible && now >= next - IDENT_LEAD_MS && next > scheduledHour) {
@@ -270,11 +265,11 @@ export function createDirector(options: DirectorOptions = {}): { tick(input: Tic
     }
 
     if (!visible) {
-      // 4. Hidden: what is on air is cut and not restarted, and the stories
-      // waiting their turn are dropped, a STORM WARNING with them: it came due
-      // at this moment. The report on the hour waits on
+      // 4. Hidden: what is on air is cut and not restarted, and everything
+      // waiting its turn is dropped: the stories, a STORM WARNING, which came
+      // due at this moment, and the report on the hour, whose hour is skipped
       end(now, false)
-      if (dropWaitingStories()) {
+      if (dropWaiting()) {
         desk.markDue(now)
       }
       turn = null

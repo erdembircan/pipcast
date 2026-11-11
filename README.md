@@ -87,7 +87,7 @@ Stories air one after another, in the order they land, and nothing cuts in. KLWD
 
 ### On the hour
 
-At the top of every hour, the station clock strikes, Clawd reads the headlines, and THE HOUR IN REVIEW shows what each session did: the lines it changed, or how long it has been waiting on you. If you're in Claude as the hour strikes, that hour is skipped, and the next report covers it.
+At the top of every hour, the station clock strikes, Clawd reads the headlines, and THE HOUR IN REVIEW shows what each session did: the lines it changed, or how long it has been waiting on you. If you're in Claude as the hour strikes, or switch to Claude before its report airs, that hour is skipped, and the next report covers it.
 
 ### KLWD WEATHER
 
