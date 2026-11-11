@@ -4,7 +4,7 @@
 // these differ. Times are in milliseconds.
 
 public enum Constants {
-    public static let version = "1.2.0"
+    public static let version = "1.3.0"
 
     public static let schemaVersion = 1
 
