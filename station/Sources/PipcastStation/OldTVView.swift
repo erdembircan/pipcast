@@ -8,7 +8,7 @@ import StationCore
 /// all of it on layers, and the page does no work for it. The picture is the web view's layer with macOS's own Core
 /// Image filters on it, which the window server runs over WebKit's picture: the lines wobble and the bottom tears
 /// with `CIDisplacementDistortion`, one value to a row of points, and Core Animation steps each filter's strength
-/// frame by frame by itself. Above it, this view's plain layers hold the grain, the colour noise, the dropouts and
+/// frame by frame by itself. Above it, this view's plain layers hold the grain, the colour noise and
 /// the tube: its lines, dark corners, rim and sheen. The window server ignores a filter of our own, so only Apple's
 /// built-in ones are used.
 ///
@@ -22,7 +22,6 @@ final class OldTVView: NSView {
     // The layers, back to front
     private let grain = CALayer()
     private let chroma = CALayer()
-    private let dropout = CALayer()
     private let lines = CAReplicatorLayer()
     private let line = CALayer()
     private let corners = CAGradientLayer()
@@ -63,7 +62,6 @@ final class OldTVView: NSView {
         grain.magnificationFilter = .nearest
         chroma.magnificationFilter = .linear
         chroma.compositingFilter = "softLightBlendMode"
-        dropout.backgroundColor = NSColor.white.cgColor
         line.backgroundColor = NSColor.black.withAlphaComponent(OldTVLook.linesOpacity).cgColor
         lines.addSublayer(line)
 
@@ -84,7 +82,7 @@ final class OldTVView: NSView {
         sheen.startPoint = OldTVLook.sheenStart
         sheen.endPoint = OldTVLook.sheenEnd
 
-        for layer in [grain, chroma, dropout, lines, corners, rim, sheen] {
+        for layer in [grain, chroma, lines, corners, rim, sheen] {
             Self.quiet(layer)
             layer.isHidden = true
             root.addSublayer(layer)
@@ -146,15 +144,15 @@ final class OldTVView: NSView {
                 layer.filters = nil
                 for key in Self.signalKeys { layer.removeAnimation(forKey: key) }
             }
-            for layer in [grain, chroma, dropout, lines, corners, rim, sheen] { layer.isHidden = true }
+            for layer in [grain, chroma, lines, corners, rim, sheen] { layer.isHidden = true }
             releaseNoise()
         }
         allowFilters(false)
     }
 
-    /// Frees the grain, the colour noise and the dropout.
+    /// Frees the grain and the colour noise.
     private func releaseNoise() {
-        for layer in [grain, chroma, dropout] {
+        for layer in [grain, chroma] {
             layer.removeAllAnimations()
             layer.contents = nil
         }
@@ -169,11 +167,10 @@ final class OldTVView: NSView {
         // Every layer follows the size at once, the noise stretched meanwhile
         withoutActions { fitLayers() }
         guard isOn else { return }
-        // The maps and the dropout are tiny, so they follow at once: no row of a larger picture is ever outside a map
+        // The maps are tiny, so they follow at once: no row of a larger picture is ever outside a map
         cancelBurst()
         installSignal()
         if !reducesMotion {
-            installDropout()
             // The noise is made again only once the size has stopped changing
             noiseWork?.cancel()
             generation &+= 1
@@ -282,17 +279,16 @@ final class OldTVView: NSView {
 
     // MARK: The noise
 
-    /// Grain, colour noise and dropouts, each on a loop of its own length, or nothing of them with Reduce Motion on.
+    /// Grain and colour noise, each on a loop of its own length, or nothing of them with Reduce Motion on.
     private func installNoise() {
         withoutActions {
             if reducesMotion {
-                for layer in [grain, chroma, dropout] { layer.isHidden = true }
+                for layer in [grain, chroma] { layer.isHidden = true }
                 releaseNoise()
             } else {
-                for layer in [grain, chroma, dropout] { layer.isHidden = false }
+                for layer in [grain, chroma] { layer.isHidden = false }
                 grain.opacity = OldTVLook.grainOpacity
                 chroma.opacity = OldTVLook.chromaOpacity
-                installDropout()
             }
         }
         if !reducesMotion {
@@ -335,42 +331,6 @@ final class OldTVView: NSView {
                 chroma.contents = first
                 chroma.add(Self.keyframes("contents", colours, fps: OldTVLook.chromaFPS), forKey: "oldtv.chroma")
             }
-        }
-    }
-
-    /// The dropout: one white layer a point tall that, in about one frame in five, is a streak of 8 to 58 points
-    /// somewhere in the picture, and otherwise invisible. Position, size and opacity step together.
-    private func installDropout() {
-        dropout.removeAllAnimations()
-        let width = bounds.width, height = bounds.height
-        var positions: [NSValue] = []
-        var sizes: [NSValue] = []
-        var opacities: [NSNumber] = []
-        var lastPosition = NSPoint.zero
-        var lastBounds = CGRect(x: 0, y: 0, width: 1, height: 1)
-        for _ in 0 ..< OldTVLook.dropoutFrames {
-            if random.next() < OldTVLook.dropoutChance {
-                let y = (random.next() * max(1, height - 2)).rounded(.down)
-                let x = (random.next() * max(1, width - 60)).rounded(.down)
-                let length = (OldTVLook.dropoutLength.lowerBound
-                    + random.next() * (OldTVLook.dropoutLength.upperBound - OldTVLook.dropoutLength.lowerBound)).rounded(.down)
-                lastPosition = NSPoint(x: x + length / 2, y: y + 0.5)
-                lastBounds = CGRect(x: 0, y: 0, width: length, height: 1)
-                opacities.append(NSNumber(value: OldTVLook.dropoutOpacity))
-            } else {
-                opacities.append(NSNumber(value: Float(0)))
-            }
-            positions.append(NSValue(point: lastPosition))
-            sizes.append(NSValue(rect: lastBounds))
-        }
-        dropout.position = lastPosition
-        dropout.bounds = lastBounds
-        dropout.opacity = 0
-        let begin = dropout.convertTime(CACurrentMediaTime(), from: nil)
-        for (path, values) in [("position", positions), ("bounds", sizes), ("opacity", opacities)] as [(String, [Any])] {
-            let animation = Self.keyframes(path, values, fps: OldTVLook.fps)
-            animation.beginTime = begin
-            dropout.add(animation, forKey: "oldtv.dropout.\(path)")
         }
     }
 

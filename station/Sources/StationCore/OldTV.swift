@@ -61,10 +61,6 @@ public enum OldTVLook {
     public static let chromaFrames = 29
     public static let chromaFPS: Double = 15
     public static let chromaDivisor = 10
-    public static let dropoutFrames = 41
-    public static let dropoutChance = 0.2
-    public static let dropoutLength: ClosedRange<Double> = 8.0 ... 58.0
-    public static let dropoutOpacity: Float = 0.86
 
     // The tube
     public static let linesOpacity: CGFloat = 0.16

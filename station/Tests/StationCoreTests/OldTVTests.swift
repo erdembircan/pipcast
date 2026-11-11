@@ -87,9 +87,9 @@ import Testing
     }
 
     @Test func theLoopsAreTheLengthsTheDocsGive() {
-        let loops = [OldTVLook.grainFrames, OldTVLook.chromaFrames, OldTVLook.dropoutFrames, OldTVLook.bottomFrames,
+        let loops = [OldTVLook.grainFrames, OldTVLook.chromaFrames, OldTVLook.bottomFrames,
                      OldTVLook.wobbleFramesB, OldTVLook.wobbleFramesA]
-        #expect(loops == [24, 29, 41, 83, 89, 97])
+        #expect(loops == [24, 29, 83, 89, 97])
     }
 
     @Test func theRowMapPutsTheTopRowLastAndCarriesTheShiftInRed() throws {
