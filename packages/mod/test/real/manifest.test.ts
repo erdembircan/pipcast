@@ -26,9 +26,11 @@ describe('the options /pipcast sets', () => {
     }
   })
 
-  it('start with Tune in every new session on and Transparent window off', () => {
+  it('start with Tune in every new session on, and Transparent window and Old TV off', () => {
     expect(manifest.userConfig?.autoTuneIn?.default).toBe(true)
     expect(manifest.userConfig?.transparentWindow?.default).toBe(false)
+    expect(manifest.userConfig?.oldTv?.type).toBe('boolean')
+    expect(manifest.userConfig?.oldTv?.default).toBe(false)
   })
 
   it('have their words, and no others', () => {
@@ -36,6 +38,6 @@ describe('the options /pipcast sets', () => {
   })
 
   it('show in the slash menu after /pipcast', () => {
-    expect(COMMAND_ARGUMENT_HINT).toBe('[auto|transparency on|off]')
+    expect(COMMAND_ARGUMENT_HINT).toBe('[auto|transparency|tv on|off]')
   })
 })

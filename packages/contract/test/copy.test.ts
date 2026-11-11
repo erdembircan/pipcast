@@ -5,6 +5,7 @@ import {
   OUTLOOK_WORDS,
   WEATHER,
   ERROR_WORDS,
+  COMMAND_ARGUMENT_HINT,
   afterReportLine,
   deskLine,
   doing,
@@ -16,6 +17,7 @@ import {
   hourHeadline,
   hourSoFarLine,
   hourStrap,
+  optionState,
   outTag,
   reviewDetail,
   stillWaitingLine,
@@ -163,5 +165,16 @@ describe('the weekly forecast', () => {
     expect(WEATHER.tracker).toBe('STORMTRACKER')
     expect(WEATHER).not.toHaveProperty('warningLabel')
     expect(WEATHER.alert).toEqual(['WEATHER', 'ALERT'])
+  })
+})
+
+describe('the options', () => {
+  it('shows every option word after /pipcast', () => {
+    expect(COMMAND_ARGUMENT_HINT).toBe('[auto|transparency|tv on|off]')
+  })
+
+  it('says what Old TV is set to', () => {
+    expect(optionState('tv', true)).toBe('Old TV is on. KLWD plays as a 1990s broadcast taped and played back on an old television.')
+    expect(optionState('tv', false)).toBe('Old TV is off. KLWD comes through sharp and clean.')
   })
 })

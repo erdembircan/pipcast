@@ -43,6 +43,11 @@ var OPTION_WORDS = {
     title: "Transparent window",
     on: "KLWD fades to 40% while the pointer is elsewhere, so what is under it shows through.",
     off: "KLWD stays solid."
+  },
+  tv: {
+    title: "Old TV",
+    on: "KLWD plays as a 1990s broadcast taped and played back on an old television.",
+    off: "KLWD comes through sharp and clean."
   }
 };
 var COMMAND_ARGUMENT_HINT = `[${Object.keys(OPTION_WORDS).join("|")} on|off]`;
@@ -349,7 +354,7 @@ function parseSharedOptions(value) {
   if (!isObject(value) || value.v !== 1 || typeof value.transparent !== "boolean") {
     return null;
   }
-  return { v: 1, transparent: value.transparent };
+  return { v: 1, transparent: value.transparent, oldTv: value.oldTv === true };
 }
 
 // packages/mod/src/core/auto.ts
@@ -1208,11 +1213,13 @@ function fileTitled(m, title) {
 // packages/mod/src/core/options.ts
 var OPTIONS = [
   { word: "auto", key: "autoTuneIn" },
-  { word: "transparency", key: "transparentWindow" }
+  { word: "transparency", key: "transparentWindow" },
+  { word: "tv", key: "oldTv" }
 ];
 var TRANSPARENT_KEY = "transparentWindow";
-function needsSharing(file, transparent) {
-  return file === null || file.transparent !== transparent;
+var OLD_TV_KEY = "oldTv";
+function needsSharing(file, wanted) {
+  return file === null || file.transparent !== wanted.transparent || file.oldTv !== wanted.oldTv;
 }
 function parseRequest(args) {
   const typed = args.trim().split(/\s+/).filter((word) => word !== "");
@@ -1481,6 +1488,7 @@ var tuned = atom({ plugin: "pipcast", key: "tuned" }, false);
 var due = atom({ plugin: "pipcast", key: "due" }, false);
 var autoTuneIn = false;
 var transparentWindow = false;
+var oldTv = false;
 var autoQueue = Promise.resolve();
 var optionsAt = null;
 var model = null;
@@ -1644,19 +1652,20 @@ function stopTimers() {
   titleTimer?.cancel();
   titleTimer = void 0;
 }
-async function shareTransparency($, transparent) {
+async function shareStationOptions($, values) {
   try {
     const io = ioFor($);
-    await shareOptions(io, await io.storeHome(), { v: 1, transparent }, await $.session.id());
+    await shareOptions(io, await io.storeHome(), { v: 1, ...values }, await $.session.id());
   } catch (error) {
     failure($, "telling the station", error);
   }
 }
-async function shareOwnTransparency($) {
+async function shareOwnOptions($) {
   try {
     const io = ioFor($);
-    if (needsSharing(await readSharedOptions(io, await io.storeHome()), transparentWindow)) {
-      await shareTransparency($, transparentWindow);
+    const own = { transparent: transparentWindow, oldTv };
+    if (needsSharing(await readSharedOptions(io, await io.storeHome()), own)) {
+      await shareStationOptions($, own);
     }
   } catch (error) {
     failure($, "telling the station", error);
@@ -1965,7 +1974,7 @@ async function startSession($) {
       await readLimitsNow($);
       tunedInAt = own.tunedInAt;
       await save($);
-      await shareOwnTransparency($);
+      await shareOwnOptions($);
       await ensureStation(io, home);
       startTitleChecks($);
     }
@@ -1996,7 +2005,7 @@ async function tuneInNow($) {
   const built = await ensureSession($);
   await checkTitle($);
   await readLimitsNow($);
-  await shareOwnTransparency($);
+  await shareOwnOptions($);
   const m = model ?? built;
   const io = ioFor($);
   let result = { status: "cannot-start" };
@@ -2124,7 +2133,9 @@ async function setOption($, option, enabled) {
       return OPTION_REPLY.cannotSave(option.word, enabled);
     }
     if (option.key === TRANSPARENT_KEY) {
-      await shareTransparency($, enabled);
+      await shareStationOptions($, { transparent: enabled, oldTv });
+    } else if (option.key === OLD_TV_KEY) {
+      await shareStationOptions($, { transparent: transparentWindow, oldTv: enabled });
     }
     return optionState(option.word, enabled);
   } catch (error) {
@@ -2218,6 +2229,7 @@ async function onComplete($, isAborted, reason) {
 function register(on, options) {
   autoTuneIn = options.autoTuneIn === true;
   transparentWindow = options.transparentWindow === true;
+  oldTv = options.oldTv === true;
   optionsAt = null;
   on("session.start", async ($, e, next) => {
     try {

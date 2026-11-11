@@ -112,6 +112,7 @@ export interface StationPrefs {
 export interface SharedOptions {
   v: 1
   transparent: boolean
+  oldTv: boolean
 }
 
 // weather.json: the week's usage readings the forecast goes by, and when STORM

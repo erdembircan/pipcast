@@ -49,11 +49,14 @@ final class StationController: NSObject, InteractionDelegate, WKNavigationDelega
     private var watcher: DispatchSourceFileSystemObject?
     private var timers: [Timer] = []
     private var selfCaptureScheduled = false
+    private var selfCapturePairScheduled = false
     /// Whether the window counts as hovered, as the station last looked: the controls show and the window is whole.
     /// Never while it is hidden.
     private var hovered = false
     /// Transparent window, as options.json last said.
     private var transparent = false
+    /// Old TV, as options.json last said.
+    private var oldTV = false
     /// The self-capture holds the controls up.
     private var holdingControls = false
     #if PIPCAST_DEV
@@ -136,8 +139,12 @@ final class StationController: NSObject, InteractionDelegate, WKNavigationDelega
         log.write(web.canReadFiles
                   ? "webgl: the page may read the pictures beside it"
                   : "error cannot let the page read the pictures of the Earth beside it; STORMTRACKER shows no globe")
-        transparent = SharedOptions.load(from: paths.options).transparent
+        let shared = SharedOptions.load(from: paths.options)
+        transparent = shared.transparent
+        oldTV = shared.oldTV
         log.write(transparent ? "transparent on" : "transparent off")
+        log.write(oldTV ? "old tv on" : "old tv off")
+        followOldTV()
         if model.mode == .minimized { log.write("minimized") }
         sound = SoundDesk(folder: URL(fileURLWithPath: "\(options.assets)/sounds"), log: { [log] in log.write($0) })
         place(on: NSScreen.main ?? NSScreen.screens[0], animated: false)
@@ -159,6 +166,11 @@ final class StationController: NSObject, InteractionDelegate, WKNavigationDelega
             self?.keepOffOwnSpaces()
             self?.updateVisibility()
             self?.keepOnActiveSpace()
+        }
+        NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            self?.followOldTV()
         }
         NotificationCenter.default.addObserver(
             forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main
@@ -417,6 +429,7 @@ final class StationController: NSObject, InteractionDelegate, WKNavigationDelega
             // The window server puts a window that has just come on screen on its Spaces a moment later.
             DispatchQueue.main.async { [weak self] in self?.keepOffOwnSpaces() }
             scheduleSelfCaptureOnce()
+            scheduleSelfCapturePairOnce()
         } else {
             // A slide stops where it is and ends as it would have, with no motion; a segment's window goes back
             // into the side.
@@ -518,6 +531,30 @@ final class StationController: NSObject, InteractionDelegate, WKNavigationDelega
         }
     }
 
+    /// With `PIPCAST_SELF_CAPTURE_PAIR` set to a path prefix: once, 1.5 s after the window is first shown, writes two
+    /// of the station's own pictures of its window, controls not shown, 200 ms apart, as `<prefix>-a.png` and
+    /// `<prefix>-b.png`, for checking that Old TV moves.
+    private func scheduleSelfCapturePairOnce() {
+        guard !selfCapturePairScheduled,
+              let prefix = ProcessInfo.processInfo.environment["PIPCAST_SELF_CAPTURE_PAIR"], !prefix.isEmpty else { return }
+        selfCapturePairScheduled = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
+            guard let self else { return }
+            self.writePairCapture(to: "\(prefix)-a.png")
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in
+                self?.writePairCapture(to: "\(prefix)-b.png")
+            }
+        }
+    }
+
+    private func writePairCapture(to path: String) {
+        if writeSelfCapture(of: panel, to: path) {
+            log.write("self-capture \(path)")
+        } else {
+            log.write("error self-capture failed")
+        }
+    }
+
     /// The screen the window is on: while it slides, the one it started on; minimized, the one that holds the tab;
     /// else the one that holds the window's centre. A centre past every screen, as when the window is dropped past
     /// the edge, belongs to the nearest.
@@ -588,13 +625,23 @@ final class StationController: NSObject, InteractionDelegate, WKNavigationDelega
 
     // MARK: Hover and Transparent window
 
-    /// Follows options.json: Transparent window, logged as it changes.
+    /// Follows options.json: Transparent window and Old TV, logged as they change.
     private func readOptions() {
-        let now = SharedOptions.load(from: paths.options).transparent
-        guard now != transparent else { return }
-        transparent = now
-        log.write(now ? "transparent on" : "transparent off")
+        let shared = SharedOptions.load(from: paths.options)
+        if shared.oldTV != oldTV {
+            oldTV = shared.oldTV
+            log.write(oldTV ? "old tv on" : "old tv off")
+            followOldTV()
+        }
+        guard shared.transparent != transparent else { return }
+        transparent = shared.transparent
+        log.write(transparent ? "transparent on" : "transparent off")
         showLook(animated: isShown == true)
+    }
+
+    /// Old TV on the window as it is now, with Reduce Motion as macOS has it.
+    private func followOldTV() {
+        chrome.oldTV.set(on: oldTV, reduceMotion: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion)
     }
 
     /// Whether the window counts as hovered now, from where the pointer is. Never while it is minimized or sliding.

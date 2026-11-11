@@ -17,7 +17,7 @@ import type { Reading } from './core/ledger.ts'
 import { limitsMoved, readLimits } from './core/limits.ts'
 import * as record from './core/model.ts'
 import type { SessionModel } from './core/model.ts'
-import { TRANSPARENT_KEY, needsSharing, parseRequest } from './core/options.ts'
+import { OLD_TV_KEY, TRANSPARENT_KEY, needsSharing, parseRequest } from './core/options.ts'
 import type { OptionSpec } from './core/options.ts'
 import { lookAtShells, lookDue, stillWorking } from './core/shells.ts'
 import { waitsOn } from './core/wake.ts'
@@ -44,6 +44,8 @@ const due = atom({ plugin: 'pipcast', key: 'due' } as const, false)
 let autoTuneIn = false
 // Transparent window, the plugin's option, as this load was given it
 let transparentWindow = false
+// Old TV, the plugin's option, as this load was given it
+let oldTv = false
 // Tuning in by itself runs one at a time, so a session never tunes in twice
 let autoQueue: Promise<void> = Promise.resolve()
 // Where Claude Code keeps this plugin's options, once found this load
@@ -243,11 +245,11 @@ function stopTimers(): void {
   titleTimer = undefined
 }
 
-// Tells the station what Transparent window is now: options.json
-async function shareTransparency($: EngineInterface, transparent: boolean): Promise<void> {
+// Tells the station what Transparent window and Old TV are now: options.json
+async function shareStationOptions($: EngineInterface, values: { transparent: boolean; oldTv: boolean }): Promise<void> {
   try {
     const io = ioFor($)
-    await shareOptions(io, await io.storeHome(), { v: 1, transparent }, await $.session.id())
+    await shareOptions(io, await io.storeHome(), { v: 1, ...values }, await $.session.id())
   } catch (error) {
     failure($, 'telling the station', error)
   }
@@ -255,11 +257,12 @@ async function shareTransparency($: EngineInterface, transparent: boolean): Prom
 
 // As the session tunes in, or reloads while tuned in: this load's value, when
 // options.json is missing, cannot be read or says otherwise
-async function shareOwnTransparency($: EngineInterface): Promise<void> {
+async function shareOwnOptions($: EngineInterface): Promise<void> {
   try {
     const io = ioFor($)
-    if (needsSharing(await readSharedOptions(io, await io.storeHome()), transparentWindow)) {
-      await shareTransparency($, transparentWindow)
+    const own = { transparent: transparentWindow, oldTv }
+    if (needsSharing(await readSharedOptions(io, await io.storeHome()), own)) {
+      await shareStationOptions($, own)
     }
   } catch (error) {
     failure($, 'telling the station', error)
@@ -635,7 +638,7 @@ async function startSession($: EngineInterface): Promise<void> {
       tunedInAt = own.tunedInAt
       await save($)
       // A reload after a change brings the new value; the station follows it
-      await shareOwnTransparency($)
+      await shareOwnOptions($)
       await ensureStation(io, home)
       startTitleChecks($)
     }
@@ -670,7 +673,7 @@ async function tuneInNow($: EngineInterface): Promise<TuneInResult['status']> {
   await checkTitle($)
   await readLimitsNow($)
   // The station reads Transparent window as it starts
-  await shareOwnTransparency($)
+  await shareOwnOptions($)
   const m = model ?? built
   const io = ioFor($)
   let result = { status: 'cannot-start' } as TuneInResult
@@ -813,8 +816,8 @@ async function showOption($: EngineInterface, option: OptionSpec): Promise<strin
 }
 
 // /pipcast <option> on|off: saved with Claude Code's own command, after which
-// every session reloads the mod with the new value. Transparent window also
-// reaches the station at once, through options.json.
+// every session reloads the mod with the new value. Transparent window and Old TV also
+// reach the station at once, through options.json.
 async function setOption($: EngineInterface, option: OptionSpec, enabled: boolean): Promise<string> {
   try {
     const home = await optionsHomeOf($)
@@ -823,7 +826,9 @@ async function setOption($: EngineInterface, option: OptionSpec, enabled: boolea
       return OPTION_REPLY.cannotSave(option.word, enabled)
     }
     if (option.key === TRANSPARENT_KEY) {
-      await shareTransparency($, enabled)
+      await shareStationOptions($, { transparent: enabled, oldTv })
+    } else if (option.key === OLD_TV_KEY) {
+      await shareStationOptions($, { transparent: transparentWindow, oldTv: enabled })
     }
     return optionState(option.word, enabled)
   } catch (error) {
@@ -936,6 +941,7 @@ export function register(on: On, options: PluginOptions) {
   // The plugin's options, fixed for this load: a change reloads the module
   autoTuneIn = options.autoTuneIn === true
   transparentWindow = options.transparentWindow === true
+  oldTv = options.oldTv === true
   optionsAt = null
 
   on('session.start', async ($, e, next) => {

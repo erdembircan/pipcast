@@ -187,11 +187,13 @@ final class InteractionView: NSView {
 }
 
 /// The panel's content: black, rounded, with a hairline edge. From the bottom
-/// up: the web view, the dim, the interaction view, the three buttons.
+/// up: the web view, the old TV, the dim, the interaction view, the three buttons.
 final class ChromeView: NSView {
     static let cornerRadius: CGFloat = 20
 
     let interaction = InteractionView(frame: .zero)
+    /// Old TV, drawn on the web view's layer and the layers above it.
+    let oldTV: OldTVView
     let close = GlassButton(symbol: "xmark", label: "Stop tracking")
     let sound = GlassButton(symbol: "speaker.wave.2.fill", label: "Mute")
     let back = GlassButton(symbol: "pip.exit", label: "Back to Claude")
@@ -200,8 +202,11 @@ final class ChromeView: NSView {
     private let dim = NSView()
 
     init(web: NSView) {
+        oldTV = OldTVView(web: web)
         super.init(frame: NSRect(x: 0, y: 0, width: 320, height: 180))
         wantsLayer = true
+        // Core Image filters on the web view's layer, which Old TV puts there, are drawn only when both layers allow them.
+        layerUsesCoreImageFilters = true
         layer?.backgroundColor = NSColor.black.cgColor
         layer?.cornerRadius = Self.cornerRadius
         layer?.masksToBounds = true
@@ -210,7 +215,12 @@ final class ChromeView: NSView {
         layer?.borderColor = NSColor.white.withAlphaComponent(0.16).cgColor
 
         web.frame = bounds
+        web.wantsLayer = true
+        web.layerUsesCoreImageFilters = true
         addSubview(web)
+
+        oldTV.frame = bounds
+        addSubview(oldTV)
 
         dim.wantsLayer = true
         dim.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.18).cgColor

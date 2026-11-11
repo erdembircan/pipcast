@@ -34,7 +34,7 @@ A session that was already open, or one you resume, goes on air when you press *
 
 ## The window
 
-The window looks and works like macOS's picture in picture for video: a 16:9 window with rounded corners that floats above every app, on every desktop. It never takes the keyboard, and it hides while Claude is in front. Drag it to another corner, resize it from an edge, or tuck it into the side of the screen, and BREAKING NEWS and the hour still bring it out. Hover over it for its controls: **Close** takes every session off the air, **Mute** turns the jingles and the beat off, and **Back to Claude** brings Claude to the front. Sound plays at your Mac's volume.
+The window looks and works like macOS's picture in picture for video: a 16:9 window with rounded corners that floats above every app, on every desktop. It never takes the keyboard, and it hides while Claude is in front. Drag it to another corner, resize it from an edge, or tuck it into the side of the screen, and BREAKING NEWS and the hour still bring it out. Hover over it for its controls: **Close** takes every session off the air, **Mute** turns the jingles and the beat off, and **Back to Claude** brings Claude to the front. Sound plays at your Mac's volume. Turn on **Old TV** in Settings and KLWD plays as a 1990s broadcast taped and played back on an old television.
 
 The window is there while at least one session is on air, and closes a few seconds after the last one goes off.
 
@@ -44,8 +44,9 @@ The window is there while at least one session is on air, and closes a few secon
 | --- | --- | --- | --- |
 | **Tune in every new session** | On | Each new session in the desktop app goes on air as it opens. With it off, every session waits for **TUNE IN** | `/pipcast auto on` or `/pipcast auto off` |
 | **Transparent window** | Off | The window fades to 40% while the pointer is elsewhere, and turns solid again as soon as the pointer is on it | `/pipcast transparency on` or `/pipcast transparency off` |
+| **Old TV** | Off | KLWD plays as a 1990s broadcast taped and played back on an old television: grain, wobbling lines, a torn bottom edge, and now and then the tape slips | `/pipcast tv on` or `/pipcast tv off` |
 
-Run `/pipcast auto` or `/pipcast transparency` on its own to see whether that setting is on.
+Run `/pipcast auto`, `/pipcast transparency` or `/pipcast tv` on its own to see whether that setting is on.
 
 ## What Pipcast runs and reads
 
@@ -67,12 +68,12 @@ What it reads about a session goes only into that session's file, for the statio
 - `git`, only to read (`rev-parse`, `diff-index` and `ls-files`), in the folders where Claude works, and it reads the files there that git doesn't track yet, to count the lines each session changes
 - `ps`, `lsof`, `head` and `tail`, when a turn ends with commands still running in the background, to tell from their processes and the start and end of their output whether they're still at work
 - `find`, to find the folder of the session's transcript when no hook has said where it is
-- `ps`, when you run `/pipcast auto` or `/pipcast transparency`, to find the Claude Code program the session runs on: it lists your processes with their commands, finds among them the `ps` it started by a tag of its own, and keeps only the program that started that `ps`
-- that Claude Code program's `claude plugin list` and `claude plugin configure`, to read and save Pipcast's two settings, when you run `/pipcast auto` or `/pipcast transparency`
+- `ps`, when you run `/pipcast auto`, `/pipcast transparency` or `/pipcast tv`, to find the Claude Code program the session runs on: it lists your processes with their commands, finds among them the `ps` it started by a tag of its own, and keeps only the program that started that `ps`
+- that Claude Code program's `claude plugin list` and `claude plugin configure`, to read and save Pipcast's three settings, when you run `/pipcast auto`, `/pipcast transparency` or `/pipcast tv`
 - `mkdir`, `mv`, `rm` and `chmod`, on its own files
 - the station
 
-**The station** is a small macOS app that comes with Pipcast: the program `station/pipcast-station` in the plugin, built from the Swift source in Pipcast's repository. The mod starts it when the first session goes on air, and it quits a few seconds after the last one goes off. It reads the sessions' files, shows the broadcast in its window, a web page that comes with the plugin, and plays the jingles and the beat in `station/sounds`. It works out the weekly forecast itself, from the usage limits in the sessions' files, and draws STORMTRACKER's globe in its web page with WebGL, on NASA's Blue Marble pictures of the Earth in `station/web/textures`. It checks which app is in front, to hide while Claude is, and where the pointer is, to show the window's controls. Its window never takes the keyboard, so macOS treats the station as an app in the background, and three private macOS switches, looked up as it runs, make up for that: one draws the window's glass controls as an active window's, one lets the station set the pointer for resizing, and one keeps the window off Claude's full-screen desktop. One more private switch, in WebKit and looked up as it runs too, lets its page hand the pictures of the Earth beside it to STORMTRACKER's globe, which WebKit otherwise refuses. For Pipcast's own checks, it has a `snapshot` command that draws a still of its page, and it saves a picture of its own window, and no other, when `PIPCAST_SELF_CAPTURE` is set. It asks for no permission: no screen recording, no accessibility, no automation.
+**The station** is a small macOS app that comes with Pipcast: the program `station/pipcast-station` in the plugin, built from the Swift source in Pipcast's repository. The mod starts it when the first session goes on air, and it quits a few seconds after the last one goes off. It reads the sessions' files, shows the broadcast in its window, a web page that comes with the plugin, and plays the jingles and the beat in `station/sounds`. It works out the weekly forecast itself, from the usage limits in the sessions' files, and draws STORMTRACKER's globe in its web page with WebGL, on NASA's Blue Marble pictures of the Earth in `station/web/textures`. With **Old TV** on, it lays the old television over its window's picture with macOS's own Core Image filters. It checks which app is in front, to hide while Claude is, and where the pointer is, to show the window's controls. Its window never takes the keyboard, so macOS treats the station as an app in the background, and three private macOS switches, looked up as it runs, make up for that: one draws the window's glass controls as an active window's, one lets the station set the pointer for resizing, and one keeps the window off Claude's full-screen desktop. One more private switch, in WebKit and looked up as it runs too, lets its page hand the pictures of the Earth beside it to STORMTRACKER's globe, which WebKit otherwise refuses. For Pipcast's own checks, it has a `snapshot` command that draws a still of its page, and it saves pictures of its own window, and no other, when `PIPCAST_SELF_CAPTURE` or `PIPCAST_SELF_CAPTURE_PAIR` is set. It asks for no permission: no screen recording, no accessibility, no automation.
 
 Neither part makes a network request, and neither downloads or installs anything.
 
@@ -83,11 +84,11 @@ Everything stays on your Mac. Pipcast sends nothing anywhere, and has no account
 It keeps its files in one folder, `~/Library/Application Support/Pipcast`, which only your user can open:
 
 - a file for each session on air, with its project's folder name, its title, its state, what Claude is doing, the question Claude asked or what a permission is for, Claude's last words when a turn ends, the lines and files it changed in each hour, and your account's usage limits. A session deletes its file when it goes off the air or ends. A file left behind by a session that stopped without ending, as when Claude Code is force-quit, is deleted the next time a session goes on air, once it's an hour old.
-- the window's corner and size, whether it's tucked into the side, whether sound is on, when the hour last aired, when the window was last closed, **Transparent window**, and the station's process number and version
+- the window's corner and size, whether it's tucked into the side, whether sound is on, when the hour last aired, when the window was last closed, **Transparent window** and **Old TV**, and the station's process number and version
 - your week's usage, as the share used at times since the week's limit last reset, at most one reading each hour, for the weekly forecast, and when the last storm warning aired. The readings start over when the week resets.
 - the station's own log of what its window did, for fixing problems, cut back at 1 MB
 
-Claude Code keeps Pipcast's two settings with your other plugins' options.
+Claude Code keeps Pipcast's three settings with your other plugins' options.
 
 Uninstalling Pipcast leaves that folder in place. To remove everything Pipcast kept, delete `~/Library/Application Support/Pipcast`.
 

@@ -245,7 +245,7 @@ export function parseSharedOptions(value: unknown): SharedOptions | null {
   if (!isObject(value) || value.v !== 1 || typeof value.transparent !== 'boolean') {
     return null
   }
-  return { v: 1, transparent: value.transparent }
+  return { v: 1, transparent: value.transparent, oldTv: value.oldTv === true }
 }
 
 // weather.json, or null when it is missing or not one. The station sends

@@ -199,4 +199,23 @@ import Testing
         try #"{"v":1,"transparent":false}"#.write(toFile: path, atomically: true, encoding: .utf8)
         #expect(!SharedOptions.load(from: path).transparent)
     }
+
+    @Test func readsOldTVAsOffUnlessItIsABooleanTrue() throws {
+        let folder = temporaryFolder()
+        defer { try? FileManager.default.removeItem(atPath: folder) }
+        let path = "\(folder)/options.json"
+        try #"{"v":1,"transparent":true,"oldTv":true}"#.write(toFile: path, atomically: true, encoding: .utf8)
+        #expect(SharedOptions.load(from: path) == SharedOptions(transparent: true, oldTV: true))
+        try #"{"v":1,"transparent":false,"oldTv":false}"#.write(toFile: path, atomically: true, encoding: .utf8)
+        #expect(!SharedOptions.load(from: path).oldTV)
+        // A file from an older mod has no oldTv
+        try #"{"v":1,"transparent":true}"#.write(toFile: path, atomically: true, encoding: .utf8)
+        #expect(SharedOptions.load(from: path) == SharedOptions(transparent: true, oldTV: false))
+        for text in [#"{"v":1,"transparent":true,"oldTv":"yes"}"#, #"{"v":1,"transparent":true,"oldTv":1}"#, #"{"v":1,"transparent":true,"oldTv":null}"#] {
+            try text.write(toFile: path, atomically: true, encoding: .utf8)
+            let options = SharedOptions.load(from: path)
+            #expect(!options.oldTV, "\(text)")
+            #expect(options.transparent, "\(text)")
+        }
+    }
 }

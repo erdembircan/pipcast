@@ -341,8 +341,8 @@ describe('the store home', () => {
 describe('the options the station follows', () => {
   it('writes options.json through a temporary file named after the writer', async () => {
     const state = fake()
-    await shareOptions(state.io, HOME, { v: 1, transparent: true }, 'session-a')
-    expect(JSON.parse(state.files.get(paths.options) ?? '')).toEqual({ v: 1, transparent: true })
+    await shareOptions(state.io, HOME, { v: 1, transparent: true, oldTv: true }, 'session-a')
+    expect(JSON.parse(state.files.get(paths.options) ?? '')).toEqual({ v: 1, transparent: true, oldTv: true })
     expect(state.temps).toEqual([`${paths.options}.session-a.tmp`])
   })
 
@@ -352,7 +352,9 @@ describe('the options the station follows', () => {
     state.files.set(paths.options, 'not json')
     expect(await readSharedOptions(state.io, HOME)).toBeNull()
     state.files.set(paths.options, JSON.stringify({ v: 1, transparent: false }))
-    expect(await readSharedOptions(state.io, HOME)).toEqual({ v: 1, transparent: false })
+    expect(await readSharedOptions(state.io, HOME)).toEqual({ v: 1, transparent: false, oldTv: false })
+    state.files.set(paths.options, JSON.stringify({ v: 1, transparent: false, oldTv: true }))
+    expect(await readSharedOptions(state.io, HOME)).toEqual({ v: 1, transparent: false, oldTv: true })
   })
 })
 

@@ -85,6 +85,9 @@ const AUTO_OFF = { settings: { autoTuneIn: false } } as const
 // Transparent window, on
 const SEE_THROUGH = { settings: { transparentWindow: true } } as const
 
+// Old TV, on
+const OLD_TV = { settings: { oldTv: true } } as const
+
 // The engine starting a session, as classic.SessionStart says where it came from
 const started = ($: Engine, source: 'startup' | 'resume' | 'clear' | 'compact' | 'fork') =>
   $.classic.SessionStart({ source, ...located } as never)
@@ -1325,13 +1328,46 @@ scenario('/pipcast transparency on and off save the setting and tell the station
   expect((await option($, 'transparency on')).text).toBe(optionState('transparency', true))
   expect(w.saved.transparentWindow).toBe('true')
   expect(w.engineCalls.find((call) => call.argv.includes('--values-stdin'))?.stdin).toBe(JSON.stringify({ transparentWindow: 'true' }))
-  expect(w.shared()).toEqual({ v: 1, transparent: true })
+  expect(w.shared()).toEqual({ v: 1, transparent: true, oldTv: false })
   expect((await option($, 'transparency off')).text).toBe(optionState('transparency', false))
   expect(w.saved.transparentWindow).toBe('false')
-  expect(w.shared()).toEqual({ v: 1, transparent: false })
+  expect(w.shared()).toEqual({ v: 1, transparent: false, oldTv: false })
   // Neither tunes the session in or out
   expect(w.record()).toBeNull()
   expect(w.launched.length).toBe(0)
+})
+
+scenario('/pipcast tv says what Old TV is set to', {}, async (w, $) => {
+  expect((await option($, 'tv')).text).toBe(optionState('tv', false))
+  w.saved.oldTv = 'true'
+  expect((await option($, 'tv')).text).toBe(optionState('tv', true))
+  // Reading it tells the station nothing
+  expect(w.shared()).toBeNull()
+})
+
+scenario('/pipcast tv on and off save the setting and tell the station at once, tuned in or not', {}, async (w, $) => {
+  expect((await option($, 'tv on')).text).toBe(optionState('tv', true))
+  expect(w.saved.oldTv).toBe('true')
+  expect(w.engineCalls.find((call) => call.argv.includes('--values-stdin'))?.stdin).toBe(JSON.stringify({ oldTv: 'true' }))
+  expect(w.shared()).toEqual({ v: 1, transparent: false, oldTv: true })
+  expect((await option($, 'tv off')).text).toBe(optionState('tv', false))
+  expect(w.saved.oldTv).toBe('false')
+  expect(w.shared()).toEqual({ v: 1, transparent: false, oldTv: false })
+  // Neither tunes the session in or out
+  expect(w.record()).toBeNull()
+  expect(w.launched.length).toBe(0)
+})
+
+scenario('each of the two options the station follows keeps the other as the session has it', { settings: { transparentWindow: true, oldTv: true } }, async (w, $) => {
+  await option($, 'tv off')
+  expect(w.shared()).toEqual({ v: 1, transparent: true, oldTv: false })
+  await option($, 'transparency off')
+  expect(w.shared()).toEqual({ v: 1, transparent: false, oldTv: true })
+})
+
+scenario('a save Claude Code refuses for Old TV tells the station nothing', { configureFails: true }, async (w, $) => {
+  expect((await option($, 'tv on')).text).toBe(OPTION_REPLY.cannotSave('tv', true))
+  expect(w.shared()).toBeNull()
 })
 
 scenario('options.json goes through a temporary file named after the session', {}, async (w, $) => {
@@ -1353,7 +1389,7 @@ scenario('/pipcast auto on tells the station nothing', {}, async (w, $) => {
 
 scenario('tuning in tells the station Transparent window before the station starts', SEE_THROUGH, async (w, $) => {
   await tuneIn($)
-  expect(w.shared()).toEqual({ v: 1, transparent: true })
+  expect(w.shared()).toEqual({ v: 1, transparent: true, oldTv: false })
   const order = w.ran.flatMap((argv) => (argv[0] === STATION ? ['station'] : argv[0] === '/bin/mv' && argv.includes(OPTIONS_FILE) ? ['options'] : []))
   expect(order).toEqual(['options', 'station'])
 })
@@ -1362,24 +1398,37 @@ scenario('tuning in leaves options.json alone when it already agrees', SEE_THROU
   w.files.set(OPTIONS_FILE, JSON.stringify({ v: 1, transparent: true }))
   await tuneIn($)
   expect(w.writes.filter((path) => path.startsWith(OPTIONS_FILE))).toEqual([])
-  expect(w.shared()).toEqual({ v: 1, transparent: true })
+  expect(w.shared()).toEqual({ v: 1, transparent: true, oldTv: false })
 })
 
 scenario('tuning in puts its own value over an options.json that says otherwise or cannot be read', {}, async (w, $) => {
   w.files.set(OPTIONS_FILE, JSON.stringify({ v: 1, transparent: true }))
   await tuneIn($)
-  expect(w.shared()).toEqual({ v: 1, transparent: false })
+  expect(w.shared()).toEqual({ v: 1, transparent: false, oldTv: false })
   expect((await tuneIn($)).text).toBe(REPLY.tunedOut)
   w.files.set(OPTIONS_FILE, 'not json')
   await tuneIn($)
-  expect(w.shared()).toEqual({ v: 1, transparent: false })
+  expect(w.shared()).toEqual({ v: 1, transparent: false, oldTv: false })
+})
+
+scenario('tuning in tells the station Old TV before the station starts', OLD_TV, async (w, $) => {
+  await tuneIn($)
+  expect(w.shared()).toEqual({ v: 1, transparent: false, oldTv: true })
+  const order = w.ran.flatMap((argv) => (argv[0] === STATION ? ['station'] : argv[0] === '/bin/mv' && argv.includes(OPTIONS_FILE) ? ['options'] : []))
+  expect(order).toEqual(['options', 'station'])
+})
+
+scenario('tuning in puts its own Old TV over an options.json from an older mod, which has none', OLD_TV, async (w, $) => {
+  w.files.set(OPTIONS_FILE, JSON.stringify({ v: 1, transparent: false }))
+  await tuneIn($)
+  expect(w.shared()).toEqual({ v: 1, transparent: false, oldTv: true })
 })
 
 scenario('a session that tunes in by itself tells the station too', SEE_THROUGH, async (w, $) => {
   await started($, 'startup')
   await shown($)
   expect(w.record()?.id).toBe(ID)
-  expect(w.shared()).toEqual({ v: 1, transparent: true })
+  expect(w.shared()).toEqual({ v: 1, transparent: true, oldTv: false })
 })
 
 scenario('a reload while tuned in tells the station the value it brings', SEE_THROUGH, async (w, $) => {
@@ -1388,7 +1437,7 @@ scenario('a reload while tuned in tells the station the value it brings', SEE_TH
   w.files.set(OPTIONS_FILE, JSON.stringify({ v: 1, transparent: false }))
   // The module starts over; $.state says tuned in
   await $.session.start(START)
-  expect(w.shared()).toEqual({ v: 1, transparent: true })
+  expect(w.shared()).toEqual({ v: 1, transparent: true, oldTv: false })
 })
 
 scenario('a session that is not tuned in tells the station nothing as it loads and works', SEE_THROUGH, async (w, $) => {

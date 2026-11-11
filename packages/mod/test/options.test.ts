@@ -4,6 +4,7 @@ import { OPTIONS, installedId, needsSharing, parseRequest, readBoolean, wasSaved
 
 const auto = OPTIONS.find((option) => option.word === 'auto')
 const transparency = OPTIONS.find((option) => option.word === 'transparency')
+const tv = OPTIONS.find((option) => option.word === 'tv')
 
 describe('parseRequest', () => {
   it('reads /pipcast on its own as tuning in or out', () => {
@@ -21,6 +22,13 @@ describe('parseRequest', () => {
     expect(parseRequest('transparency')).toEqual({ kind: 'show', option: transparency })
     expect(parseRequest('Transparency ON')).toEqual({ kind: 'set', option: transparency, enabled: true })
     expect(parseRequest('transparency off')).toEqual({ kind: 'set', option: transparency, enabled: false })
+  })
+
+  it('reads tv the same way', () => {
+    expect(parseRequest('tv')).toEqual({ kind: 'show', option: tv })
+    expect(parseRequest('TV On')).toEqual({ kind: 'set', option: tv, enabled: true })
+    expect(parseRequest('tv off')).toEqual({ kind: 'set', option: tv, enabled: false })
+    expect(tv?.key).toBe('oldTv')
   })
 
   it('reads the words in any case and spacing', () => {
@@ -69,9 +77,13 @@ describe('what claude plugin configure answers', () => {
 
 describe('needsSharing', () => {
   it('writes options.json when it is missing or says otherwise, and leaves it when it agrees', () => {
-    expect(needsSharing(null, false)).toBe(true)
-    expect(needsSharing({ v: 1, transparent: true }, false)).toBe(true)
-    expect(needsSharing({ v: 1, transparent: false }, false)).toBe(false)
-    expect(needsSharing({ v: 1, transparent: true }, true)).toBe(false)
+    const wanted = (transparent: boolean, oldTv: boolean) => ({ transparent, oldTv })
+    expect(needsSharing(null, wanted(false, false))).toBe(true)
+    expect(needsSharing({ v: 1, transparent: true, oldTv: false }, wanted(false, false))).toBe(true)
+    expect(needsSharing({ v: 1, transparent: false, oldTv: false }, wanted(false, false))).toBe(false)
+    expect(needsSharing({ v: 1, transparent: true, oldTv: false }, wanted(true, false))).toBe(false)
+    expect(needsSharing({ v: 1, transparent: false, oldTv: false }, wanted(false, true))).toBe(true)
+    expect(needsSharing({ v: 1, transparent: false, oldTv: true }, wanted(false, true))).toBe(false)
+    expect(needsSharing({ v: 1, transparent: true, oldTv: true }, wanted(true, false))).toBe(true)
   })
 })
