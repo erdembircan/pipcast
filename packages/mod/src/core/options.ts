@@ -14,7 +14,7 @@ export interface OptionSpec {
 export const OPTIONS: readonly OptionSpec[] = [
   { word: 'auto', key: 'autoTuneIn' },
   { word: 'transparency', key: 'transparentWindow' },
-  { word: 'tv', key: 'oldTv' },
+  { word: 'oldtv', key: 'oldTv' },
 ]
 
 // The options the station follows, through options.json

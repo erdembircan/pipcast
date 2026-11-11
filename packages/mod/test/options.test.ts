@@ -4,7 +4,7 @@ import { OPTIONS, installedId, mergedOptions, needsSharing, parseRequest, readBo
 
 const auto = OPTIONS.find((option) => option.word === 'auto')
 const transparency = OPTIONS.find((option) => option.word === 'transparency')
-const tv = OPTIONS.find((option) => option.word === 'tv')
+const oldtv = OPTIONS.find((option) => option.word === 'oldtv')
 
 describe('parseRequest', () => {
   it('reads /pipcast on its own as tuning in or out', () => {
@@ -24,11 +24,11 @@ describe('parseRequest', () => {
     expect(parseRequest('transparency off')).toEqual({ kind: 'set', option: transparency, enabled: false })
   })
 
-  it('reads tv the same way', () => {
-    expect(parseRequest('tv')).toEqual({ kind: 'show', option: tv })
-    expect(parseRequest('TV On')).toEqual({ kind: 'set', option: tv, enabled: true })
-    expect(parseRequest('tv off')).toEqual({ kind: 'set', option: tv, enabled: false })
-    expect(tv?.key).toBe('oldTv')
+  it('reads oldtv the same way', () => {
+    expect(parseRequest('oldtv')).toEqual({ kind: 'show', option: oldtv })
+    expect(parseRequest('OldTV On')).toEqual({ kind: 'set', option: oldtv, enabled: true })
+    expect(parseRequest('oldtv off')).toEqual({ kind: 'set', option: oldtv, enabled: false })
+    expect(oldtv?.key).toBe('oldTv')
   })
 
   it('reads the words in any case and spacing', () => {

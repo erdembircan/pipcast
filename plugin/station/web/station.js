@@ -149,7 +149,7 @@
       on: "KLWD fades to 40% while the pointer is elsewhere, so what is under it shows through.",
       off: "KLWD stays solid."
     },
-    tv: {
+    oldtv: {
       title: "Old TV",
       on: "KLWD plays as a 1990s broadcast taped and played back on an old television.",
       off: "KLWD comes through sharp and clean."

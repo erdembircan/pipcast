@@ -1337,20 +1337,20 @@ scenario('/pipcast transparency on and off save the setting and tell the station
   expect(w.launched.length).toBe(0)
 })
 
-scenario('/pipcast tv says what Old TV is set to', {}, async (w, $) => {
-  expect((await option($, 'tv')).text).toBe(optionState('tv', false))
+scenario('/pipcast oldtv says what Old TV is set to', {}, async (w, $) => {
+  expect((await option($, 'oldtv')).text).toBe(optionState('oldtv', false))
   w.saved.oldTv = 'true'
-  expect((await option($, 'tv')).text).toBe(optionState('tv', true))
+  expect((await option($, 'oldtv')).text).toBe(optionState('oldtv', true))
   // Reading it tells the station nothing
   expect(w.shared()).toBeNull()
 })
 
-scenario('/pipcast tv on and off save the setting and tell the station at once, tuned in or not', {}, async (w, $) => {
-  expect((await option($, 'tv on')).text).toBe(optionState('tv', true))
+scenario('/pipcast oldtv on and off save the setting and tell the station at once, tuned in or not', {}, async (w, $) => {
+  expect((await option($, 'oldtv on')).text).toBe(optionState('oldtv', true))
   expect(w.saved.oldTv).toBe('true')
   expect(w.engineCalls.find((call) => call.argv.includes('--values-stdin'))?.stdin).toBe(JSON.stringify({ oldTv: 'true' }))
   expect(w.shared()).toEqual({ v: 1, transparent: false, oldTv: true })
-  expect((await option($, 'tv off')).text).toBe(optionState('tv', false))
+  expect((await option($, 'oldtv off')).text).toBe(optionState('oldtv', false))
   expect(w.saved.oldTv).toBe('false')
   expect(w.shared()).toEqual({ v: 1, transparent: false, oldTv: false })
   // Neither tunes the session in or out
@@ -1359,16 +1359,16 @@ scenario('/pipcast tv on and off save the setting and tell the station at once, 
 })
 
 scenario('with no options.json, each of the two options the station follows keeps the other as the session has it', { settings: { transparentWindow: true, oldTv: true } }, async (w, $) => {
-  await option($, 'tv off')
+  await option($, 'oldtv off')
   expect(w.shared()).toEqual({ v: 1, transparent: true, oldTv: false })
 })
 
 scenario('a change made after another in the same load keeps the first, which the load does not know of yet', {}, async (w, $) => {
-  await option($, 'tv on')
+  await option($, 'oldtv on')
   expect(w.shared()).toEqual({ v: 1, transparent: false, oldTv: true })
   await option($, 'transparency on')
   expect(w.shared()).toEqual({ v: 1, transparent: true, oldTv: true })
-  await option($, 'tv off')
+  await option($, 'oldtv off')
   expect(w.shared()).toEqual({ v: 1, transparent: true, oldTv: false })
   await option($, 'transparency off')
   expect(w.shared()).toEqual({ v: 1, transparent: false, oldTv: false })
@@ -1376,18 +1376,18 @@ scenario('a change made after another in the same load keeps the first, which th
 
 scenario('a change keeps the other option as options.json holds it, over what the load has', { settings: { transparentWindow: true } }, async (w, $) => {
   w.files.set(OPTIONS_FILE, JSON.stringify({ v: 1, transparent: false, oldTv: true }))
-  await option($, 'tv off')
+  await option($, 'oldtv off')
   expect(w.shared()).toEqual({ v: 1, transparent: false, oldTv: false })
 })
 
 scenario('with options.json unreadable, a change falls back to the load\'s own values', { settings: { transparentWindow: true } }, async (w, $) => {
   w.files.set(OPTIONS_FILE, 'not json')
-  await option($, 'tv on')
+  await option($, 'oldtv on')
   expect(w.shared()).toEqual({ v: 1, transparent: true, oldTv: true })
 })
 
 scenario('a save Claude Code refuses for Old TV tells the station nothing', { configureFails: true }, async (w, $) => {
-  expect((await option($, 'tv on')).text).toBe(OPTION_REPLY.cannotSave('tv', true))
+  expect((await option($, 'oldtv on')).text).toBe(OPTION_REPLY.cannotSave('oldtv', true))
   expect(w.shared()).toBeNull()
 })
 

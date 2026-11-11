@@ -44,7 +44,7 @@ var OPTION_WORDS = {
     on: "KLWD fades to 40% while the pointer is elsewhere, so what is under it shows through.",
     off: "KLWD stays solid."
   },
-  tv: {
+  oldtv: {
     title: "Old TV",
     on: "KLWD plays as a 1990s broadcast taped and played back on an old television.",
     off: "KLWD comes through sharp and clean."
@@ -1214,7 +1214,7 @@ function fileTitled(m, title) {
 var OPTIONS = [
   { word: "auto", key: "autoTuneIn" },
   { word: "transparency", key: "transparentWindow" },
-  { word: "tv", key: "oldTv" }
+  { word: "oldtv", key: "oldTv" }
 ];
 var TRANSPARENT_KEY = "transparentWindow";
 var OLD_TV_KEY = "oldTv";

@@ -38,6 +38,6 @@ describe('the options /pipcast sets', () => {
   })
 
   it('show in the slash menu after /pipcast', () => {
-    expect(COMMAND_ARGUMENT_HINT).toBe('[auto|transparency|tv on|off]')
+    expect(COMMAND_ARGUMENT_HINT).toBe('[auto|transparency|oldtv on|off]')
   })
 })

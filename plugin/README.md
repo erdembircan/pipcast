@@ -44,9 +44,9 @@ The window is there while at least one session is on air, and closes a few secon
 | --- | --- | --- | --- |
 | **Tune in every new session** | On | Each new session in the desktop app goes on air as it opens. With it off, every session waits for **TUNE IN** | `/pipcast auto on` or `/pipcast auto off` |
 | **Transparent window** | Off | The window fades to 40% while the pointer is elsewhere, and turns solid again as soon as the pointer is on it | `/pipcast transparency on` or `/pipcast transparency off` |
-| **Old TV** | Off | KLWD plays as a 1990s broadcast taped and played back on an old television: grain, wobbling lines, a torn bottom edge, and now and then the tape slips | `/pipcast tv on` or `/pipcast tv off` |
+| **Old TV** | Off | KLWD plays as a 1990s broadcast taped and played back on an old television: grain, wobbling lines, a torn bottom edge, and now and then the tape slips | `/pipcast oldtv on` or `/pipcast oldtv off` |
 
-Run `/pipcast auto`, `/pipcast transparency` or `/pipcast tv` on its own to see whether that setting is on.
+Run `/pipcast auto`, `/pipcast transparency` or `/pipcast oldtv` on its own to see whether that setting is on.
 
 ## What Pipcast runs and reads
 
@@ -68,8 +68,8 @@ What it reads about a session goes only into that session's file, for the statio
 - `git`, only to read (`rev-parse`, `diff-index` and `ls-files`), in the folders where Claude works, and it reads the files there that git doesn't track yet, to count the lines each session changes
 - `ps`, `lsof`, `head` and `tail`, when a turn ends with commands still running in the background, to tell from their processes and the start and end of their output whether they're still at work
 - `find`, to find the folder of the session's transcript when no hook has said where it is
-- `ps`, when you run `/pipcast auto`, `/pipcast transparency` or `/pipcast tv`, to find the Claude Code program the session runs on: it lists your processes with their commands, finds among them the `ps` it started by a tag of its own, and keeps only the program that started that `ps`
-- that Claude Code program's `claude plugin list` and `claude plugin configure`, to read and save Pipcast's three settings, when you run `/pipcast auto`, `/pipcast transparency` or `/pipcast tv`
+- `ps`, when you run `/pipcast auto`, `/pipcast transparency` or `/pipcast oldtv`, to find the Claude Code program the session runs on: it lists your processes with their commands, finds among them the `ps` it started by a tag of its own, and keeps only the program that started that `ps`
+- that Claude Code program's `claude plugin list` and `claude plugin configure`, to read and save Pipcast's three settings, when you run `/pipcast auto`, `/pipcast transparency` or `/pipcast oldtv`
 - `mkdir`, `mv`, `rm` and `chmod`, on its own files
 - the station
 

@@ -170,11 +170,11 @@ describe('the weekly forecast', () => {
 
 describe('the options', () => {
   it('shows every option word after /pipcast', () => {
-    expect(COMMAND_ARGUMENT_HINT).toBe('[auto|transparency|tv on|off]')
+    expect(COMMAND_ARGUMENT_HINT).toBe('[auto|transparency|oldtv on|off]')
   })
 
   it('says what Old TV is set to', () => {
-    expect(optionState('tv', true)).toBe('Old TV is on. KLWD plays as a 1990s broadcast taped and played back on an old television.')
-    expect(optionState('tv', false)).toBe('Old TV is off. KLWD comes through sharp and clean.')
+    expect(optionState('oldtv', true)).toBe('Old TV is on. KLWD plays as a 1990s broadcast taped and played back on an old television.')
+    expect(optionState('oldtv', false)).toBe('Old TV is off. KLWD comes through sharp and clean.')
   })
 })

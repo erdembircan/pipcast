@@ -8,8 +8,8 @@
 # without CLAUDE_CODE_EXECPATH as a desktop session is, /pipcast auto has to say
 # that Tune in every new session is on while nothing is saved. Then it runs
 # /pipcast auto off and /pipcast auto on, then /pipcast transparency,
-# /pipcast transparency on and /pipcast transparency off, then /pipcast tv,
-# /pipcast tv on and /pipcast tv off: each value has to land in the throwaway
+# /pipcast transparency on and /pipcast transparency off, then /pipcast oldtv,
+# /pipcast oldtv on and /pipcast oldtv off: each value has to land in the throwaway
 # configuration's plugin options, and Transparent window's and Old TV's in the
 # throwaway store's options.json as well. No model call is made. The temporary folder is removed on every exit.
 set -uo pipefail
@@ -81,7 +81,7 @@ else
   check "the installed copy holds no TypeScript source, test or tsconfig.json" test -z "$sources"
 fi
 
-step "/pipcast auto, /pipcast transparency and /pipcast tv, in a headless session on the installed copy"
+step "/pipcast auto, /pipcast transparency and /pipcast oldtv, in a headless session on the installed copy"
 store="$config/pipcast-home"
 out="$config/engine-out.jsonl"
 # What the engine had written when /pipcast auto, the first prompt, was answered
@@ -97,8 +97,8 @@ auto_on="$(state auto on)"
 auto_off="$(state auto off)"
 transparency_on="$(state transparency on)"
 transparency_off="$(state transparency off)"
-tv_on="$(state tv on)"
-tv_off="$(state tv off)"
+tv_on="$(state oldtv on)"
+tv_off="$(state oldtv off)"
 
 say() { # one prompt, as the session reads it
   printf '{"type":"user","message":{"role":"user","content":"%s"}}\n' "$1"
@@ -156,12 +156,12 @@ shared_tv() { # what the throwaway store's options.json tells the station of Old
   sleep 8
   echo "transparency-after-off $(saved transparentWindow) $(shared)" >>"$notes"
   echo "before-tv $(saved oldTv) $(shared_tv)" >>"$notes"
-  say "/pipcast tv"
+  say "/pipcast oldtv"
   sleep 6
-  say "/pipcast tv on"
+  say "/pipcast oldtv on"
   sleep 8
   echo "tv-after-on $(saved oldTv) $(shared_tv) $(shared)" >>"$notes"
-  say "/pipcast tv off"
+  say "/pipcast oldtv off"
   sleep 8
   echo "tv-after-off $(saved oldTv) $(shared_tv) $(shared)" >>"$notes"
 ) | env -u CLAUDE_CODE_EXECPATH CLAUDE_CONFIG_DIR="$config" PIPCAST_HOME="$store" PIPCAST_STATION_BIN=/usr/bin/false \
@@ -185,11 +185,11 @@ check "/pipcast transparency said the setting is off" grep -qF -- "$transparency
 check "/pipcast transparency on saved it on and told the station" grep -qx "transparency-after-on true on" "$notes"
 check "/pipcast transparency on answered that it is on" grep -qF -- "$transparency_on" "$out"
 check "/pipcast transparency off saved it off and told the station" grep -qx "transparency-after-off false off" "$notes"
-check "nothing was saved for Old TV, and options.json had it off, before /pipcast tv on" grep -qx "before-tv unset off" "$notes"
-check "/pipcast tv said the setting is off" grep -qF -- "$tv_off" "$out"
-check "/pipcast tv on saved it on and told the station, and left Transparent window off" grep -qx "tv-after-on true on off" "$notes"
-check "/pipcast tv on answered that it is on" grep -qF -- "$tv_on" "$out"
-check "/pipcast tv off saved it off and told the station" grep -qx "tv-after-off false off off" "$notes"
+check "nothing was saved for Old TV, and options.json had it off, before /pipcast oldtv on" grep -qx "before-tv unset off" "$notes"
+check "/pipcast oldtv said the setting is off" grep -qF -- "$tv_off" "$out"
+check "/pipcast oldtv on saved it on and told the station, and left Transparent window off" grep -qx "tv-after-on true on off" "$notes"
+check "/pipcast oldtv on answered that it is on" grep -qF -- "$tv_on" "$out"
+check "/pipcast oldtv off saved it off and told the station" grep -qx "tv-after-off false off off" "$notes"
 
 if [[ "$failed" -eq 0 ]]; then
   echo "verify-install: all checks passed"
