@@ -61,7 +61,7 @@ export interface PipNewsHandle {
   LowerThird: ComponentType<LowerThirdProps>
   Stinger: ComponentType<StingerProps>
   Ident: ComponentType<IdentProps>
-  SessionBoard: ComponentType<SessionBoardProps>
+  SessionBoard: ComponentType<SessionBoardProps & { forecast?: WeatherScene }>
   StatePill: ComponentType<StatePillProps>
   NewsDesk: ComponentType<NewsDeskProps>
   OTSBox: ComponentType<OTSBoxProps>
@@ -72,7 +72,17 @@ export interface PipNewsHandle {
   PromptSketch: ComponentType<PromptSketchProps>
   samples: Record<string, Scene>
   crawlSpeed: number
+  // KLWD WEATHER's parts, which index.d.ts doesn't type yet
+  WeatherIcon: ComponentType<{ sky: Sky; size?: number; className?: string; bolt?: string }>
+  WeatherNow: ComponentType<{ weather?: WeatherScene }>
+  WeatherDays: ComponentType<{ weather?: WeatherScene }>
+  AlertOpen: ComponentType<{ outro?: boolean; progress?: number; animate?: boolean }>
+  stormScene: unknown
+  weatherIconMarkup: (sky: Sky, uid: number) => string
+  WEATHER: { now: string; days: string; tracker: string; week: string; arrival: string; start: string; out: string; alert: string[] }
 }
+
+import type { Sky, WeatherScene } from '../../../design/components/index.d.ts'
 
 const handle = (window as unknown as { PipNews?: PipNewsHandle }).PipNews
 

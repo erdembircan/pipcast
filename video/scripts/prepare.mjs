@@ -5,7 +5,7 @@
 // KLWD's beat when its loops or where it plays changed. With --picture it
 // stops before the sound, for the README's stills (scripts/readme.mjs).
 import { createHash } from 'node:crypto'
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -40,6 +40,20 @@ if (!existsSync(iconOut) || readFileSync(iconOut, 'utf8') !== iconBody) {
   console.log('src/generated/icon-layers.ts')
 }
 
+// STORMTRACKER's four pictures of the earth, which its globe loads by name
+// from a folder: served from public/textures
+const textures = join(root, 'design/textures')
+const texturesOut = join(video, 'public/textures')
+mkdirSync(texturesOut, { recursive: true })
+for (const name of readdirSync(textures).filter((file) => file.endsWith('.jpg'))) {
+  const from = join(textures, name)
+  const to = join(texturesOut, name)
+  if (!existsSync(to) || statSync(to).size !== statSync(from).size) {
+    copyFileSync(from, to)
+    console.log(`public/textures/${name}`)
+  }
+}
+
 // With --picture, only what the pictures need: the README's stills have no sound
 if (process.argv.includes('--picture')) {
   process.exit(0)
@@ -64,6 +78,20 @@ if (existsSync(score)) {
   }
 }
 
+// The promo's storm and score (scripts/music/storm.js through score.js's
+// synth): only when either, the renderer or the promo's running order changed
+const stormHash = createHash('sha256')
+for (const file of ['scripts/music/score.js', 'scripts/music/storm.js', 'scripts/render-audio.mjs', 'src/promo/timeline.ts']) {
+  stormHash.update(readFileSync(join(video, file)))
+}
+const stormSum = stormHash.digest('hex')
+const stormStamp = join(video, 'public/audio/storm.SOURCE')
+if (!existsSync(join(video, 'public/audio/storm.wav')) || !existsSync(stormStamp) || readFileSync(stormStamp, 'utf8').trim() !== stormSum) {
+  const { renderStorm } = await import('./render-audio.mjs')
+  await renderStorm()
+  writeFileSync(stormStamp, `${stormSum}\n`)
+}
+
 // KLWD's beat, laid where the station plays it: only when the shipped loops,
 // the contract's mix, how it is laid or the running order changed
 const beatHash = createHash('sha256')
@@ -83,4 +111,23 @@ if (!existsSync(join(video, 'public/audio/beat.wav')) || !existsSync(beatStamp) 
   renderBeat()
   writeFileSync(beatStamp, `${beatSum}\n`)
   console.log('public/audio/beat.wav')
+}
+
+// And the promo's, from its own running order
+const promoBeatHash = createHash('sha256')
+for (const file of [
+  join(root, 'plugin/station/sounds/beat-minor.caf'),
+  join(root, 'packages/contract/src/constants.ts'),
+  join(video, 'scripts/render-beat.mjs'),
+  join(video, 'src/promo/timeline.ts'),
+]) {
+  promoBeatHash.update(readFileSync(file))
+}
+const promoBeatSum = promoBeatHash.digest('hex')
+const promoBeatStamp = join(video, 'public/audio/promo-beat.SOURCE')
+if (!existsSync(join(video, 'public/audio/promo-beat.wav')) || !existsSync(promoBeatStamp) || readFileSync(promoBeatStamp, 'utf8').trim() !== promoBeatSum) {
+  const { renderPromoBeat } = await import('./render-beat.mjs')
+  renderPromoBeat()
+  writeFileSync(promoBeatStamp, `${promoBeatSum}\n`)
+  console.log('public/audio/promo-beat.wav')
 }

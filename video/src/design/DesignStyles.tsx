@@ -14,6 +14,10 @@ const driven = `
 .rv-air .pn-clawd { will-change: auto; }
 .rv-air .pn-signal > i:nth-child(1) { transform: scale(var(--rv-wave-1-s, 1)); opacity: var(--rv-wave-1-o, 0); }
 .rv-air .pn-signal > i:nth-child(2) { transform: scale(var(--rv-wave-2-s, 1)); opacity: var(--rv-wave-2-o, 0); }
+.rv-gold .pn-stinger-face { background-image: linear-gradient(180deg, var(--gold-hi, #ffe08a) 0%, var(--gold, #f2b630) 46%, var(--gold-lo, #b97d0c) 52%, var(--gold, #f2b630) 74%, var(--gold-hi, #ffe08a) 100%); }
+.rv-gold .pn-stinger-ink { -webkit-text-stroke-color: rgba(42, 24, 0, 0.7); }
+.rv-st3 .pn-wx-st3-label, .rv-st3 .pn-wx-st3-toa { transition: none; }
+.rv-st3 .pn-wx-st3-flare, .rv-st3 .pn-wx-st3-out.pn-wx-on > span, .rv-st3 .pn-wx-st3-toa > span.pn-wx-st3-hit.pn-wx-on { animation: none; }
 .rv-air .pn-signal > i:nth-child(3) { transform: scale(var(--rv-wave-3-s, 1)); opacity: var(--rv-wave-3-o, 0); }
 `
 
