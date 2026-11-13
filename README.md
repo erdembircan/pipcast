@@ -10,8 +10,6 @@ What plays in the window is KLWD, a local TV news channel for your sessions, sty
 
 <p align="center"><a href="https://www.youtube.com/watch?v=WZc3zm6nB9g&list=PLCbk0boCLtOs"><img src="assets/youtube-thumbnail-play.jpg" width="716" alt="Watch Pipcast's videos on YouTube"></a></p>
 
-<p align="center"><img src="assets/screenshots/breaking.png" width="716" alt="KLWD on air: Clawd at the anchor desk with a READY FOR REVIEW story"></p>
-
 ## Requirements
 
 - A Mac with Apple silicon, on macOS 14 or later. The window's controls use Liquid Glass on macOS 26 and later.
