@@ -111,8 +111,9 @@ function at(array: readonly number[], index: number): number {
 
 // What a reading is to a week's history: `take`, a point of the week; `reset`,
 // a measured fall of RESET_FALL or more, the week's usage reset in place, which
-// is taken as a point too; `stale`, a session's older answer, or after a reset
-// in place any reading not measured, which says nothing
+// is taken as a point too; `stale`, a reading no newer than the week's last
+// point, a session's older answer, or after a reset in place any reading not
+// measured, which says nothing
 export type ReadingKind = 'take' | 'reset' | 'stale'
 
 // Whether the points hold a reset in place: a point lower than the one before it
@@ -128,9 +129,14 @@ export function classifyReading(history: WeekHistory | null, reading: WeekReadin
   if (last === undefined) {
     return 'take'
   }
+  // A reading no newer than the week's last point says nothing new: a session
+  // that replied before a reset in place still holds that reply's share
+  if (reading.at <= last[0]) {
+    return 'stale'
+  }
   const percent = clamp(reading.percent, 0, 100)
   if (percent < last[1]) {
-    return reading.measured === true && reading.at > last[0] && last[1] - percent >= RESET_FALL ? 'reset' : 'stale'
+    return reading.measured === true && last[1] - percent >= RESET_FALL ? 'reset' : 'stale'
   }
   // After a reset in place, a reading not measured may be a session's answer
   // from before it, as one gives when it tunes in: only measured readings, taken

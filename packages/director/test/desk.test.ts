@@ -386,6 +386,40 @@ describe('a reset in place', () => {
     tick(desk, [read(9.6, next, true), read(98, later, false)], next, 3)
     expect(desk.forecast()?.used).toBe(9.6)
   })
+
+  it('keeps the share after the reset on a desk made from the posted memory, with a session that replied before it still on air', () => {
+    const first = createWeatherDesk({ memory })
+    tick(first, [read(8, now, true)], now, 1)
+    const posted = first.memory()
+    expect(posted).not.toBeNull()
+    // The station starts again: only the session whose last reply was before the reset is on air, still measured, at 98
+    const desk = createWeatherDesk({ memory: posted })
+    const later = now + 5 * MIN
+    tick(desk, [read(98, last[0], true)], later, 1)
+    expect(desk.forecast()?.used).toBe(8)
+    expect(desk.forecast()?.outlook).not.toBe('storm')
+    expect(desk.due(later, false)).toBe(false)
+    // The week's replies after the reset move the share
+    tick(desk, [read(98, last[0], true), read(10, later + MIN, true)], later + MIN, 2)
+    expect(desk.forecast()?.used).toBe(10)
+    tick(desk, [read(98, last[0], true), read(11, later + 2 * MIN, true)], later + 2 * MIN, 3)
+    expect(desk.forecast()?.used).toBe(11)
+    expect(desk.due(later + 2 * MIN, false)).toBe(false)
+  })
+
+  it('keeps the share after the reset when a tick with no week reading comes before the session that replied before it', () => {
+    const desk = createWeatherDesk({ memory })
+    tick(desk, [read(8, now, true)], now, 1)
+    const later = now + 5 * MIN
+    // A session with no limits on air: no week reading at all
+    desk.tick({ now: later, visible: true, sessions: [session('quiet', { limits: [] })], lastReportAt: null, limits: 2 }, later)
+    expect(desk.forecast()).toBeNull()
+    const next = now + 6 * MIN
+    tick(desk, [read(98, last[0], true)], next, 3)
+    expect(desk.forecast()?.used).toBe(8)
+    expect(desk.forecast()?.outlook).not.toBe('storm')
+    expect(desk.due(next, false)).toBe(false)
+  })
 })
 
 describe('a desk with a reading and no forecast', () => {

@@ -409,6 +409,19 @@ describe('a reset in place', () => {
     expect(recordReading(first, measured(3, NOW - 1000))).toBe(first)
   })
 
+  it('is stale for a reading, measured or not, no newer than the week’s last point, at any share', () => {
+    const first = week(40, 40)
+    const lastAt = NOW + HOUR_MS
+    for (const share of [3, 39, 40, 41, 90]) {
+      for (const at of [lastAt, lastAt - 1000, NOW]) {
+        expect(classifyReading(first, measured(share, at))).toBe('stale')
+        expect(classifyReading(first, unmeasured(share, at))).toBe('stale')
+      }
+    }
+    expect(classifyReading(first, measured(3, lastAt + 1))).toBe('reset')
+    expect(classifyReading(first, measured(41, lastAt + 1))).toBe('take')
+  })
+
   it('is a new week, and not a reset, when the reset time has moved', () => {
     const nextWeek = RESET + WEEK_MS
     expect(classifyReading(week(40), measured(3, nextWeek - WEEK_MS + HOUR_MS, nextWeek))).toBe('take')

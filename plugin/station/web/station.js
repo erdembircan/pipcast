@@ -579,9 +579,12 @@
     if (last === void 0) {
       return "take";
     }
+    if (reading.at <= last[0]) {
+      return "stale";
+    }
     const percent = clamp(reading.percent, 0, 100);
     if (percent < last[1]) {
-      return reading.measured === true && reading.at > last[0] && last[1] - percent >= RESET_FALL ? "reset" : "stale";
+      return reading.measured === true && last[1] - percent >= RESET_FALL ? "reset" : "stale";
     }
     if (reading.measured !== true && hasReset(history.points)) {
       return "stale";
@@ -1078,7 +1081,7 @@
         cached = null;
         return;
       }
-      if (first || moved || kind === "reset" || cached === null || found.percent - cached.used >= 1) {
+      if (first || moved || kind === "reset" || cached === null || found.percent - cached.used >= 1 || found.percent < cached.used) {
         compute(now);
       }
     }
