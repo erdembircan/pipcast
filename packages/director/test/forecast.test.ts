@@ -415,25 +415,34 @@ describe('a reset in place', () => {
     expect(classifyReading(null, unmeasured(3, NOW))).toBe('take')
   })
 
-  it('leaves the points before it, and makes an answer from before it stale when it is not measured', () => {
+  it('leaves the points before it, and makes any reading not measured stale after it, whatever its share', () => {
     let history = week(30, 40)
     history = recordReading(history, measured(3, after)) as WeekHistory
     expect(history.points.map(([, share]) => share)).toEqual([30, 40, 3])
-    // A session tuning in gives the share it read before the reset
-    expect(classifyReading(history, unmeasured(40, after + HOUR_MS))).toBe('stale')
-    expect(classifyReading(history, unmeasured(55, after + HOUR_MS))).toBe('stale')
-    expect(recordReading(history, unmeasured(55, after + HOUR_MS))).toBe(history)
-    // A share under the peak is the week's own rise, measured or not
-    expect(classifyReading(history, unmeasured(10, after + HOUR_MS))).toBe('take')
+    // A session tuning in may give the share it read before the reset, or any older one
+    for (const share of [39, 40, 55, 2]) {
+      expect(classifyReading(history, unmeasured(share, after + HOUR_MS))).toBe('stale')
+      expect(recordReading(history, unmeasured(share, after + HOUR_MS))).toBe(history)
+    }
+    // Only a measured reading moves the week from there
+    expect(classifyReading(history, measured(10, after + HOUR_MS))).toBe('take')
     expect(classifyReading(history, measured(45, after + HOUR_MS))).toBe('take')
-    expect((recordReading(history, unmeasured(10, after + HOUR_MS)) as WeekHistory).points.map(([, share]) => share)).toEqual([30, 40, 3, 10])
+    expect((recordReading(history, measured(10, after + HOUR_MS)) as WeekHistory).points.map(([, share]) => share)).toEqual([30, 40, 3, 10])
   })
 
-  it('in the same hour as the peak replaces it, so the points still hold one an hour', () => {
+  it('in the same hour as the peak keeps both points, and a reading after it in that hour replaces the fall', () => {
     const slot = hourStart(NOW)
     const first = recordReading(null, measured(40, slot + 1000)) as WeekHistory
     const next = recordReading(first, measured(3, slot + 20 * 60_000)) as WeekHistory
-    expect(next.points).toEqual([[slot + 20 * 60_000, 3]])
+    expect(next.points).toEqual([
+      [slot + 1000, 40],
+      [slot + 20 * 60_000, 3],
+    ])
+    const rising = recordReading(next, measured(4, slot + 30 * 60_000)) as WeekHistory
+    expect(rising.points).toEqual([
+      [slot + 1000, 40],
+      [slot + 30 * 60_000, 4],
+    ])
   })
 
   it('counts the share read after it as the use across it, for the hourly rates', () => {
@@ -473,6 +482,30 @@ describe('hourlyPoints', () => {
       [slot + 50 * 60_000, 10.9],
       [slot + HOUR_MS + 10 * 60_000, 11.5],
       [slot + 3 * HOUR_MS, 12],
+    ])
+  })
+
+  it('keeps a fall in the same hour, a reset in place, and still thins a rise in it', () => {
+    const slot = hourStart(NOW)
+    expect(
+      hourlyPoints([
+        [slot + 5 * 60_000, 40],
+        [slot + 20 * 60_000, 3],
+        [slot + 30 * 60_000, 4],
+        [slot + 50 * 60_000, 6],
+      ]),
+    ).toEqual([
+      [slot + 5 * 60_000, 40],
+      [slot + 50 * 60_000, 6],
+    ])
+    expect(
+      hourlyPoints([
+        [slot + 5 * 60_000, 40],
+        [slot + 20 * 60_000, 3],
+      ]),
+    ).toEqual([
+      [slot + 5 * 60_000, 40],
+      [slot + 20 * 60_000, 3],
     ])
   })
 

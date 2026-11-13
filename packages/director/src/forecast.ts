@@ -1,11 +1,11 @@
 // The weekly forecast: will the week's usage limit last until it resets?
 //
 // The week's limit is a share used, in percent, that only rises, but for a reset
-// in place (RESET_FALL). A session
-// reads it when it replies, so the readings come at irregular times, and the
-// hours between two of them are unobserved, not idle. Everything here is a
-// pure function of the readings and of the time it is given: nothing reads the
-// clock. Times are ms since the epoch, and "local" is the Mac's time zone.
+// in place (RESET_FALL). A session reads it when it replies, so the readings
+// come at irregular times, and the hours between two of them are unobserved,
+// not idle. Everything here is a pure function of the readings and of the time
+// it is given: nothing reads the clock. Times are ms since the epoch, and
+// "local" is the Mac's time zone.
 //
 // The model rebuilds the week so far as one figure for each hour, estimates how
 // much each hour of the day uses (recent days counting most, each hour drawn
@@ -42,7 +42,8 @@ export const MIN_SHORT_HOURS = 6
 export const MAX_POINTS = 200
 // Two reset times this close are the same window
 export const RESET_TOLERANCE_MS = 10 * 60_000
-// A measured share at least this much lower than the week's last is a reset in place: Anthropic reset the week's usage and kept its reset time
+// A measured share at least this much lower than the week's last is a reset in
+// place: Anthropic reset the week's usage and kept its reset time
 export const RESET_FALL = 5
 // The chance of running out from which the outlook is a storm
 export const STORM_CHANCE = 0.5
@@ -110,22 +111,13 @@ function at(array: readonly number[], index: number): number {
 
 // What a reading is to a week's history: `take`, a point of the week; `reset`,
 // a measured fall of RESET_FALL or more, the week's usage reset in place, which
-// is taken as a point too; `stale`, a session's older answer, which says nothing
+// is taken as a point too; `stale`, a session's older answer, or after a reset
+// in place any reading not measured, which says nothing
 export type ReadingKind = 'take' | 'reset' | 'stale'
 
-// The highest share among the points before the latest fall (a point lower than
-// the one before it); null when the points have no fall
-function peakBeforeReset(points: readonly (readonly [number, number])[]): number | null {
-  let fall = -1
-  for (let i = 1; i < points.length; i += 1) {
-    if ((points[i] as readonly [number, number])[1] < (points[i - 1] as readonly [number, number])[1]) {
-      fall = i
-    }
-  }
-  if (fall < 0) {
-    return null
-  }
-  return Math.max(...points.slice(0, fall).map((point) => point[1]))
+// Whether the points hold a reset in place: a point lower than the one before it
+function hasReset(points: readonly (readonly [number, number])[]): boolean {
+  return points.some((point, i) => i > 0 && point[1] < (points[i - 1] as readonly [number, number])[1])
 }
 
 export function classifyReading(history: WeekHistory | null, reading: WeekReading): ReadingKind {
@@ -140,13 +132,11 @@ export function classifyReading(history: WeekHistory | null, reading: WeekReadin
   if (percent < last[1]) {
     return reading.measured === true && reading.at > last[0] && last[1] - percent >= RESET_FALL ? 'reset' : 'stale'
   }
-  // A tune-in's answer from before a reset in place is as high as the week was
-  // then, and is no rise of the week since
-  if (reading.measured !== true) {
-    const peak = peakBeforeReset(history.points)
-    if (peak !== null && percent >= peak) {
-      return 'stale'
-    }
+  // After a reset in place, a reading not measured may be a session's answer
+  // from before it, as one gives when it tunes in: only measured readings, taken
+  // after replies, move the week from there
+  if (reading.measured !== true && hasReset(history.points)) {
+    return 'stale'
   }
   return 'take'
 }
@@ -172,12 +162,14 @@ export function recordReading(history: WeekHistory | null, reading: WeekReading)
     }
     // A lower share is a stale reading (a session's older answer, or a share that
     // jitters by a point) and says nothing, unless it is a reset in place
-    if (classifyReading(history, reading) === 'stale') {
+    const kind = classifyReading(history, reading)
+    if (kind === 'stale') {
       return history
     }
     // One point an hour, in the hours the model bins by: a reading in the same
-    // hour replaces the last point
-    if (hourStart(reading.at) === hourStart(last[0])) {
+    // hour replaces the last point, but for a reset in place, which keeps the
+    // point before it
+    if (kind !== 'reset' && hourStart(reading.at) === hourStart(last[0])) {
       points = points.slice(0, -1)
     }
   }
@@ -187,12 +179,13 @@ export function recordReading(history: WeekHistory | null, reading: WeekReading)
 
 // A week's points as the hours hold them: the last point of each local hour.
 // The desk thins a memory it is handed with this, which is how it still reads
-// a week kept at finer times.
+// a week kept at finer times. A fall, a reset in place, keeps the point before
+// it in the same hour.
 export function hourlyPoints(points: readonly (readonly [number, number])[]): [number, number][] {
   const out: [number, number][] = []
   for (const [at, percent] of points) {
     const last = out[out.length - 1]
-    if (last !== undefined && hourStart(last[0]) === hourStart(at)) {
+    if (last !== undefined && hourStart(last[0]) === hourStart(at) && percent >= last[1]) {
       out[out.length - 1] = [at, percent]
     } else {
       out.push([at, percent])
@@ -397,7 +390,8 @@ export function forecastWeek(history: WeekHistory, usedNow: number, now: number)
   const intervals: [number, number, number][] = []
   let previous: [number, number] = [start, 0]
   for (const point of points) {
-    // A fall is a reset in place: the share started again from 0, so the use across it is at least the share read after it
+    // A fall is a reset in place: the share started again from 0, so the use
+    // across it is at least the share read after it
     intervals.push([previous[0], point[0], point[1] >= previous[1] ? point[1] - previous[1] : point[1]])
     previous = point
   }

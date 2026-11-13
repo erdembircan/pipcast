@@ -152,9 +152,9 @@ export function createWeatherDesk(options: WeatherDeskOptions = {}): WeatherDesk
     // (a session tuning in gives its last answer, which may be hours old) and
     // changes nothing, unless it is measured and RESET_FALL lower: then it is a
     // reset in place, and the week goes on from it. After a reset in place, a
-    // reading not measured that is as high as the week was before it is an answer
-    // from before the reset, and stale too. When a stale reading is the first the
-    // desk sees, the week as it stands is what it forecasts from.
+    // reading not measured may be an answer from before it, and is stale too.
+    // When a stale reading is the first the desk sees, the week as it stands is
+    // what it forecasts from.
     const kind = classifyReading(history, found)
     if (kind === 'stale') {
       const lastPoint = history === null ? undefined : history.points[history.points.length - 1]
@@ -181,9 +181,9 @@ export function createWeatherDesk(options: WeatherDeskOptions = {}): WeatherDesk
 
   // Whether what the station holds is behind what the desk has, by anything it
   // is worth a write to keep: a new hour's point, the hour's point a whole point
-  // higher since the last post, or lower (a reset in place) (the station quits
-  // seconds after the last session, and would otherwise keep each hour's first
-  // reading), another week, or STORM WARNING's time
+  // higher since the last post (the station quits seconds after the last
+  // session, and would otherwise keep each hour's first reading) or lower, a
+  // reset in place, another week, or STORM WARNING's time
   function behind(): boolean {
     const now = stand()
     if (now.hour !== posted.hour || now.resetsAt !== posted.resetsAt || now.warnedAt !== posted.warnedAt) {

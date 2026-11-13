@@ -568,17 +568,8 @@
   function at(array, index) {
     return array[index] ?? 0;
   }
-  function peakBeforeReset(points) {
-    let fall = -1;
-    for (let i = 1; i < points.length; i += 1) {
-      if (points[i][1] < points[i - 1][1]) {
-        fall = i;
-      }
-    }
-    if (fall < 0) {
-      return null;
-    }
-    return Math.max(...points.slice(0, fall).map((point) => point[1]));
+  function hasReset(points) {
+    return points.some((point, i) => i > 0 && point[1] < points[i - 1][1]);
   }
   function classifyReading(history, reading) {
     if (history === null || Math.abs(reading.resetsAt - history.resetsAt) > RESET_TOLERANCE_MS) {
@@ -592,11 +583,8 @@
     if (percent < last[1]) {
       return reading.measured === true && reading.at > last[0] && last[1] - percent >= RESET_FALL ? "reset" : "stale";
     }
-    if (reading.measured !== true) {
-      const peak = peakBeforeReset(history.points);
-      if (peak !== null && percent >= peak) {
-        return "stale";
-      }
+    if (reading.measured !== true && hasReset(history.points)) {
+      return "stale";
     }
     return "take";
   }
@@ -614,10 +602,11 @@
       if (reading.at <= last[0]) {
         return history;
       }
-      if (classifyReading(history, reading) === "stale") {
+      const kind = classifyReading(history, reading);
+      if (kind === "stale") {
         return history;
       }
-      if (hourStart(reading.at) === hourStart(last[0])) {
+      if (kind !== "reset" && hourStart(reading.at) === hourStart(last[0])) {
         points = points.slice(0, -1);
       }
     }
@@ -628,7 +617,7 @@
     const out = [];
     for (const [at2, percent] of points) {
       const last = out[out.length - 1];
-      if (last !== void 0 && hourStart(last[0]) === hourStart(at2)) {
+      if (last !== void 0 && hourStart(last[0]) === hourStart(at2) && percent >= last[1]) {
         out[out.length - 1] = [at2, percent];
       } else {
         out.push([at2, percent]);
