@@ -276,7 +276,11 @@ function parseLimit(value) {
   if (!isLimitKind(kind) || !isNumber(percentUsed) || !isNumber(at)) {
     return null;
   }
-  return { kind, percentUsed, resetsAt: isNumber(resetsAt) ? resetsAt : null, at };
+  const limit = { kind, percentUsed, resetsAt: isNumber(resetsAt) ? resetsAt : null, at };
+  if (value.measured === true) {
+    limit.measured = true;
+  }
+  return limit;
 }
 function parseList(value, parseItem) {
   if (!Array.isArray(value)) {
@@ -808,14 +812,18 @@ function isReported(value) {
 function windowNamed(list, name) {
   return list.find((one) => one.kind === name) ?? list.find((one) => one.kind.startsWith(name));
 }
-function readLimits(reported, now) {
+function readLimits(reported, now, measured2 = false) {
   const list = Array.isArray(reported) ? reported.filter(isReported) : [];
   const read2 = [];
   for (const { kind, name } of WINDOWS) {
     const found = windowNamed(list, name);
     if (found !== void 0) {
       const resetsAt = found.resetsAt === void 0 ? Number.NaN : Date.parse(found.resetsAt);
-      read2.push({ kind, percentUsed: found.percentUsed, resetsAt: Number.isFinite(resetsAt) ? resetsAt : null, at: now });
+      const limit = { kind, percentUsed: found.percentUsed, resetsAt: Number.isFinite(resetsAt) ? resetsAt : null, at: now };
+      if (measured2) {
+        limit.measured = true;
+      }
+      read2.push(limit);
     }
   }
   return read2;
@@ -823,7 +831,10 @@ function readLimits(reported, now) {
 function keepLimits(kept, read2) {
   const out = [];
   for (const { kind } of WINDOWS) {
-    const limit = read2.find((one) => one.kind === kind) ?? kept.find((one) => one.kind === kind);
+    const old = kept.find((one) => one.kind === kind);
+    const found = read2.find((one) => one.kind === kind);
+    const same = old !== void 0 && found !== void 0 && old.measured === true && found.measured !== true && old.percentUsed === found.percentUsed && old.resetsAt === found.resetsAt;
+    const limit = same ? old : found ?? old;
     if (limit !== void 0) {
       out.push(limit);
     }
@@ -833,7 +844,7 @@ function keepLimits(kept, read2) {
 function limitsMoved(before, after) {
   return before.length !== after.length || after.some((limit) => {
     const old = before.find((one) => one.kind === limit.kind);
-    return old === void 0 || old.percentUsed !== limit.percentUsed || old.resetsAt !== limit.resetsAt;
+    return old === void 0 || old.percentUsed !== limit.percentUsed || old.resetsAt !== limit.resetsAt || old.measured !== true && limit.measured === true;
   });
 }
 
@@ -1867,11 +1878,11 @@ function startTitleChecks($) {
     void checkTitle($);
   });
 }
-async function takeLimits($, reported) {
+async function takeLimits($, reported, measured2 = false) {
   if (model === null) {
     return false;
   }
-  const updated = measured(model, readLimits(reported, await $.clock.now()));
+  const updated = measured(model, readLimits(reported, await $.clock.now(), measured2));
   const moved = limitsMoved(model.record.limits ?? [], updated.record.limits ?? []);
   model = updated;
   return moved;
@@ -2372,7 +2383,7 @@ function register(on, options) {
   });
   on("session.measure", async ($, e, next) => {
     try {
-      if (await takeLimits($, e.rateLimits)) {
+      if (await takeLimits($, e.rateLimits, true)) {
         await save($);
       }
     } catch (error) {

@@ -113,7 +113,11 @@ function parseLimit(value: unknown): UsageLimit | null {
   if (!isLimitKind(kind) || !isNumber(percentUsed) || !isNumber(at)) {
     return null
   }
-  return { kind, percentUsed, resetsAt: isNumber(resetsAt) ? resetsAt : null, at }
+  const limit: UsageLimit = { kind, percentUsed, resetsAt: isNumber(resetsAt) ? resetsAt : null, at }
+  if (value.measured === true) {
+    limit.measured = true
+  }
+  return limit
 }
 
 function parseList<T>(value: unknown, parseItem: (item: unknown) => T | null): T[] {

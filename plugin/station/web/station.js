@@ -347,7 +347,11 @@
     if (!isLimitKind(kind) || !isNumber(percentUsed) || !isNumber(at2)) {
       return null;
     }
-    return { kind, percentUsed, resetsAt: isNumber(resetsAt) ? resetsAt : null, at: at2 };
+    const limit = { kind, percentUsed, resetsAt: isNumber(resetsAt) ? resetsAt : null, at: at2 };
+    if (value.measured === true) {
+      limit.measured = true;
+    }
+    return limit;
   }
   function parseList(value, parseItem) {
     if (!Array.isArray(value)) {
@@ -555,6 +559,7 @@
   var MIN_SHORT_HOURS = 6;
   var MAX_POINTS = 200;
   var RESET_TOLERANCE_MS = 10 * 6e4;
+  var RESET_FALL = 5;
   var STORM_CHANCE = 0.5;
   var CLOUDS_END = 70;
   function clamp(value, low, high) {
@@ -562,6 +567,29 @@
   }
   function at(array, index) {
     return array[index] ?? 0;
+  }
+  function hasReset(points) {
+    return points.some((point, i) => i > 0 && point[1] < points[i - 1][1]);
+  }
+  function classifyReading(history, reading) {
+    if (history === null || Math.abs(reading.resetsAt - history.resetsAt) > RESET_TOLERANCE_MS) {
+      return "take";
+    }
+    const last = history.points[history.points.length - 1];
+    if (last === void 0) {
+      return "take";
+    }
+    if (reading.at <= last[0]) {
+      return "stale";
+    }
+    const percent = clamp(reading.percent, 0, 100);
+    if (percent < last[1]) {
+      return reading.measured === true && last[1] - percent >= RESET_FALL ? "reset" : "stale";
+    }
+    if (reading.measured !== true && hasReset(history.points)) {
+      return "stale";
+    }
+    return "take";
   }
   function recordReading(history, reading) {
     if (reading.at < reading.resetsAt - WEEK_MS || reading.at > reading.resetsAt) {
@@ -577,10 +605,11 @@
       if (reading.at <= last[0]) {
         return history;
       }
-      if (percent < last[1]) {
+      const kind = classifyReading(history, reading);
+      if (kind === "stale") {
         return history;
       }
-      if (hourStart(reading.at) === hourStart(last[0])) {
+      if (kind !== "reset" && hourStart(reading.at) === hourStart(last[0])) {
         points = points.slice(0, -1);
       }
     }
@@ -591,7 +620,7 @@
     const out = [];
     for (const [at2, percent] of points) {
       const last = out[out.length - 1];
-      if (last !== void 0 && hourStart(last[0]) === hourStart(at2)) {
+      if (last !== void 0 && hourStart(last[0]) === hourStart(at2) && percent >= last[1]) {
         out[out.length - 1] = [at2, percent];
       } else {
         out.push([at2, percent]);
@@ -770,7 +799,7 @@
     const intervals = [];
     let previous = [start, 0];
     for (const point of points) {
-      intervals.push([previous[0], point[0], Math.max(0, point[1] - previous[1])]);
+      intervals.push([previous[0], point[0], point[1] >= previous[1] ? point[1] - previous[1] : point[1]]);
       previous = point;
     }
     const short = new Array(bins).fill(0);
@@ -922,13 +951,21 @@
       return null;
     }
     let best;
+    let bestMeasured;
     for (const week of weeks) {
       if (latest - week.resetsAt > RESET_TOLERANCE_MS) {
         continue;
       }
-      if (best === void 0 || week.percent > best.percent || week.percent === best.percent && week.limit.at > best.limit.at) {
+      if (week.limit.measured === true) {
+        if (bestMeasured === void 0 || week.limit.at > bestMeasured.limit.at || week.limit.at === bestMeasured.limit.at && week.percent > bestMeasured.percent) {
+          bestMeasured = week;
+        }
+      } else if (best === void 0 || week.percent > best.percent || week.percent === best.percent && week.limit.at > best.limit.at) {
         best = week;
       }
+    }
+    if (bestMeasured !== void 0) {
+      return { percent: bestMeasured.percent, resetsAt: bestMeasured.resetsAt, at: bestMeasured.limit.at, measured: true };
     }
     return best === void 0 ? null : { percent: best.percent, resetsAt: best.resetsAt, at: best.limit.at };
   }
@@ -1025,9 +1062,10 @@
       if (reading !== null && !moved && found.at <= reading.at) {
         return;
       }
-      const lastPoint = history === null ? void 0 : history.points[history.points.length - 1];
-      if (history !== null && lastPoint !== void 0 && Math.abs(found.resetsAt - history.resetsAt) <= RESET_TOLERANCE_MS && found.percent < lastPoint[1]) {
-        if (reading === null) {
+      const kind = classifyReading(history, found);
+      if (kind === "stale") {
+        const lastPoint = history === null ? void 0 : history.points[history.points.length - 1];
+        if (history !== null && lastPoint !== void 0 && reading === null) {
           reading = { percent: lastPoint[1], resetsAt: history.resetsAt, at: lastPoint[0] };
           compute(now);
         }
@@ -1043,7 +1081,7 @@
         cached = null;
         return;
       }
-      if (first || moved || cached === null || found.percent - cached.used >= 1) {
+      if (first || moved || kind === "reset" || cached === null || found.percent - cached.used >= 1) {
         compute(now);
       }
     }
@@ -1052,7 +1090,7 @@
       if (now.hour !== posted.hour || now.resetsAt !== posted.resetsAt || now.warnedAt !== posted.warnedAt) {
         return true;
       }
-      return now.last !== null && posted.last !== null && now.last - posted.last >= 1;
+      return now.last !== null && posted.last !== null && (now.last - posted.last >= 1 || now.last < posted.last);
     }
     return {
       tick(snapshot, now) {

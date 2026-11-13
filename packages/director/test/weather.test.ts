@@ -313,11 +313,28 @@ describe('newestWeekReading', () => {
     expect(reading).toEqual({ percent: 30.5, resetsAt: RESET, at: 300 })
   })
 
-  it('takes the highest share, not the newest reading, since a window’s share never falls', () => {
+  it('takes the highest share, not the newest reading, when none is measured: a window’s share only rises but for a reset in place', () => {
     // A session that tuned in gives its last answer, stamped now, with a lower share
     const reading = newestWeekReading([hold(week(100, 55)), hold(week(900, 41))], T)
     expect(reading).toEqual({ percent: 55, resetsAt: RESET, at: 100 })
     expect(newestWeekReading([hold(week(900, 41)), hold(week(100, 55))], T)).toEqual(reading)
+  })
+
+  it('takes the newest measured reading over a higher one that is not measured, though that is stamped later', () => {
+    const measured = (at: number, percentUsed: number): UsageLimit => ({ ...week(at, percentUsed), measured: true })
+    const reading = newestWeekReading([hold(week(900, 98)), hold(measured(100, 8))], T)
+    expect(reading).toEqual({ percent: 8, resetsAt: RESET, at: 100, measured: true })
+    expect(newestWeekReading([hold(measured(100, 8)), hold(week(900, 98))], T)).toEqual(reading)
+  })
+
+  it('takes the newest of the measured readings, not the highest, and the higher share of equal times', () => {
+    const measured = (at: number, percentUsed: number): UsageLimit => ({ ...week(at, percentUsed), measured: true })
+    expect(newestWeekReading([hold(measured(100, 98)), hold(measured(200, 8))], T)).toEqual({ percent: 8, resetsAt: RESET, at: 200, measured: true })
+    expect(newestWeekReading([hold(measured(200, 8)), hold(measured(200, 9))], T)).toEqual({ percent: 9, resetsAt: RESET, at: 200, measured: true })
+  })
+
+  it('leaves the mark out of a reading when none is measured', () => {
+    expect(newestWeekReading([hold(week(100, 10)), hold(week(200, 20))], T)).not.toHaveProperty('measured')
   })
 
   it('takes the later reading of equal shares', () => {

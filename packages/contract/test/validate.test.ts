@@ -173,6 +173,24 @@ describe('parseSessionRecord', () => {
     ])
   })
 
+  it('keeps a usage limit marked measured, and leaves out a mark that is anything else', () => {
+    const parsed = parseSessionRecord({
+      ...record(),
+      limits: [
+        { kind: 'session', percentUsed: 42, resetsAt: 5, at: 1, measured: true },
+        { kind: 'week', percentUsed: 11, resetsAt: 6, at: 2, measured: false },
+        { kind: 'week', percentUsed: 12, resetsAt: 6, at: 3, measured: 'yes' },
+      ],
+    })
+    expect(parsed?.limits).toEqual([
+      { kind: 'session', percentUsed: 42, resetsAt: 5, at: 1, measured: true },
+      { kind: 'week', percentUsed: 11, resetsAt: 6, at: 2 },
+      { kind: 'week', percentUsed: 12, resetsAt: 6, at: 3 },
+    ])
+    expect(parsed?.limits?.[1]).not.toHaveProperty('measured')
+    expect(parsed?.limits?.[2]).not.toHaveProperty('measured')
+  })
+
   it('gives a record written before the limits none', () => {
     expect(parseSessionRecord(without(record(), ['limits']))?.limits).toEqual([])
     expect(parseSessionRecord({ ...record(), limits: 'none' })?.limits).toEqual([])

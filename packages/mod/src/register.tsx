@@ -508,12 +508,13 @@ function startTitleChecks($: EngineInterface): void {
 }
 
 // A report of the account's usage limits, on the model; true when a figure
-// moved, so the record is worth writing at once
-async function takeLimits($: EngineInterface, reported: unknown): Promise<boolean> {
+// moved, or a limit became measured, so the record is worth writing at once.
+// `measured` is for a report that came after a reply
+async function takeLimits($: EngineInterface, reported: unknown, measured = false): Promise<boolean> {
   if (model === null) {
     return false
   }
-  const updated = record.measured(model, readLimits(reported, await $.clock.now()))
+  const updated = record.measured(model, readLimits(reported, await $.clock.now(), measured))
   const moved = limitsMoved(model.record.limits ?? [], updated.record.limits ?? [])
   model = updated
   return moved
@@ -1097,10 +1098,11 @@ export function register(on: On, options: PluginOptions) {
 
   // Claude Code measured the session: after each reply, and when a usage
   // limit moves a whole point. The limits are the account's, so every session
-  // on air reads the same ones; the board shows the newest reading
+  // on air reads the same ones; the board shows the newest reading. Its
+  // figures are as new as the reply, so its readings are marked measured
   on('session.measure', async ($, e, next) => {
     try {
-      if (await takeLimits($, e.rateLimits)) {
+      if (await takeLimits($, e.rateLimits, true)) {
         await save($)
       }
     } catch (error) {
