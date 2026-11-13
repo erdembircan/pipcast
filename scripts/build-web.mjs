@@ -1,19 +1,17 @@
 // Builds the page the station shows into plugin/station/web/: index.html,
 // station.js, design.js, station.css, fonts/, textures/ and vendor/. Nothing is
-// minified, since Anthropic's plugin directory holds code it can't read for a
-// reviewer: station.js is the page's own code, bundled as written, design.js is
-// the design system's bundle, design/components/bundle.js, copied as it is
-// (each file has its own 256 KiB, and the design's comments, which say where
-// code follows another's, are kept), and React comes as its own production
-// files in vendor/, from its npm package with its license.
-// React's is copied unchanged, and React DOM's with two minified names renamed
-// (scripts/lib/react-dom-names.mjs says why). STORMTRACKER draws its globe in
-// design.js itself, with WebGL, so there is no library for it, and the
-// pictures of the Earth it draws on are copied from design/textures into
-// textures/. index.html loads React first, then design.js, which takes React
-// from its global and sets PipNews, then station.js, which takes React,
-// ReactDOM and PipNews from the globals they set. The output folder is emptied
-// first, so the build is reproducible.
+// minified, so the people who install Pipcast can read every line it runs:
+// station.js is the page's own code, bundled as written, design.js is the
+// design system's bundle, design/components/bundle.js, copied as it is (the
+// design's comments, which say where code follows another's, are kept), and
+// React comes as its own production files in vendor/, copied unchanged from
+// its npm package with its license. STORMTRACKER draws its globe in design.js
+// itself, with WebGL, so there is no library for it, and the pictures of the
+// Earth it draws on are copied from design/textures into textures/.
+// index.html loads React first, then design.js, which takes React from its
+// global and sets PipNews, then station.js, which takes React, ReactDOM and
+// PipNews from the globals they set. The output folder is emptied first, so
+// the build is reproducible.
 // With --dev it builds the development build's page instead, from
 // packages/dev/src/main.tsx into .dev/web, for scripts/build-dev.sh: never into
 // plugin/.
@@ -21,8 +19,6 @@ import { build, transform } from 'esbuild'
 import { cpSync, copyFileSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-
-import { renameShellNames } from './lib/react-dom-names.mjs'
 
 const VENDOR = [
   ['node_modules/react/umd/react.production.min.js', 'vendor/react.production.min.js'],
@@ -119,11 +115,7 @@ copyFileSync(join(root, 'design/components/bundle.js'), join(out, 'design.js'))
 
 mkdirSync(join(out, 'vendor'), { recursive: true })
 for (const [from, to] of VENDOR) {
-  if (to === 'vendor/react-dom.production.min.js') {
-    writeFileSync(join(out, to), renameShellNames(readFileSync(join(root, from), 'utf8')))
-  } else {
-    copyFileSync(join(root, from), join(out, to))
-  }
+  copyFileSync(join(root, from), join(out, to))
 }
 
 console.log(dev ? '.dev/web' : 'plugin/station/web')

@@ -19,9 +19,7 @@ What plays in the window is KLWD, a local TV news channel for your sessions, sty
 
 ## Install
 
-Pipcast installs from [erdembircan-plugins](https://github.com/erdembircan/plugin-marketplace), a marketplace of Claude Code plugins. It's on its way to Anthropic's plugin directory too, where it's in review and can't be added yet.
-
-### From erdembircan-plugins
+Pipcast installs from [erdembircan-plugins](https://github.com/erdembircan/plugin-marketplace), a marketplace of Claude Code plugins.
 
 In the Claude desktop app, click **+** next to the prompt box, then **Plugins**. Choose **Add marketplace**, enter `erdembircan/plugin-marketplace`, and add **Pipcast**.
 
@@ -36,18 +34,6 @@ claude plugin install pipcast@erdembircan-plugins
 ```
 
 Sessions you start after that have it.
-
-### From Anthropic's plugin directory
-
-Pipcast is in review for Anthropic's plugin directory, and isn't available there yet. Until it's listed, install it from erdembircan-plugins.
-
-Once it's listed:
-
-1. In the Claude desktop app, or on claude.ai, open **Customize**, then **Plugins**.
-2. Under **Discover**, find **Pipcast** and select **Add**.
-3. Start a new Claude Code session, signed in to the same account. If Pipcast isn't on in it yet, run `/reload-plugins` in that session, or start another one.
-
-On a Team or Enterprise plan, the directory shows only if your organization keeps it.
 
 ## Get started
 
@@ -191,9 +177,7 @@ KLWD is an ordinary window, so it appears in screen shares and recordings, with 
 
 ## Update and uninstall
 
-**From Anthropic's plugin directory**, once it's listed there, Pipcast updates by itself: when a new version is out, new sessions get it. To uninstall it, open **Customize**, then **Plugins**, open **Pipcast**, open its menu and select **Remove**. New sessions start without it.
-
-**From erdembircan-plugins**, update or uninstall it from a terminal, then start a new session:
+Update or uninstall Pipcast from a terminal, then start a new session:
 
 ```bash
 claude plugin update pipcast@erdembircan-plugins
@@ -203,7 +187,7 @@ claude plugin update pipcast@erdembircan-plugins
 claude plugin uninstall pipcast@erdembircan-plugins
 ```
 
-Either way, uninstalling leaves the files Pipcast kept in `~/Library/Application Support/Pipcast`. Delete that folder to remove them too.
+Uninstalling leaves the files Pipcast kept in `~/Library/Application Support/Pipcast`. Delete that folder to remove them too.
 
 ## Development
 

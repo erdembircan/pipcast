@@ -12,15 +12,6 @@
   "license": "MIT",
   "keywords": ["picture-in-picture", "pip", "notifications", "sessions", "status", "overlay", "macos", "mod"],
   "icon": "./assets/icon.png",
-  "documentationUrl": "https://github.com/erdembircan/pipcast#readme",
-  "supportUrl": "https://github.com/erdembircan/pipcast/issues",
-  "privacyPolicyUrl": "https://github.com/erdembircan/pipcast#privacy",
-  "screenshots": [
-    "https://raw.githubusercontent.com/erdembircan/pipcast/master/assets/screenshots/breaking.png",
-    "https://raw.githubusercontent.com/erdembircan/pipcast/master/assets/screenshots/in-use.jpg",
-    "https://raw.githubusercontent.com/erdembircan/pipcast/master/assets/screenshots/on-air.jpg",
-    "https://raw.githubusercontent.com/erdembircan/pipcast/master/assets/screenshots/window.jpg"
-  ],
   "types": "./types/index.d.ts",
   "userConfig": {
     "autoTuneIn": {

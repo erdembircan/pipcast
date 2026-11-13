@@ -1,9 +1,8 @@
 #!/bin/bash
 # Puts a change to Pipcast in the Claude desktop app, for trying it, and takes
 # it out again. It is for development only: it never installs or updates a
-# release of Pipcast. People install the release in the app, from Anthropic's
-# plugin directory or from erdembircan-plugins (pipcast@erdembircan-plugins),
-# and so do you.
+# release of Pipcast. People install the release in the app from
+# erdembircan-plugins (pipcast@erdembircan-plugins), and so do you.
 #
 # The change runs from the live checkout: a second checkout of this repository
 # in a folder beside the main checkout, named after it
@@ -55,11 +54,10 @@
 # PIPCAST_LIVE_BUILD=release puts a commit's plugin/ in as it is, without
 # building, for scripts/test.d/50-live.sh.
 #
-# A copy the desktop app hands in itself, from Anthropic's plugin directory or
-# an upload in Customize > Plugins, is the one kind of release live.sh can't
-# see or turn off: it stays outside Claude Code's plugin list, and runs over
-# any installed Pipcast, the live checkout too. Turn it off in Customize >
-# Plugins while you try a change.
+# An upload in Customize > Plugins is the one kind of release live.sh can't see
+# or turn off: the desktop app hands it to its sessions itself, outside Claude
+# Code's plugin list, and it runs over any installed Pipcast, the live checkout
+# too. Turn it off in Customize > Plugins while you try a change.
 set -euo pipefail
 
 root="$(cd "$(dirname "$0")/.." && pwd)"
@@ -80,7 +78,7 @@ plugin="$mount/plugin"
 # Where live.sh keeps the releases it turned off, one id a line
 record="$(git -C "$main" rev-parse --path-format=absolute --git-common-dir)/pipcast-live-releases"
 # Said wherever Claude Code's plugin list shows no Pipcast at all
-directory_note="A copy from Anthropic's plugin directory or an upload never shows in that list: the desktop app hands it to each of its sessions itself."
+upload_note="An upload in Customize > Plugins never shows in that list: the desktop app hands it to each of its sessions itself."
 
 # The live checkout's commit and subject, on one line
 describe() {
@@ -100,10 +98,8 @@ listed() { # state|version <id>
 }
 
 # The releases of Pipcast in Claude Code's plugin list, one id a line: every
-# pipcast install but the live checkout's, from a marketplace or a terminal's
-# sync of Anthropic's plugin directory, leaving out those a project's settings
-# hold. A copy the desktop app hands in, from the directory or an upload, is
-# never among them
+# pipcast install but the live checkout's, leaving out those a project's
+# settings hold. An upload in Customize > Plugins is never among them
 releases() {
   { "$claude" plugin list --json 2>/dev/null || true; } | node -e '
     let plugins = []
@@ -284,7 +280,7 @@ settle_station() { # <fingerprint of the station before the move>
       echo "The live checkout's station is on air in place of the one that ran."
     fi
   else
-    echo "The station on air runs from $(dirname "$(dirname "$binary")"), not the live checkout's build. If that is a copy the desktop app hands in, from Anthropic's plugin directory or an upload, turn Pipcast off in Customize > Plugins first. Then scripts/live.sh restart puts the live checkout's station on air in its place."
+    echo "The station on air runs from $(dirname "$(dirname "$binary")"), not the live checkout's build. If that is an upload in Customize > Plugins, turn it off there first. Then scripts/live.sh restart puts the live checkout's station on air in its place."
   fi
 }
 
@@ -408,7 +404,7 @@ moved() { # <what it ran> [<what was put there>]
   echo "The app ran $1."
   echo "It now runs $now${2:+ ($2)}."
   if [[ "$now" == 'no Pipcast'* ]]; then
-    echo "$directory_note"
+    echo "$upload_note"
   fi
   echo "Run /reload-plugins in a session to pick it up, or start a new one."
 }
@@ -444,7 +440,7 @@ case "${1:-}" in
         echo "Both are on: run scripts/live.sh published or scripts/live.sh master to keep one."
         ;;
       'no Pipcast'*)
-        echo "$directory_note"
+        echo "$upload_note"
         echo "Run scripts/live.sh setup to try the live checkout."
         ;;
       'the live checkout in'*)
@@ -467,7 +463,7 @@ case "${1:-}" in
         echo "The station on air takes no cues."
       fi
       if [[ "$now" == 'the live checkout in'* && ! "$station" -ef "$plugin/station/pipcast-station" ]]; then
-        echo "It runs from $(dirname "$(dirname "$station")"), not the live checkout's build. If that is a copy the desktop app hands in, from Anthropic's plugin directory or an upload, turn Pipcast off in Customize > Plugins first. Then scripts/live.sh restart puts the live checkout's station on air in its place."
+        echo "It runs from $(dirname "$(dirname "$station")"), not the live checkout's build. If that is an upload in Customize > Plugins, turn it off there first. Then scripts/live.sh restart puts the live checkout's station on air in its place."
       fi
     fi
     ;;

@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Changed
+
+- Pipcast is no longer headed for Anthropic's plugin directory. It installs from erdembircan-plugins, as it has since 1.0.0, and its README no longer says it's in review there.
+
 ### Fixed
 
 - When Anthropic resets your week's usage before its reset time, KLWD WEATHER now sees it: from your next reply, the forecast goes by the share the week has after the reset, and STORM WARNING stops if the week no longer looks like running out. It used to keep the share from before the reset, and warned every hour of a storm an hour away.
