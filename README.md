@@ -15,25 +15,15 @@ What plays in the window is KLWD, a local TV news channel for your sessions, sty
 ## Requirements
 
 - A Mac with Apple silicon, on macOS 14 or later. The window's controls use Liquid Glass on macOS 26 and later.
-- The Claude desktop app, with Claude Code. Sessions you run in Claude Code in a terminal can tune in with `/pipcast` too. Pipcast is a mod for Claude Code, so it doesn't run in chat or Cowork.
+- The Claude desktop app, with Claude Code. Pipcast runs in the desktop app's Code tab alone, not in chat, Cowork or Claude Code in a terminal.
 
 ## Install
 
 Pipcast installs from [erdembircan-plugins](https://github.com/erdembircan/plugin-marketplace), a marketplace of Claude Code plugins.
 
-In the Claude desktop app, click **+** next to the prompt box, then **Plugins**. Choose **Add marketplace**, enter `erdembircan/plugin-marketplace`, and add **Pipcast**.
-
-Or from a terminal:
-
-```bash
-claude plugin marketplace add erdembircan/plugin-marketplace
-```
-
-```bash
-claude plugin install pipcast@erdembircan-plugins
-```
-
-Sessions you start after that have it.
+1. In the Claude desktop app, click **+** next to the prompt box, then **Plugins**.
+2. Choose **Add marketplace**, enter `erdembircan/plugin-marketplace`, and add **Pipcast**.
+3. Start a new session. It has Pipcast.
 
 ## Get started
 
@@ -177,15 +167,10 @@ KLWD is an ordinary window, so it appears in screen shares and recordings, with 
 
 ## Update and uninstall
 
-Update or uninstall Pipcast from a terminal, then start a new session:
+In the Claude desktop app, click **+** next to the prompt box, then **Plugins**, then **Manage plugins**, and open **Pipcast**.
 
-```bash
-claude plugin update pipcast@erdembircan-plugins
-```
-
-```bash
-claude plugin uninstall pipcast@erdembircan-plugins
-```
+- To update, select **Update** when a new version is out, then start a new session. To look for one now, select **Check for updates** in Pipcast's menu.
+- To uninstall, select **Uninstall**. New sessions start without Pipcast.
 
 Uninstalling leaves the files Pipcast kept in `~/Library/Application Support/Pipcast`. Delete that folder to remove them too.
 

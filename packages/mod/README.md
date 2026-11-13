@@ -11,7 +11,7 @@ Watch Pipcast's videos on YouTube, starting with the demo: https://www.youtube.c
 ## Requirements
 
 - A Mac with Apple silicon, on macOS 14 or later. The window's controls use Liquid Glass on macOS 26 and later.
-- Claude Code, in the Code tab of the Claude desktop app or in a terminal. Pipcast is a mod for Claude Code, so it doesn't run in chat or Cowork.
+- The Claude desktop app, with Claude Code. Pipcast runs in the desktop app's Code tab alone, not in chat, Cowork or Claude Code in a terminal.
 
 ## Get started
 

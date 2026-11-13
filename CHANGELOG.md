@@ -9,6 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Changed
 
 - Pipcast is no longer headed for Anthropic's plugin directory. It installs from erdembircan-plugins, as it has since 1.0.0, and its README no longer says it's in review there.
+- The README installs, updates and uninstalls Pipcast in the Claude desktop app alone, where it runs.
 
 ### Fixed
 
