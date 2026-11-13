@@ -174,7 +174,7 @@ export function createWeatherDesk(options: WeatherDeskOptions = {}): WeatherDesk
       cached = null
       return
     }
-    if (first || moved || kind === 'reset' || cached === null || found.percent - cached.used >= 1 || found.percent < cached.used) {
+    if (first || moved || kind === 'reset' || cached === null || found.percent - cached.used >= 1) {
       compute(now)
     }
   }
