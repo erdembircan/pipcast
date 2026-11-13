@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs'
+
 import { describe, expect, it } from 'vitest'
 
 import { hourStart } from '@pipcast/contract'
@@ -325,6 +327,64 @@ describe('a stale reading', () => {
     expect(used).toEqual([share])
     const items = h.history[h.history.length - 1]?.program.scene.ticker ?? []
     expect(items.some((item) => typeof item !== 'string' && item.key === 'forecast')).toBe(true)
+  })
+})
+
+// A real week that Anthropic reset in place: the share was 98 and the sessions
+// read 8 after it, with the reset time the same. Numbers only.
+const RESET_IN_PLACE = JSON.parse(readFileSync(new URL('./fixtures/week-reset-in-place.json', import.meta.url), 'utf8')) as {
+  resetsAt: number
+  points: [number, number][]
+}
+
+describe('a reset in place', () => {
+  const now = Date.UTC(2026, 10, 13, 18, 47, 3)
+  const memory: WeatherMemory = { v: 1, resetsAt: RESET_IN_PLACE.resetsAt, points: RESET_IN_PLACE.points, warnedAt: null }
+  const last = RESET_IN_PLACE.points[RESET_IN_PLACE.points.length - 1] as [number, number]
+  const read = (percentUsed: number, at: number, measured: boolean): UsageLimit => ({
+    kind: 'week',
+    percentUsed,
+    resetsAt: RESET_IN_PLACE.resetsAt,
+    at,
+    ...(measured ? { measured: true as const } : {}),
+  })
+  const tick = (desk: ReturnType<typeof createWeatherDesk>, limits: UsageLimit[], at: number, counter: number) =>
+    desk.tick({ now: at, visible: true, sessions: limits.map((limit, i) => session(`s${i}`, { limits: [limit] })), lastReportAt: null, limits: counter }, at)
+
+  it('the week ending at 98, with every session reading 8, was a storm while the reading was not measured', () => {
+    const desk = createWeatherDesk({ memory })
+    tick(desk, [read(8, now, false)], now, 1)
+    expect(last[1]).toBe(98)
+    expect(desk.forecast()?.used).toBe(98)
+    expect(desk.forecast()?.outlook).toBe('storm')
+  })
+
+  it('goes by the share after it when the reading is measured: no storm, nothing running out, the memory posted at once', () => {
+    const desk = createWeatherDesk({ memory })
+    tick(desk, [read(8, now, true)], now, 1)
+    const forecast = desk.forecast()
+    expect(forecast?.used).toBe(8)
+    expect(forecast?.outlook).not.toBe('storm')
+    expect(forecast?.runsOutAt).toBeNull()
+    const posted = desk.memory()
+    expect(posted?.points.slice(0, -1)).toEqual(RESET_IN_PLACE.points)
+    expect(posted?.points[posted.points.length - 1]).toEqual([now, 8])
+    expect(desk.due(now, false)).toBe(false)
+    expect(desk.due(now + 70 * MIN, false)).toBe(false)
+  })
+
+  it('keeps the share of the measured reading when a session tuning in gives its answer from before the reset, stamped later', () => {
+    const desk = createWeatherDesk({ memory })
+    tick(desk, [read(8, now, true)], now, 1)
+    expect(desk.memory()).not.toBeNull()
+    const later = now + 5 * MIN
+    tick(desk, [read(8, now, true), read(98, later, false)], later, 2)
+    expect(desk.forecast()?.used).toBe(8)
+    expect(desk.memory()).toBeNull()
+    // The week's next measured reading goes on from the reset
+    const next = now + 10 * MIN
+    tick(desk, [read(9.6, next, true), read(98, later, false)], next, 3)
+    expect(desk.forecast()?.used).toBe(9.6)
   })
 })
 

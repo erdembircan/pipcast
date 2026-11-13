@@ -1,8 +1,8 @@
 import { dayName, hourStart } from '@pipcast/contract'
 import { describe, expect, it } from 'vitest'
 
-import { forecastWeek, gammaMedian, gammaP, hourlyPoints, MAX_POINTS, recordReading, WEEK_MS } from '../src/forecast.ts'
-import type { Forecast, WeekHistory } from '../src/forecast.ts'
+import { classifyReading, forecastWeek, gammaMedian, gammaP, hourlyPoints, MAX_POINTS, recordReading, RESET_FALL, WEEK_MS } from '../src/forecast.ts'
+import type { Forecast, WeekHistory, WeekReading } from '../src/forecast.ts'
 import { HOUR_MS } from '../src/timing.ts'
 
 // Local-time constructors, so the cases hold in any time zone. The reference
@@ -329,7 +329,7 @@ describe('recordReading', () => {
     expect(jitter.points).toHaveLength(2)
   })
 
-  it('ignores a lower share in the same window, by any amount: it is a stale reading, not a reset', () => {
+  it('ignores a lower share in the same window that was not measured, by any amount: it is a stale reading, not a reset', () => {
     const first = recordReading(null, reading(40, NOW)) as WeekHistory
     for (const lower of [39.9, 39.5, 39, 10, 0]) {
       expect(recordReading(first, reading(lower, NOW + HOUR_MS))).toBe(first)
@@ -370,6 +370,92 @@ describe('recordReading', () => {
   it('holds a reading to 0..100', () => {
     expect(recordReading(null, reading(130, NOW))?.points).toEqual([[NOW, 100]])
     expect(recordReading(null, reading(-4, NOW))?.points).toEqual([[NOW, 0]])
+  })
+})
+
+describe('a reset in place', () => {
+  const measured = (percent: number, at: number, resetsAt = RESET): WeekReading => ({ percent, resetsAt, at, measured: true })
+  const unmeasured = (percent: number, at: number, resetsAt = RESET): WeekReading => ({ percent, resetsAt, at })
+  const week = (...shares: number[]): WeekHistory => ({ resetsAt: RESET, points: shares.map((share, i): [number, number] => [NOW + i * HOUR_MS, share]) })
+  const after = NOW + 10 * HOUR_MS
+
+  it('is a measured share at least RESET_FALL lower than the week’s last, and is appended', () => {
+    expect(RESET_FALL).toBe(5)
+    for (const lower of [3, 35, 0]) {
+      const first = week(40)
+      expect(classifyReading(first, measured(lower, after))).toBe('reset')
+      const next = recordReading(first, measured(lower, after)) as WeekHistory
+      expect(next).not.toBe(first)
+      expect(next.points).toEqual([
+        [NOW, 40],
+        [after, lower],
+      ])
+    }
+  })
+
+  it('is no reset when the fall is under RESET_FALL, and the history is the same one', () => {
+    const first = week(40)
+    expect(classifyReading(first, measured(35.1, after))).toBe('stale')
+    expect(classifyReading(first, measured(40 - 4.9, after))).toBe('stale')
+    expect(recordReading(first, measured(35.1, after))).toBe(first)
+  })
+
+  it('is no reset when the reading is not measured, or is no newer than the last point', () => {
+    const first = week(40)
+    expect(classifyReading(first, unmeasured(3, after))).toBe('stale')
+    expect(recordReading(first, unmeasured(3, after))).toBe(first)
+    expect(classifyReading(first, measured(3, NOW))).toBe('stale')
+    expect(recordReading(first, measured(3, NOW))).toBe(first)
+    expect(recordReading(first, measured(3, NOW - 1000))).toBe(first)
+  })
+
+  it('is a new week, and not a reset, when the reset time has moved', () => {
+    const nextWeek = RESET + WEEK_MS
+    expect(classifyReading(week(40), measured(3, nextWeek - WEEK_MS + HOUR_MS, nextWeek))).toBe('take')
+    expect(classifyReading(null, unmeasured(3, NOW))).toBe('take')
+  })
+
+  it('leaves the points before it, and makes an answer from before it stale when it is not measured', () => {
+    let history = week(30, 40)
+    history = recordReading(history, measured(3, after)) as WeekHistory
+    expect(history.points.map(([, share]) => share)).toEqual([30, 40, 3])
+    // A session tuning in gives the share it read before the reset
+    expect(classifyReading(history, unmeasured(40, after + HOUR_MS))).toBe('stale')
+    expect(classifyReading(history, unmeasured(55, after + HOUR_MS))).toBe('stale')
+    expect(recordReading(history, unmeasured(55, after + HOUR_MS))).toBe(history)
+    // A share under the peak is the week's own rise, measured or not
+    expect(classifyReading(history, unmeasured(10, after + HOUR_MS))).toBe('take')
+    expect(classifyReading(history, measured(45, after + HOUR_MS))).toBe('take')
+    expect((recordReading(history, unmeasured(10, after + HOUR_MS)) as WeekHistory).points.map(([, share]) => share)).toEqual([30, 40, 3, 10])
+  })
+
+  it('in the same hour as the peak replaces it, so the points still hold one an hour', () => {
+    const slot = hourStart(NOW)
+    const first = recordReading(null, measured(40, slot + 1000)) as WeekHistory
+    const next = recordReading(first, measured(3, slot + 20 * 60_000)) as WeekHistory
+    expect(next.points).toEqual([[slot + 20 * 60_000, 3]])
+  })
+
+  it('counts the share read after it as the use across it, for the hourly rates', () => {
+    const base: [number, number][] = [
+      [START + 24 * HOUR_MS, 20],
+      [START + 48 * HOUR_MS, 40],
+      [START + 60 * HOUR_MS, 90],
+    ]
+    const at = START + 60 * HOUR_MS + 30 * 60_000
+    const reset = forecastWeek({ resetsAt: RESET, points: [...base, [at, 6]] }, 6, at + 60_000) as Forecast
+    const flat = forecastWeek({ resetsAt: RESET, points: [...base, [at, 0]] }, 0, at + 60_000) as Forecast
+    expect(reset.end - reset.used).toBeGreaterThan(flat.end - flat.used)
+  })
+
+  it('takes a week used up and reset in place for one that is no longer out', () => {
+    const history = week(100)
+    const out = forecastWeek(history, 100, after) as Forecast
+    expect(out.outlook).toBe('out')
+    const next = recordReading(history, measured(3, after)) as WeekHistory
+    const forecast = forecastWeek(next, 3, after) as Forecast
+    expect(forecast.outlook).not.toBe('out')
+    expect(forecast.used).toBe(3)
   })
 })
 

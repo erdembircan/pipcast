@@ -6,7 +6,7 @@ import { aroundTime, clock, dayName, dayTime, hourStart, OUTLOOK_WORDS, parseWea
 import type { SessionRecord, Snapshot, WeatherMemory } from '@pipcast/contract'
 import type { Scene, Sky, TrackMark, WeatherScene } from '@pipcast/design'
 
-import { forecastWeek, hourlyPoints, MAX_POINTS, recordReading, RESET_TOLERANCE_MS } from './forecast.ts'
+import { classifyReading, forecastWeek, hourlyPoints, MAX_POINTS, recordReading, RESET_TOLERANCE_MS } from './forecast.ts'
 import type { Forecast, WeekHistory, WeekReading } from './forecast.ts'
 import { newestWeekReading } from './limits.ts'
 import type { Segment } from './story.ts'
@@ -134,9 +134,9 @@ export function createWeatherDesk(options: WeatherDeskOptions = {}): WeatherDesk
 
   // Looks at the week's reading. Nothing happens unless it is newer than the
   // last, or of another week. The forecast is worked out then only for the first
-  // reading the desk takes, a new week (the reset moved), a desk that holds no
-  // forecast (its first reading was out of its window, say), or a share a whole
-  // point or more above the one the forecast holds.
+  // reading the desk takes, a new week (the reset moved), a reset in place, a
+  // desk that holds no forecast (its first reading was out of its window, say),
+  // or a share a whole point or more above the one the forecast holds.
   function scan(found: WeekReading | null, now: number): void {
     if (found === null) {
       reading = null
@@ -150,12 +150,15 @@ export function createWeatherDesk(options: WeatherDeskOptions = {}): WeatherDesk
     }
     // A share lower than the week's last, in the same window, is a stale reading
     // (a session tuning in gives its last answer, which may be hours old) and
-    // changes nothing: the share never falls, and only the reset moving starts a
-    // new week. When it is the first the desk sees, the week as it stands is what
-    // it forecasts from.
-    const lastPoint = history === null ? undefined : history.points[history.points.length - 1]
-    if (history !== null && lastPoint !== undefined && Math.abs(found.resetsAt - history.resetsAt) <= RESET_TOLERANCE_MS && found.percent < lastPoint[1]) {
-      if (reading === null) {
+    // changes nothing, unless it is measured and RESET_FALL lower: then it is a
+    // reset in place, and the week goes on from it. After a reset in place, a
+    // reading not measured that is as high as the week was before it is an answer
+    // from before the reset, and stale too. When a stale reading is the first the
+    // desk sees, the week as it stands is what it forecasts from.
+    const kind = classifyReading(history, found)
+    if (kind === 'stale') {
+      const lastPoint = history === null ? undefined : history.points[history.points.length - 1]
+      if (history !== null && lastPoint !== undefined && reading === null) {
         reading = { percent: lastPoint[1], resetsAt: history.resetsAt, at: lastPoint[0] }
         compute(now)
       }
@@ -171,22 +174,22 @@ export function createWeatherDesk(options: WeatherDeskOptions = {}): WeatherDesk
       cached = null
       return
     }
-    if (first || moved || cached === null || found.percent - cached.used >= 1) {
+    if (first || moved || kind === 'reset' || cached === null || found.percent - cached.used >= 1) {
       compute(now)
     }
   }
 
   // Whether what the station holds is behind what the desk has, by anything it
   // is worth a write to keep: a new hour's point, the hour's point a whole point
-  // higher since the last post (the station quits seconds after the last
-  // session, and would otherwise keep each hour's first reading), another week,
-  // or STORM WARNING's time
+  // higher since the last post, or lower (a reset in place) (the station quits
+  // seconds after the last session, and would otherwise keep each hour's first
+  // reading), another week, or STORM WARNING's time
   function behind(): boolean {
     const now = stand()
     if (now.hour !== posted.hour || now.resetsAt !== posted.resetsAt || now.warnedAt !== posted.warnedAt) {
       return true
     }
-    return now.last !== null && posted.last !== null && now.last - posted.last >= 1
+    return now.last !== null && posted.last !== null && (now.last - posted.last >= 1 || now.last < posted.last)
   }
 
   return {

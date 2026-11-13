@@ -57,6 +57,20 @@ describe('readLimits', () => {
     expect(odd[0]?.resetsAt).toBeNull()
   })
 
+  it('marks each limit measured when the report came after a reply, and leaves the mark out otherwise', () => {
+    const report = [
+      { kind: 'five_hour', percentUsed: 1 },
+      { kind: 'seven_day', percentUsed: 2 },
+    ]
+    expect(readLimits(report, NOW, true).map((limit) => limit.measured)).toEqual([true, true])
+    for (const read of [readLimits(report, NOW), readLimits(report, NOW, false)]) {
+      expect(read).toHaveLength(2)
+      for (const limit of read) {
+        expect(limit).not.toHaveProperty('measured')
+      }
+    }
+  })
+
   it('stamps each limit with the time it was read', () => {
     const read = readLimits(
       [
@@ -88,6 +102,26 @@ describe('keepLimits', () => {
     expect(keepLimits([session(10), week(20)], [week(21, NOW + 1)])).toEqual([session(10), week(21, NOW + 1)])
   })
 
+  it('keeps a measured limit when a look that is not measured finds the same figures', () => {
+    const measured = { ...week(20), measured: true as const }
+    const kept = keepLimits([measured], [week(20, NOW + 5000)])
+    expect(kept).toEqual([measured])
+    expect(kept[0]).toBe(measured)
+  })
+
+  it('replaces a measured limit when a look that is not measured finds other figures', () => {
+    const measured = { ...week(20), measured: true as const }
+    expect(keepLimits([measured], [week(21, NOW + 5000)])).toEqual([week(21, NOW + 5000)])
+    expect(keepLimits([measured], [{ ...week(20, NOW + 5000), resetsAt: NOW + 9000 }])).toEqual([{ ...week(20, NOW + 5000), resetsAt: NOW + 9000 }])
+  })
+
+  it('replaces a measured limit with a newer measured one, and a limit that is not measured with a measured one', () => {
+    const old = { ...week(20), measured: true as const }
+    const next = { ...week(20, NOW + 5000), measured: true as const }
+    expect(keepLimits([old], [next])).toEqual([next])
+    expect(keepLimits([week(20)], [next])).toEqual([next])
+  })
+
   it('orders the session\'s limit before the week\'s', () => {
     expect(keepLimits([], [week(20), session(10)]).map((limit) => limit.kind)).toEqual(['session', 'week'])
     expect(keepLimits([week(20)], [session(10)]).map((limit) => limit.kind)).toEqual(['session', 'week'])
@@ -104,6 +138,11 @@ describe('limitsMoved', () => {
     expect(limitsMoved([], [session(10)])).toBe(true)
     expect(limitsMoved([session(10), week(20)], [session(10)])).toBe(true)
     expect(limitsMoved([session(10)], [week(20)])).toBe(true)
+  })
+
+  it('tells a limit that became measured, with the same figures', () => {
+    expect(limitsMoved([session(10), week(20)], [session(10), { ...week(20, NOW + 5000), measured: true }])).toBe(true)
+    expect(limitsMoved([{ ...week(20), measured: true }], [{ ...week(20, NOW + 5000), measured: true }])).toBe(false)
   })
 
   it('ignores a reading that moved only the time it was read', () => {

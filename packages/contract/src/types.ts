@@ -66,6 +66,10 @@ export interface UsageLimit {
   resetsAt: number | null
   // When the session read it
   at: number
+  // Read from Claude Code's report after a reply (session.measure), so its
+  // figures are as new as the reply; left out for a look the mod took as the
+  // session tuned in or reloaded, whose figures may be hours old
+  measured?: true
 }
 
 export interface SessionRecord {

@@ -41,10 +41,12 @@ export function limitMeters(sessions: readonly SessionRecord[], now: number): Li
 
 // The week's reading among the sessions on air, for the forecast: of the latest
 // reset window any of them reads (reset times within RESET_TOLERANCE_MS are one
-// window), the one with the highest share, since a window's share never falls
-// and a lower one is a session's older answer, as one gives when it tunes in.
-// With equal shares, the later reading. Null when none has a reset time, or the
-// latest window's reset has passed.
+// window), the newest measured reading, the one Claude Code reported after the
+// latest reply, with equal times the higher share. With none measured, the one
+// with the highest share, since a window's share only rises but for a reset in
+// place, and a lower one is a session's older answer, as one gives when it tunes
+// in; with equal shares, the later reading. Null when none has a reset time, or
+// the latest window's reset has passed.
 export function newestWeekReading(sessions: readonly SessionRecord[], now: number): WeekReading | null {
   const weeks: { limit: UsageLimit; resetsAt: number; percent: number }[] = []
   let latest = -Infinity
@@ -60,13 +62,25 @@ export function newestWeekReading(sessions: readonly SessionRecord[], now: numbe
     return null
   }
   let best: (typeof weeks)[number] | undefined
+  let bestMeasured: (typeof weeks)[number] | undefined
   for (const week of weeks) {
     if (latest - week.resetsAt > RESET_TOLERANCE_MS) {
       continue
     }
-    if (best === undefined || week.percent > best.percent || (week.percent === best.percent && week.limit.at > best.limit.at)) {
+    if (week.limit.measured === true) {
+      if (
+        bestMeasured === undefined ||
+        week.limit.at > bestMeasured.limit.at ||
+        (week.limit.at === bestMeasured.limit.at && week.percent > bestMeasured.percent)
+      ) {
+        bestMeasured = week
+      }
+    } else if (best === undefined || week.percent > best.percent || (week.percent === best.percent && week.limit.at > best.limit.at)) {
       best = week
     }
+  }
+  if (bestMeasured !== undefined) {
+    return { percent: bestMeasured.percent, resetsAt: bestMeasured.resetsAt, at: bestMeasured.limit.at, measured: true }
   }
   return best === undefined ? null : { percent: best.percent, resetsAt: best.resetsAt, at: best.limit.at }
 }

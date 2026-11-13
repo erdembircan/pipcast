@@ -1,6 +1,7 @@
 // The weekly forecast: will the week's usage limit last until it resets?
 //
-// The week's limit is a share used, in percent, that only rises. A session
+// The week's limit is a share used, in percent, that only rises, but for a reset
+// in place (RESET_FALL). A session
 // reads it when it replies, so the readings come at irregular times, and the
 // hours between two of them are unobserved, not idle. Everything here is a
 // pure function of the readings and of the time it is given: nothing reads the
@@ -41,6 +42,8 @@ export const MIN_SHORT_HOURS = 6
 export const MAX_POINTS = 200
 // Two reset times this close are the same window
 export const RESET_TOLERANCE_MS = 10 * 60_000
+// A measured share at least this much lower than the week's last is a reset in place: Anthropic reset the week's usage and kept its reset time
+export const RESET_FALL = 5
 // The chance of running out from which the outlook is a storm
 export const STORM_CHANCE = 0.5
 // The end of the week from which the outlook is clouds
@@ -60,6 +63,9 @@ export interface WeekReading {
   resetsAt: number
   // When the session read it
   at: number
+  // Read from Claude Code's report after a reply, so its share is as new as the
+  // reply; left out for one a session gave as it tuned in, which may be hours old
+  measured?: true
 }
 
 // `out`: the week is already used up, so there is nothing left to forecast
@@ -102,6 +108,49 @@ function at(array: readonly number[], index: number): number {
   return array[index] ?? 0
 }
 
+// What a reading is to a week's history: `take`, a point of the week; `reset`,
+// a measured fall of RESET_FALL or more, the week's usage reset in place, which
+// is taken as a point too; `stale`, a session's older answer, which says nothing
+export type ReadingKind = 'take' | 'reset' | 'stale'
+
+// The highest share among the points before the latest fall (a point lower than
+// the one before it); null when the points have no fall
+function peakBeforeReset(points: readonly (readonly [number, number])[]): number | null {
+  let fall = -1
+  for (let i = 1; i < points.length; i += 1) {
+    if ((points[i] as readonly [number, number])[1] < (points[i - 1] as readonly [number, number])[1]) {
+      fall = i
+    }
+  }
+  if (fall < 0) {
+    return null
+  }
+  return Math.max(...points.slice(0, fall).map((point) => point[1]))
+}
+
+export function classifyReading(history: WeekHistory | null, reading: WeekReading): ReadingKind {
+  if (history === null || Math.abs(reading.resetsAt - history.resetsAt) > RESET_TOLERANCE_MS) {
+    return 'take'
+  }
+  const last = history.points[history.points.length - 1]
+  if (last === undefined) {
+    return 'take'
+  }
+  const percent = clamp(reading.percent, 0, 100)
+  if (percent < last[1]) {
+    return reading.measured === true && reading.at > last[0] && last[1] - percent >= RESET_FALL ? 'reset' : 'stale'
+  }
+  // A tune-in's answer from before a reset in place is as high as the week was
+  // then, and is no rise of the week since
+  if (reading.measured !== true) {
+    const peak = peakBeforeReset(history.points)
+    if (peak !== null && percent >= peak) {
+      return 'stale'
+    }
+  }
+  return 'take'
+}
+
 // Keeps a reading in the week's history. Returns a new history when something
 // changed and the same one (null, given null) when nothing did, so the caller
 // can tell by identity.
@@ -121,9 +170,9 @@ export function recordReading(history: WeekHistory | null, reading: WeekReading)
     if (reading.at <= last[0]) {
       return history
     }
-    // The share never falls within a window, so a lower one is a stale reading (a
-    // session's older answer, or a share that jitters by a point) and says nothing
-    if (percent < last[1]) {
+    // A lower share is a stale reading (a session's older answer, or a share that
+    // jitters by a point) and says nothing, unless it is a reset in place
+    if (classifyReading(history, reading) === 'stale') {
       return history
     }
     // One point an hour, in the hours the model bins by: a reading in the same
@@ -348,7 +397,8 @@ export function forecastWeek(history: WeekHistory, usedNow: number, now: number)
   const intervals: [number, number, number][] = []
   let previous: [number, number] = [start, 0]
   for (const point of points) {
-    intervals.push([previous[0], point[0], Math.max(0, point[1] - previous[1])])
+    // A fall is a reset in place: the share started again from 0, so the use across it is at least the share read after it
+    intervals.push([previous[0], point[0], point[1] >= previous[1] ? point[1] - previous[1] : point[1]])
     previous = point
   }
 

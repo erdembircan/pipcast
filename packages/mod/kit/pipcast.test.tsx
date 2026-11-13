@@ -323,17 +323,36 @@ scenario('a reply that moves a limit writes the record at once', { limits: [FIVE
   await w.clock.advance(1000)
   await measuredWith($, [{ ...FIVE_HOUR, percentUsed: 43 }, SEVEN_DAY])
   const limits = w.record()?.limits
-  expect(limits?.[0]).toEqual({ kind: 'session', percentUsed: 43, resetsAt: Date.parse('2026-10-21T18:00:00Z'), at: T0 + 1000 })
+  expect(limits?.[0]).toEqual({ kind: 'session', percentUsed: 43, resetsAt: Date.parse('2026-10-21T18:00:00Z'), at: T0 + 1000, measured: true })
   expect(limits?.[1]?.at).toBe(T0 + 1000)
+})
+
+scenario('the limits a reply reports are marked measured, and the ones read as the session tuned in are not', { limits: [FIVE_HOUR, SEVEN_DAY] }, async (w, $) => {
+  await tuneIn($)
+  expect(w.record()?.limits?.map((limit) => limit.measured)).toEqual([undefined, undefined])
+  expect(w.record()?.limits?.[1]).not.toHaveProperty('measured')
+  await w.clock.advance(1000)
+  await measuredWith($, [{ ...FIVE_HOUR, percentUsed: 43 }, { ...SEVEN_DAY, percentUsed: 62 }])
+  const limits = w.record()?.limits
+  expect(limits?.[1]).toEqual({ kind: 'week', percentUsed: 62, resetsAt: Date.parse('2026-10-24T09:00:00Z'), at: T0 + 1000, measured: true })
+})
+
+scenario('a reply that finds the figures the tune-in read writes the record at once, as the limits became measured', { limits: [FIVE_HOUR, SEVEN_DAY] }, async (w, $) => {
+  await tuneIn($)
+  await w.clock.advance(1000)
+  await measuredWith($, [FIVE_HOUR, SEVEN_DAY])
+  expect(w.record()?.limits?.map((limit) => limit.measured)).toEqual([true, true])
 })
 
 scenario('a reply that moves only the time leaves the record to the heartbeat', { limits: [FIVE_HOUR, SEVEN_DAY] }, async (w, $) => {
   await tuneIn($)
   await w.clock.advance(1000)
   await measuredWith($, [FIVE_HOUR, SEVEN_DAY])
-  expect(w.record()?.limits?.map((limit) => limit.at)).toEqual([T0, T0])
-  await w.clock.advance(HEARTBEAT_MS - 1000)
+  await w.clock.advance(1000)
+  await measuredWith($, [FIVE_HOUR, SEVEN_DAY])
   expect(w.record()?.limits?.map((limit) => limit.at)).toEqual([T0 + 1000, T0 + 1000])
+  await w.clock.advance(HEARTBEAT_MS - 2000)
+  expect(w.record()?.limits?.map((limit) => limit.at)).toEqual([T0 + 2000, T0 + 2000])
 })
 
 scenario('a limit the engine stops reporting stays on the record', { limits: [FIVE_HOUR, SEVEN_DAY] }, async (w, $) => {
@@ -342,7 +361,7 @@ scenario('a limit the engine stops reporting stays on the record', { limits: [FI
   await measuredWith($, [{ ...SEVEN_DAY, percentUsed: 62 }])
   const limits = w.record()?.limits
   expect(limits?.[0]).toEqual({ kind: 'session', percentUsed: 42, resetsAt: Date.parse('2026-10-21T18:00:00Z'), at: T0 })
-  expect(limits?.[1]).toEqual({ kind: 'week', percentUsed: 62, resetsAt: Date.parse('2026-10-24T09:00:00Z'), at: T0 + 1000 })
+  expect(limits?.[1]).toEqual({ kind: 'week', percentUsed: 62, resetsAt: Date.parse('2026-10-24T09:00:00Z'), at: T0 + 1000, measured: true })
 })
 
 scenario('a gateway\'s spend limit is not on the record', { limits: [{ kind: 'spend_limit', percentUsed: 120 }] }, async (w, $) => {
