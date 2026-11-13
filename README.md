@@ -10,44 +10,18 @@ What plays in the window is KLWD, a local TV news channel for your sessions, sty
 
 <p align="center"><a href="https://www.youtube.com/watch?v=WZc3zm6nB9g&list=PLCbk0boCLtOs"><img src="assets/youtube-thumbnail-play.jpg" width="716" alt="Watch Pipcast's videos on YouTube"></a></p>
 
-<p align="center"><img src="assets/screenshots/breaking.png" width="716" alt="KLWD on air: Clawd at the anchor desk with a READY FOR REVIEW story"></p>
-
 ## Requirements
 
 - A Mac with Apple silicon, on macOS 14 or later. The window's controls use Liquid Glass on macOS 26 and later.
-- The Claude desktop app, with Claude Code. Sessions you run in Claude Code in a terminal can tune in with `/pipcast` too. Pipcast is a mod for Claude Code, so it doesn't run in chat or Cowork.
+- The Claude desktop app, with Claude Code. Pipcast runs in the desktop app's Code tab alone, not in chat, Cowork or Claude Code in a terminal.
 
 ## Install
 
-Pipcast installs from [erdembircan-plugins](https://github.com/erdembircan/plugin-marketplace), a marketplace of Claude Code plugins. It's on its way to Anthropic's plugin directory too, where it's in review and can't be added yet.
+Pipcast installs from [erdembircan-plugins](https://github.com/erdembircan/plugin-marketplace), a marketplace of Claude Code plugins.
 
-### From erdembircan-plugins
-
-In the Claude desktop app, click **+** next to the prompt box, then **Plugins**. Choose **Add marketplace**, enter `erdembircan/plugin-marketplace`, and add **Pipcast**.
-
-Or from a terminal:
-
-```bash
-claude plugin marketplace add erdembircan/plugin-marketplace
-```
-
-```bash
-claude plugin install pipcast@erdembircan-plugins
-```
-
-Sessions you start after that have it.
-
-### From Anthropic's plugin directory
-
-Pipcast is in review for Anthropic's plugin directory, and isn't available there yet. Until it's listed, install it from erdembircan-plugins.
-
-Once it's listed:
-
-1. In the Claude desktop app, or on claude.ai, open **Customize**, then **Plugins**.
-2. Under **Discover**, find **Pipcast** and select **Add**.
-3. Start a new Claude Code session, signed in to the same account. If Pipcast isn't on in it yet, run `/reload-plugins` in that session, or start another one.
-
-On a Team or Enterprise plan, the directory shows only if your organization keeps it.
+1. In the Claude desktop app, click **+** next to the prompt box, then **Plugins**.
+2. Choose **Add marketplace**, enter `erdembircan/plugin-marketplace`, and add **Pipcast**.
+3. Start a new session. It has Pipcast.
 
 ## Get started
 
@@ -191,19 +165,12 @@ KLWD is an ordinary window, so it appears in screen shares and recordings, with 
 
 ## Update and uninstall
 
-**From Anthropic's plugin directory**, once it's listed there, Pipcast updates by itself: when a new version is out, new sessions get it. To uninstall it, open **Customize**, then **Plugins**, open **Pipcast**, open its menu and select **Remove**. New sessions start without it.
+In the Claude desktop app, click **+** next to the prompt box, then **Plugins**, then **Manage plugins**, and open **Pipcast**.
 
-**From erdembircan-plugins**, update or uninstall it from a terminal, then start a new session:
+- To update, select **Update** when a new version is out, then start a new session. To look for one now, select **Check for updates** in Pipcast's menu.
+- To uninstall, select **Uninstall**. New sessions start without Pipcast.
 
-```bash
-claude plugin update pipcast@erdembircan-plugins
-```
-
-```bash
-claude plugin uninstall pipcast@erdembircan-plugins
-```
-
-Either way, uninstalling leaves the files Pipcast kept in `~/Library/Application Support/Pipcast`. Delete that folder to remove them too.
+Uninstalling leaves the files Pipcast kept in `~/Library/Application Support/Pipcast`. Delete that folder to remove them too.
 
 ## Development
 

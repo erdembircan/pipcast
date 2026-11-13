@@ -11,7 +11,7 @@ Watch Pipcast's videos on YouTube, starting with the demo: https://www.youtube.c
 ## Requirements
 
 - A Mac with Apple silicon, on macOS 14 or later. The window's controls use Liquid Glass on macOS 26 and later.
-- Claude Code, in the Code tab of the Claude desktop app or in a terminal. Pipcast is a mod for Claude Code, so it doesn't run in chat or Cowork.
+- The Claude desktop app, with Claude Code. Pipcast runs in the desktop app's Code tab alone, not in chat, Cowork or Claude Code in a terminal.
 
 ## Get started
 
@@ -20,7 +20,7 @@ Watch Pipcast's videos on YouTube, starting with the demo: https://www.youtube.c
 3. When the session needs your input, finishes, or stops on an error, KLWD airs it as BREAKING NEWS.
 4. Click **Back to Claude** on the window, or switch to Claude yourself, and the window gets out of the way.
 
-A session that was already open, or one you resume, goes on air when you press **TUNE IN** in the band above the prompt box, or run `/pipcast`. Press **TUNE OUT**, or run `/pipcast` again, to take the session off the air. A session that has been **READY** for an hour goes off the air by itself. Press **TUNE IN** to bring it back. In Claude Code in a terminal, `/pipcast` is how a session goes on air.
+A session that was already open, or one you resume, goes on air when you press **TUNE IN** in the band above the prompt box, or run `/pipcast`. Press **TUNE OUT**, or run `/pipcast` again, to take the session off the air. A session that has been **READY** for an hour goes off the air by itself. Press **TUNE IN** to bring it back.
 
 ## What's on
 
@@ -96,6 +96,6 @@ KLWD is an ordinary window, so it appears in screen shares and recordings, with 
 
 ## Source and support
 
-Pipcast is open source, under the MIT license, at [erdembircan/pipcast](https://github.com/erdembircan/pipcast). Everything in the plugin is built from that repository: the mod from its TypeScript, the station from its Swift, the broadcast's page from its TypeScript and its design system, and the sounds from the design system's scores. The page loads React's own production files from its npm package, with React's license beside them: React's unchanged, and React DOM's with two of its minified names, `sh` and `Sh`, renamed `sQ9` and `SQ9`, since Anthropic's plugin directory reads them as the shell. It also loads the typefaces Anybody and Archivo, under the SIL Open Font License, with theirs. [Developing Pipcast](https://github.com/erdembircan/pipcast/blob/master/docs/development.md) says how to build it yourself.
+Pipcast is open source, under the MIT license, at [erdembircan/pipcast](https://github.com/erdembircan/pipcast). Everything in the plugin is built from that repository: the mod from its TypeScript, the station from its Swift, the broadcast's page from its TypeScript and its design system, and the sounds from the design system's scores. The page loads React's own production files from its npm package, unchanged, with React's license beside them. It also loads the typefaces Anybody and Archivo, under the SIL Open Font License, with theirs. [Developing Pipcast](https://github.com/erdembircan/pipcast/blob/master/docs/development.md) says how to build it yourself.
 
 To report a problem or ask a question, open an issue at [erdembircan/pipcast](https://github.com/erdembircan/pipcast/issues). For a security problem, don't open an issue: [report it privately](https://github.com/erdembircan/pipcast/security/advisories/new), as [SECURITY.md](https://github.com/erdembircan/pipcast/blob/master/SECURITY.md) says.
