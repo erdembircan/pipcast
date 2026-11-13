@@ -1,6 +1,7 @@
 // Builds the page the station shows into plugin/station/web/: index.html,
-// station.js, design.js, station.css, fonts/, textures/ and vendor/. Nothing is
-// minified, so the people who install Pipcast can read every line it runs:
+// station.js, design.js, station.css, fonts/, textures/ and vendor/. None of
+// Pipcast's own code is minified, so the people who install it can read it as
+// written:
 // station.js is the page's own code, bundled as written, design.js is the
 // design system's bundle, design/components/bundle.js, copied as it is (the
 // design's comments, which say where code follows another's, are kept), and

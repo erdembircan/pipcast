@@ -28,7 +28,7 @@ scripts/build.sh
 
 builds everything an install gets into `plugin/`: the mod bundled into one file, the station, the broadcast's page and its sounds, with the plugin's manifest, icon, README and license. `plugin/` belongs to the build. Don't edit it by hand or keep anything else in it: the build stops when it finds a file there that it doesn't make. Commit what it builds, since an install copies `plugin/` as it is, and CI fails a pull request whose `plugin/` differs from what its sources build.
 
-The build minifies nothing, so the people who install Pipcast can read every line it runs. The broadcast's page is its own code, `station.js`, bundled as written, and the design system's bundle, `design/components/bundle.js`, which the build copies as it is to `design.js` beside it, and React's production files from its npm package, copied unchanged into `plugin/station/web/vendor` with React's license. The page loads React first, then `design.js`, then `station.js`.
+The build minifies none of Pipcast's own code, so the people who install Pipcast can read it as written. The broadcast's page is its own code, `station.js`, bundled as written, and the design system's bundle, `design/components/bundle.js`, which the build copies as it is to `design.js` beside it, and React's production files from its npm package, copied unchanged into `plugin/station/web/vendor` with React's license. The page loads React first, then `design.js`, then `station.js`.
 
 The globe's pictures of the Earth are in `design/textures`, which the build copies to `plugin/station/web/textures`; `CREDITS.txt` there says where they come from.
 
@@ -42,7 +42,7 @@ The plugin's README is `packages/mod/README.md`, which the build copies to `plug
 
 The manifest also names the plugin's icon, `assets/icon-1024.png` copied to `plugin/assets/icon.png`.
 
-Two marketplaces list Pipcast as well. Each entry repeats the manifest's display fields, `displayName`, `description`, `author`, `homepage`, `repository`, `license` and `keywords`, because Claude Code shows an entry's own value wherever it sets one:
+Two marketplaces list Pipcast. Each entry repeats the manifest's display fields, `displayName`, `description`, `author`, `homepage`, `repository`, `license` and `keywords`, because Claude Code shows an entry's own value wherever it sets one:
 
 - **pipcast**, in this repository's `.claude-plugin/marketplace.json`, is for development only, and lists nothing but Pipcast: `scripts/live.sh` installs the live checkout from it, and `scripts/verify-install.sh` installs this clone from it. Nobody installs Pipcast from it. Its entry names `./plugin`, and a test fails when its display fields differ from the manifest's.
 - **erdembircan-plugins**, in [erdembircan/plugin-marketplace](https://github.com/erdembircan/plugin-marketplace), is where people install Pipcast from: a marketplace of your Claude Code plugins, Pipcast among them. Its entry is a `git-subdir` source that installs `plugin/` from this repository's master branch. When a display field changes in the manifest, change it in that entry too.

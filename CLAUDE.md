@@ -15,7 +15,7 @@ The README is for people who install Pipcast. How to build, test and try a chang
 - The development build, which takes cues, never goes into `plugin/`: its station code is inside `#if PIPCAST_DEV`, its page is `packages/dev`, and `scripts/build-dev.sh` builds both into `.dev/`. Keep every way in for a cue there.
 - Code in `packages/mod/src`, `packages/contract/src` and `packages/dev/src` imports with relative paths only: the kit tests run against the built plugin in a folder of their own, and `scripts/cue.mjs` runs `packages/dev/src/cue.ts` with Node itself, and in neither does an alias such as `@pipcast/contract` resolve to anything.
 - `plugin/README.md`, built from `packages/mod/README.md`, tells the people who add Pipcast everything it runs, reads and keeps. When the mod or the station starts to run, read or keep anything new, say so in its **What Pipcast runs and reads** or **Privacy** section, and in the same section of the root README, word for word: `packages/mod/test/readme.test.ts` fails when the two differ.
-- Never minify what ships: the people who install Pipcast can read every line it runs.
+- Never minify what ships: the people who install Pipcast can read its own code as written, and React's files are its npm package's, unchanged.
 
 ## What the desktop app runs
 
