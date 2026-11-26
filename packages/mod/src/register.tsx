@@ -847,10 +847,11 @@ async function setOption($: EngineInterface, option: OptionSpec, enabled: boolea
 // /pipcast weather: the record keeps the moment, and the director airs KLWD
 // WEATHER if the window shows within WEATHER_ASK_GRACE_MS of it
 async function askForWeather($: EngineInterface): Promise<string> {
+  const now = await $.clock.now()
   if (model === null || tunedInAt === null) {
     return REPLY.weatherOffAir
   }
-  model = record.askedForWeather(model, await $.clock.now())
+  model = record.askedForWeather(model, now)
   await save($)
   return REPLY.weather
 }

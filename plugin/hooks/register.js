@@ -10,7 +10,6 @@ var MAX_STORIES = 10;
 var MAX_ACTIVITY = 3;
 var MAX_HOURS = 3;
 var STATION_STALE_MS = 2e4;
-var WEATHER_ASK_GRACE_MS = 1e4;
 var STORE_FOLDER = "Pipcast";
 var COMMAND_MAX = 60;
 var QUESTION_MAX = 200;
@@ -32,7 +31,7 @@ var REPLY = {
   tunedIn: "Tuned in to KLWD. It shows when you switch to another app.",
   tunedOut: "Tuned out of KLWD.",
   cannotStart: "KLWD could not start. Run /pipcast to try again.",
-  weather: `KLWD WEATHER airs if you switch to another app in the next ${WEATHER_ASK_GRACE_MS / 1e3} seconds. In the week's first day, or once the week is used up, there's no forecast to show.`,
+  weather: "KLWD WEATHER airs if you switch to another app in the next 10 seconds. In the week's first day, or once the week is used up, there's no forecast to show.",
   weatherOffAir: "This session is off the air. Run /pipcast to tune in, then /pipcast weather.",
   weatherAlone: "/pipcast weather takes nothing after it."
 };
@@ -2175,10 +2174,11 @@ async function setOption($, option, enabled) {
   }
 }
 async function askForWeather($) {
+  const now = await $.clock.now();
   if (model === null || tunedInAt === null) {
     return REPLY.weatherOffAir;
   }
-  model = askedForWeather(model, await $.clock.now());
+  model = askedForWeather(model, now);
   await save($);
   return REPLY.weather;
 }

@@ -4,7 +4,6 @@
 // fundamentals): present tense, caps on tabs and labels, sentence case
 // elsewhere, no exclamation marks.
 
-import { WEATHER_ASK_GRACE_MS } from './constants.ts'
 import { figure, plural } from './format.ts'
 import type { ErrorKind, StoryKind } from './types.ts'
 
@@ -18,7 +17,7 @@ export const REPLY = {
   tunedIn: 'Tuned in to KLWD. It shows when you switch to another app.',
   tunedOut: 'Tuned out of KLWD.',
   cannotStart: 'KLWD could not start. Run /pipcast to try again.',
-  weather: `KLWD WEATHER airs if you switch to another app in the next ${WEATHER_ASK_GRACE_MS / 1000} seconds. In the week's first day, or once the week is used up, there's no forecast to show.`,
+  weather: "KLWD WEATHER airs if you switch to another app in the next 10 seconds. In the week's first day, or once the week is used up, there's no forecast to show.",
   weatherOffAir: 'This session is off the air. Run /pipcast to tune in, then /pipcast weather.',
   weatherAlone: '/pipcast weather takes nothing after it.',
 } as const

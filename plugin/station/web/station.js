@@ -139,14 +139,6 @@
   }
 
   // packages/contract/src/copy.ts
-  var REPLY = {
-    tunedIn: "Tuned in to KLWD. It shows when you switch to another app.",
-    tunedOut: "Tuned out of KLWD.",
-    cannotStart: "KLWD could not start. Run /pipcast to try again.",
-    weather: `KLWD WEATHER airs if you switch to another app in the next ${WEATHER_ASK_GRACE_MS / 1e3} seconds. In the week's first day, or once the week is used up, there's no forecast to show.`,
-    weatherOffAir: "This session is off the air. Run /pipcast to tune in, then /pipcast weather.",
-    weatherAlone: "/pipcast weather takes nothing after it."
-  };
   var OPTION_WORDS = {
     auto: {
       title: "Tune in every new session",
@@ -339,6 +331,7 @@
 
   // packages/contract/src/validate.ts
   var LIMIT_KINDS = ["session", "week"];
+  var CLOCK_SKEW_MS = 5e3;
   function isObject(value) {
     return typeof value === "object" && value !== null && !Array.isArray(value);
   }
@@ -1573,10 +1566,10 @@
   }
 
   // packages/director/src/director.ts
-  function newestAsk(snapshot) {
+  function newestAsk(snapshot, now) {
     let newest2 = 0;
     for (const session of snapshot.sessions) {
-      if (session.weatherAskedAt !== void 0 && session.weatherAskedAt > newest2) {
+      if (session.weatherAskedAt !== void 0 && session.weatherAskedAt <= now + CLOCK_SKEW_MS && session.weatherAskedAt > newest2) {
         newest2 = session.weatherAskedAt;
       }
     }
@@ -1729,7 +1722,7 @@
             desk.markDue(now);
           }
         }
-        const asked = newestAsk(snapshot);
+        const asked = newestAsk(snapshot, now);
         if (asked > servedAsk) {
           if (now - asked > WEATHER_ASK_GRACE_MS) {
             servedAsk = asked;
@@ -1744,7 +1737,8 @@
         const quarter = quarters(now);
         if (quarter !== null && quarter > servedQuarter) {
           servedQuarter = quarter;
-          dueQuarter = quarter;
+          const weatherNear = queue.some((item) => item.kind === "weather") || onAir?.item.kind === "weather";
+          dueQuarter = weatherNear ? null : quarter;
         }
         if (dueQuarter !== null && (quarter !== dueQuarter || !hasOutlook(desk.forecast()))) {
           dueQuarter = null;
@@ -1813,6 +1807,7 @@
                 continue;
               }
               onAir = { item, segment: weatherSegment(forecast, now), index: 0, stepStartedAt: now, bed: void 0 };
+              dueQuarter = null;
             } else {
               if (snapshot === null) {
                 continue;

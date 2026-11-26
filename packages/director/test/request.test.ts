@@ -212,6 +212,33 @@ describe('/pipcast weather', () => {
   })
 })
 
+describe('a request and the quarter hours', () => {
+  it('is not followed by the quarter hour’s turn to the same page', () => {
+    const { h, limit } = world(0.5, local(13, 10, 14, 0))
+    h.until(local(13, 10, 14, 40))
+    h.land([asked('a', limit, local(13, 10, 14, 50))], local(13, 10, 14, 50))
+    expect(aired(h.history)).toHaveLength(1)
+    h.until(local(13, 10, 16, 0))
+    // The :15 began while it was on air, and nothing turns the board after it
+    expect(h.history.some((sample) => sample.program.scene.forecast !== undefined)).toBe(false)
+    expect(aired(h.history)).toHaveLength(1)
+  })
+})
+
+describe('a request stamped ahead of the clock', () => {
+  it('is no request, and does not hold back a real one a second later', () => {
+    const { h, limit } = world()
+    h.until(T + 1_000)
+    h.land([asked('a', limit, T + 61_000)], T + 1_250)
+    h.until(T + 2_000)
+    expect(aired(h.history)).toEqual([])
+    h.land([asked('a', limit, T + 61_000), asked('b', limit, T + 2_250)], T + 2_250)
+    // Up to a few seconds before its stamp, when it would count as made
+    h.until(T + 50_000)
+    expect(aired(h.history)).toEqual([`weather:${T + 2_250}`])
+  })
+})
+
 describe('nothing else waits for the window', () => {
   it('a story that lands while the window is hidden never airs when it shows a second later', () => {
     const { h, limit } = world()

@@ -1,4 +1,4 @@
-import { hourStart, STORY_FRESH_MS, WEATHER_ASK_GRACE_MS } from '@pipcast/contract'
+import { CLOCK_SKEW_MS, hourStart, STORY_FRESH_MS, WEATHER_ASK_GRACE_MS } from '@pipcast/contract'
 import type { Bed, SessionRecord, Snapshot, Sound, Story, WeatherMemory } from '@pipcast/contract'
 import type { Scene, WeatherScene } from '@pipcast/design'
 
@@ -63,11 +63,11 @@ interface OnAir {
   bed: Bed | undefined
 }
 
-// The newest /pipcast weather request among the sessions on air, or 0 when none has asked
-function newestAsk(snapshot: Snapshot): number {
+// The newest /pipcast weather request among the sessions on air, or 0 when none has asked. One stamped ahead of now by more than the clock's allowance is no request
+function newestAsk(snapshot: Snapshot, now: number): number {
   let newest = 0
   for (const session of snapshot.sessions) {
-    if (session.weatherAskedAt !== undefined && session.weatherAskedAt > newest) {
+    if (session.weatherAskedAt !== undefined && session.weatherAskedAt <= now + CLOCK_SKEW_MS && session.weatherAskedAt > newest) {
       newest = session.weatherAskedAt
     }
   }
@@ -272,7 +272,7 @@ export function createDirector(options: DirectorOptions = {}): { tick(input: Tic
       // The newest request of the sessions on air counts; one is dealt with
       // once, and one that comes while KLWD WEATHER waits or is on air adds
       // nothing
-      const asked = newestAsk(snapshot)
+      const asked = newestAsk(snapshot, now)
       if (asked > servedAsk) {
         if (now - asked > WEATHER_ASK_GRACE_MS) {
           servedAsk = asked
@@ -291,7 +291,9 @@ export function createDirector(options: DirectorOptions = {}): { tick(input: Tic
       const quarter = quarters(now)
       if (quarter !== null && quarter > servedQuarter) {
         servedQuarter = quarter
-        dueQuarter = quarter
+        // KLWD WEATHER on air or waiting shows EXTENDED FORECAST itself
+        const weatherNear = queue.some((item) => item.kind === 'weather') || onAir?.item.kind === 'weather'
+        dueQuarter = weatherNear ? null : quarter
       }
       if (dueQuarter !== null && (quarter !== dueQuarter || !hasOutlook(desk.forecast()))) {
         dueQuarter = null
@@ -374,6 +376,8 @@ export function createDirector(options: DirectorOptions = {}): { tick(input: Tic
               continue
             }
             onAir = { item, segment: weatherSegment(forecast, now), index: 0, stepStartedAt: now, bed: undefined }
+            // It shows EXTENDED FORECAST: a quarter hour due now is served by it
+            dueQuarter = null
           } else {
             if (snapshot === null) {
               continue

@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
   BAND_ALT,
+  REPLY,
+  WEATHER_ASK_GRACE_MS,
   LEAD,
   OUTLOOK_WORDS,
   WEATHER,
@@ -165,6 +167,12 @@ describe('the weekly forecast', () => {
     expect(WEATHER.tracker).toBe('STORMTRACKER')
     expect(WEATHER).not.toHaveProperty('warningLabel')
     expect(WEATHER.alert).toEqual(['WEATHER', 'ALERT'])
+  })
+})
+
+describe('the command', () => {
+  it('names the grace /pipcast weather waits for in its reply', () => {
+    expect(REPLY.weather).toContain(`${WEATHER_ASK_GRACE_MS / 1000} seconds`)
   })
 })
 
