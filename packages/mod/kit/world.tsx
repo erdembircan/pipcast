@@ -65,10 +65,10 @@ export interface WorldOptions {
   launchOut?: string
   hasRepo?: boolean
   // What another mod draws in the band, on a row of its own: one plain Box or a
-  // row like usage-band's; nothing, where the engine answers with its own
-  // drawing, as it does when no other mod draws there; or an empty Box. With
-  // inOurRow, the plain Box and, in our own row beneath our hook, a line of its
-  // own. Unset, one plain Box
+  // row like usage-band's; or nothing, where the engine answers with its own
+  // drawing, as it does when no other mod draws there. With inOurRow and empty,
+  // the plain Box and, in our own row beneath our hook, a line of its own or an
+  // empty Box. Unset, one plain Box
   otherBand?: 'plain' | 'row' | 'nothing' | 'empty' | 'inOurRow'
   // The plugin's options, as settings hold them; unset, the manifest's defaults
   settings?: PluginOptions

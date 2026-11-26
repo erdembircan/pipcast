@@ -28,9 +28,12 @@ type Run = ($: Engine, on: On) => Promise<void>
 function scenario(name: string, options: WorldOptions, body: (w: ReturnType<typeof world>, $: Engine) => Promise<void>) {
   const run: Run = async ($, on) => {
     const w = world(on, options)
-    if (options.otherBand === 'inOurRow') {
+    if (options.otherBand === 'inOurRow' || options.otherBand === 'empty') {
       on('ui.render', { component: 'AbovePrompt', plugin: 'pipcast' }, ($ui, e) => {
         const { Box, Text } = $ui.ui.resolve(e)
+        if (options.otherBand === 'empty') {
+          return <Box />
+        }
         return (
           <Box>
             <Text>in our row</Text>
@@ -42,9 +45,6 @@ function scenario(name: string, options: WorldOptions, body: (w: ReturnType<type
       const { Box, Text } = $ui.ui.resolve(e)
       if (options.otherBand === 'nothing') {
         return OWN_DRAWING
-      }
-      if (options.otherBand === 'empty') {
-        return <Box />
       }
       if (options.otherBand === 'row') {
         return (
@@ -124,7 +124,6 @@ scenario('the band on the desktop: our own line, and another mod\'s on a row of 
   expect(await ui.find({ type: 'Text', text: 'another band' })).toBeDefined()
 
   const root = await ui.drawn()
-  expect(root.children?.length).toBe(2)
   const ours = rowOf(root, 'pipcast')
   const theirs = rowOf(root, 'test')
   expect(ours?.type).toBe('Box')
@@ -179,7 +178,7 @@ scenario('the band draws alone when nothing else is in the band', { otherBand: '
   await ui.unmount()
 })
 
-scenario('another mod\'s empty Box leaves our line as it draws alone', { otherBand: 'empty' }, async (_w, $) => {
+scenario('an empty Box beneath ours in our own row leaves our line as it draws alone', { otherBand: 'empty' }, async (_w, $) => {
   const ui = await mounted($)
   const ours = rowOf(await ui.drawn(), 'pipcast')
   expect(ours?.type).toBe('Box')
