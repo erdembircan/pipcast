@@ -156,7 +156,7 @@
       off: "KLWD comes through sharp and clean."
     }
   };
-  var COMMAND_ARGUMENT_HINT = `[weather | ${Object.keys(OPTION_WORDS).join("|")} on|off]`;
+  var COMMAND_ARGUMENT_HINT = `[clear | weather | ${Object.keys(OPTION_WORDS).join("|")} on|off]`;
   var LEAD = {
     comingUp: "COMING UP",
     breaking: "BREAKING",

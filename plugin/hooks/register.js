@@ -5,6 +5,7 @@ import { atom, read, update } from "claude-code";
 
 // packages/contract/src/constants.ts
 var HEARTBEAT_MS = 1e4;
+var STALE_MS = 45e3;
 var ACTIVITY_WRITE_MS = 2e3;
 var MAX_STORIES = 10;
 var MAX_ACTIVITY = 3;
@@ -16,6 +17,9 @@ var QUESTION_MAX = 200;
 var LAST_WORDS_MAX = 72;
 
 // packages/contract/src/format.ts
+function plural(n, one, many) {
+  return n === 1 ? one : many;
+}
 function pad2(n) {
   return n < 10 ? `0${n}` : String(n);
 }
@@ -26,15 +30,25 @@ function hourKey(ms) {
 
 // packages/contract/src/copy.ts
 var COMMAND_NAME = "pipcast";
-var COMMAND_DESCRIPTION = "Tune this session in to KLWD or out, air KLWD WEATHER, or change a setting";
+var COMMAND_DESCRIPTION = "Tune this session in to KLWD or out, take READY sessions off the air, air KLWD WEATHER, or change a setting";
 var REPLY = {
   tunedIn: "Tuned in to KLWD. It shows when you switch to another app.",
   tunedOut: "Tuned out of KLWD.",
   cannotStart: "KLWD could not start. Run /pipcast to try again.",
   weather: "KLWD WEATHER airs if you switch to another app in the next 10 seconds. In the week's first day, or once the week is used up, there's no forecast to show.",
   weatherOffAir: "This session is off the air. Run /pipcast to tune in, then /pipcast weather.",
-  weatherAlone: "/pipcast weather takes nothing after it."
+  weatherAlone: "/pipcast weather takes nothing after it.",
+  clearAlone: "/pipcast clear takes nothing after it.",
+  cannotClear: "Pipcast could not take the READY sessions off the air. Run /pipcast clear to try again."
 };
+function clearedReply(others, ownToo) {
+  const back = "Press TUNE IN in a session to bring it back.";
+  if (others === 0) {
+    return ownToo ? "This session was the only one READY, and it's off the air now. Press TUNE IN to bring it back." : "No session on air is READY.";
+  }
+  const sessions = `${others} ${ownToo ? "more " : ""}READY ${plural(others, "session goes", "sessions go")}`;
+  return ownToo ? `This session is off the air now, and ${sessions} off within seconds. ${back}` : `${sessions} off the air within seconds. ${back}`;
+}
 var TOAST_CANNOT_START = "Pipcast: KLWD could not start.";
 var OPTION_WORDS = {
   auto: {
@@ -53,14 +67,14 @@ var OPTION_WORDS = {
     off: "KLWD comes through sharp and clean."
   }
 };
-var COMMAND_ARGUMENT_HINT = `[weather | ${Object.keys(OPTION_WORDS).join("|")} on|off]`;
+var COMMAND_ARGUMENT_HINT = `[clear | weather | ${Object.keys(OPTION_WORDS).join("|")} on|off]`;
 function optionState(word, enabled) {
   const words = OPTION_WORDS[word];
   const state = `${words?.title ?? word} is ${enabled ? "on" : "off"}.`;
   return words === void 0 ? state : `${state} ${enabled ? words.on : words.off}`;
 }
 var OPTION_REPLY = {
-  unknown: (word) => `/pipcast has no option called ${word}. Options: ${Object.keys(OPTION_WORDS).join(", ")}. To air KLWD WEATHER, run /pipcast weather.`,
+  unknown: (word) => `/pipcast has no option called ${word}. Options: ${Object.keys(OPTION_WORDS).join(", ")}. To air KLWD WEATHER, run /pipcast weather. To take every READY session off the air, run /pipcast clear.`,
   badValue: (word) => `/pipcast ${word} takes on or off.`,
   cannotRead: (word) => `Pipcast could not read the ${word} setting. Run /pipcast ${word} to try again.`,
   cannotSave: (word, enabled) => `Pipcast could not save the ${word} setting. Run /pipcast ${word} ${enabled ? "on" : "off"} to try again.`
@@ -197,6 +211,7 @@ function storePaths(home) {
     control: `${root}/control.json`,
     prefs: `${root}/prefs.json`,
     options: `${root}/options.json`,
+    clear: `${root}/clear.json`,
     weather: `${root}/weather.json`,
     lock: `${root}/station.lock`,
     log: `${root}/station.log`
@@ -208,6 +223,7 @@ var SESSION_STATES = ["working", "needs-input", "ready", "error"];
 var STORY_KINDS = ["needs-input", "ready", "complete", "error"];
 var LIMIT_KINDS = ["session", "week"];
 var HOUR_KEY = /^\d{4}-\d{2}-\d{2}T\d{2}$/;
+var CLOCK_SKEW_MS = 5e3;
 function isObject(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -328,6 +344,9 @@ function parseSessionRecord(value) {
     ...isNumber(value.weatherAskedAt) ? { weatherAskedAt: value.weatherAskedAt } : {}
   };
 }
+function isLive(record, now) {
+  return now - record.checkedInAt <= STALE_MS && record.checkedInAt <= now + CLOCK_SKEW_MS;
+}
 function trimRecord(record) {
   return {
     ...record,
@@ -357,6 +376,12 @@ function parseControl(value) {
     return { v: 1, closedAt: value.closedAt };
   }
   return { v: 1, closedAt: null };
+}
+function parseClear(value) {
+  if (isObject(value) && value.v === 1 && isNumber(value.clearedAt)) {
+    return { v: 1, clearedAt: value.clearedAt };
+  }
+  return { v: 1, clearedAt: null };
 }
 function parseSharedOptions(value) {
   if (!isObject(value) || value.v !== 1 || typeof value.transparent !== "boolean") {
@@ -1252,6 +1277,9 @@ function parseRequest(args) {
   if (first === "weather") {
     return value === void 0 ? { kind: "weather" } : { kind: "weather-extra" };
   }
+  if (first === "clear") {
+    return value === void 0 ? { kind: "clear" } : { kind: "clear-extra" };
+  }
   const option = OPTIONS.find((candidate) => candidate.word === first);
   if (option === void 0) {
     return { kind: "unknown", word: typed[0] ?? first };
@@ -1413,17 +1441,19 @@ async function tuneOut(io, home, id) {
   await io.remove(storePaths(home).session(id));
 }
 var READY_IDLE_MS = 36e5;
-function idleTooLong(record, tunedInAt2, now) {
-  if (record.state !== "ready") {
-    return false;
-  }
-  const since = Math.max(
+function readySince(record, tunedInAt2) {
+  return Math.max(
     record.stateAt,
     tunedInAt2,
     ...record.stories.map((story) => story.at),
     ...record.activity.map((line) => line.at)
   );
-  return now - since >= READY_IDLE_MS;
+}
+function idleTooLong(record, tunedInAt2, now) {
+  if (record.state !== "ready") {
+    return false;
+  }
+  return now - readySince(record, tunedInAt2) >= READY_IDLE_MS;
 }
 async function checkIn(io, model2, tunedInAt2) {
   const home = await io.storeHome();
@@ -1433,6 +1463,11 @@ async function checkIn(io, model2, tunedInAt2) {
   if (closedAt !== null && closedAt >= tunedInAt2) {
     await io.remove(paths.session(model2.record.id));
     return { off: "closed" };
+  }
+  const { clearedAt } = parseClear(await readJson(io, paths.clear));
+  if (clearedAt !== null && model2.record.state === "ready" && readySince(model2.record, tunedInAt2) <= clearedAt) {
+    await io.remove(paths.session(model2.record.id));
+    return { off: "cleared" };
   }
   if (idleTooLong(model2.record, tunedInAt2, now)) {
     await io.remove(paths.session(model2.record.id));
@@ -1446,6 +1481,22 @@ async function checkIn(io, model2, tunedInAt2) {
 }
 async function readSharedOptions(io, home) {
   return parseSharedOptions(await readJson(io, storePaths(home).options));
+}
+async function clearReady(io, home, own) {
+  const paths = storePaths(home);
+  const now = await io.now();
+  await io.write(paths.clear, JSON.stringify({ v: 1, clearedAt: now }), `${paths.clear}.${own}.tmp`);
+  let others = 0;
+  for (const name of await io.list(paths.sessions)) {
+    if (!name.endsWith(".json") || name === `${own}.json`) {
+      continue;
+    }
+    const found = parseSessionRecord(await readJson(io, `${paths.sessions}/${name}`));
+    if (found !== null && isLive(found, now) && found.state === "ready" && readySince(found, found.tunedInAt) <= now) {
+      others += 1;
+    }
+  }
+  return others;
 }
 async function shareOptions(io, home, options, writer) {
   const path = storePaths(home).options;
@@ -2182,6 +2233,25 @@ async function askForWeather($) {
   await save($);
   return REPLY.weather;
 }
+async function clearReadySessions($) {
+  try {
+    const io = ioFor($);
+    const home = await io.storeHome();
+    const own = await $.session.id();
+    let others = 0;
+    await enqueue(async () => {
+      others = await clearReady(io, home, own);
+    });
+    const ownToo = model !== null && tunedInAt !== null && model.record.state === "ready";
+    if (ownToo) {
+      await tuneOutNow($);
+    }
+    return clearedReply(others, ownToo);
+  } catch (error) {
+    failure($, "clearing READY sessions", error);
+    return REPLY.cannotClear;
+  }
+}
 async function onTurnStart($, turnId) {
   await ensureSession($);
   if (model === null) {
@@ -2311,6 +2381,10 @@ function register(on, options) {
         return { text: await askForWeather($) };
       case "weather-extra":
         return { text: REPLY.weatherAlone };
+      case "clear":
+        return { text: await clearReadySessions($) };
+      case "clear-extra":
+        return { text: REPLY.clearAlone };
       case "toggle":
         break;
     }

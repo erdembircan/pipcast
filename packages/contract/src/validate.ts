@@ -11,6 +11,7 @@ import type {
   SessionRecord,
   SessionState,
   SharedOptions,
+  ReadyClear,
   StationControl,
   StationPrefs,
   StationStatus,
@@ -220,6 +221,13 @@ export function parseControl(value: unknown): StationControl {
     return { v: 1, closedAt: value.closedAt }
   }
   return { v: 1, closedAt: null }
+}
+
+export function parseClear(value: unknown): ReadyClear {
+  if (isObject(value) && value.v === 1 && isNumber(value.clearedAt)) {
+    return { v: 1, clearedAt: value.clearedAt }
+  }
+  return { v: 1, clearedAt: null }
 }
 
 export function parsePrefs(value: unknown): StationPrefs {

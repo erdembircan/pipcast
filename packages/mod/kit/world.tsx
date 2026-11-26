@@ -411,14 +411,14 @@ export function world(on: On, options: WorldOptions = {}) {
         files.set(TITLE_FILE, JSON.stringify({ customTitle: title }))
       }
     },
-    // Another session's record, checked in at the clock's now
-    other(id: string, tunedInAt: number, checkedInAt = clock.now()): void {
+    // Another session's record, checked in at the clock's now, working unless it says otherwise
+    other(id: string, tunedInAt: number, checkedInAt = clock.now(), state: SessionRecord['state'] = 'working'): void {
       const record: SessionRecord = {
         v: 1,
         id,
         title: id,
         project: 'other',
-        state: 'working',
+        state,
         stateAt: tunedInAt,
         tunedInAt,
         checkedInAt,

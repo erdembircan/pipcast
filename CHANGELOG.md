@@ -9,6 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Added
 
 - `/pipcast weather` airs KLWD WEATHER now: CURRENT CONDITIONS and EXTENDED FORECAST, with STORMTRACKER when there's a storm. Switch to another app within 10 seconds of running it and the forecast airs, bringing a tucked-away window out as BREAKING NEWS does; stay in Claude longer and it doesn't air. In the week's first day, or once the week is used up, there's no forecast to show.
+- `/pipcast clear` takes every READY session off the air at once, so the board no longer stays crowded across several pages until each goes off by itself after an hour. Run it in any session: if that session is READY, it goes off straight away, and the rest follow within seconds. Press **TUNE IN** in a session to bring it back.
 
 ### Changed
 

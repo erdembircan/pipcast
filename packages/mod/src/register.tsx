@@ -2,7 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, On, PluginOptions, RenderElement, Timer } from 'claude-code'
 
 import { ACTIVITY_WRITE_MS, HEARTBEAT_MS } from '../../contract/src/constants.ts'
-import { COMMAND_ARGUMENT_HINT, COMMAND_DESCRIPTION, COMMAND_NAME, OPTION_REPLY, REPLY, TOAST_CANNOT_START, fallbackTitle, optionState } from '../../contract/src/copy.ts'
+import { COMMAND_ARGUMENT_HINT, COMMAND_DESCRIPTION, COMMAND_NAME, OPTION_REPLY, REPLY, TOAST_CANNOT_START, clearedReply, fallbackTitle, optionState } from '../../contract/src/copy.ts'
 import { defaultHome, storePaths } from '../../contract/src/paths.ts'
 import type { SharedOptions } from '../../contract/src/types.ts'
 import { parseSessionRecord } from '../../contract/src/validate.ts'
@@ -24,6 +24,7 @@ import { lookAtShells, lookDue, stillWorking } from './core/shells.ts'
 import { waitsOn } from './core/wake.ts'
 import {
   checkIn,
+  clearReady,
   ensureStation,
   readSharedOptions,
   shareOptions,
@@ -566,7 +567,7 @@ async function lookAgain($: EngineInterface): Promise<void> {
 }
 
 // The heartbeat: a tuned-in session checks in, or goes off the air when the
-// window was closed or it has been ready for an hour; a held finish's
+// window was closed, it was ready at a /pipcast clear or it has been ready for an hour; a held finish's
 // background commands are looked at again
 async function beat($: EngineInterface): Promise<void> {
   await lookAgain($)
@@ -859,6 +860,27 @@ async function askForWeather($: EngineInterface): Promise<string> {
   return REPLY.weather
 }
 
+// /pipcast clear: every session READY now goes off the air, this one at once and the rest at their next heartbeat
+async function clearReadySessions($: EngineInterface): Promise<string> {
+  try {
+    const io = ioFor($)
+    const home = await io.storeHome()
+    const own = await $.session.id()
+    let others = 0
+    await enqueue(async () => {
+      others = await clearReady(io, home, own)
+    })
+    const ownToo = model !== null && tunedInAt !== null && model.record.state === 'ready'
+    if (ownToo) {
+      await tuneOutNow($)
+    }
+    return clearedReply(others, ownToo)
+  } catch (error) {
+    failure($, 'clearing READY sessions', error)
+    return REPLY.cannotClear
+  }
+}
+
 async function onTurnStart($: EngineInterface, turnId: string): Promise<void> {
   await ensureSession($)
   if (model === null) {
@@ -1012,6 +1034,10 @@ export function register(on: On, options: PluginOptions) {
         return { text: await askForWeather($) }
       case 'weather-extra':
         return { text: REPLY.weatherAlone }
+      case 'clear':
+        return { text: await clearReadySessions($) }
+      case 'clear-extra':
+        return { text: REPLY.clearAlone }
       case 'toggle':
         break
     }

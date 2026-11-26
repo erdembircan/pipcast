@@ -3,8 +3,10 @@
 # with the desktop app. In the first, with Tune in every new session off and
 # Transparent window on, /pipcast has to tune in (a record in the store,
 # options.json telling the station the window is transparent, the station
-# launched), a second /pipcast has to tune out (the record gone), and a session
-# that ends while tuned in has to take its record with it. In the second, with
+# launched), a second /pipcast has to tune out (the record gone), and, with
+# another session's READY record planted in the store, /pipcast clear has to
+# take this session off the air at once, count the other, and write clear.json.
+# A session that ends while tuned in has to take its record with it. In the second, with
 # nothing saved for Tune in every new session, which leaves it on, and
 # Transparent window off, the session has to stay off the air while nothing
 # shows it, tune in by itself once a stand-in for the desktop app attaches as
@@ -43,6 +45,7 @@ words() { # prints one of the command's replies, from the contract
 }
 tuned_in="$(words tunedIn)"
 tuned_out="$(words tunedOut)"
+cleared_one_more="$(node -e "import('$root/packages/contract/src/copy.ts').then((m) => process.stdout.write(m.clearedReply(1, true)))")"
 
 # "ok" when the store's one record exists and parses, with v 1 and an id
 record_state() { # <store>
@@ -100,6 +103,34 @@ settings() { # <options as JSON>
 
 command='{"type":"user","message":{"role":"user","content":"/pipcast"}}'
 clear='{"type":"user","message":{"role":"user","content":"/clear"}}'
+clear_ready='{"type":"user","message":{"role":"user","content":"/pipcast clear"}}'
+
+# Writes the record of a live session that is READY, as another session's mod
+# would, for /pipcast clear to count
+plant_ready() { # <session id> <store>
+  node -e '
+    const fs = require("node:fs")
+    const [id, dir] = process.argv.slice(1)
+    const now = Date.now()
+    fs.mkdirSync(dir + "/sessions", { recursive: true })
+    fs.writeFileSync(dir + "/sessions/" + id + ".json", JSON.stringify({
+      v: 1, id, title: id, project: "other", state: "ready", stateAt: now - 5000, tunedInAt: now - 5000,
+      checkedInAt: now, stories: [], activity: [], hours: [], limits: [],
+    }))
+  ' "$1" "$2"
+}
+
+# "ok" when clear.json in a store holds v 1 and a number for clearedAt, none
+# when there is no file
+clear_state() { # <store>
+  node -e '
+    const fs = require("node:fs")
+    const file = process.argv[1] + "/clear.json"
+    if (!fs.existsSync(file)) { process.stdout.write("none"); process.exit(0) }
+    const cleared = JSON.parse(fs.readFileSync(file, "utf8"))
+    process.stdout.write(cleared.v === 1 && typeof cleared.clearedAt === "number" ? "ok" : "bad")
+  ' "$1"
+}
 
 # The desktop app showing the session, as it says so: each window is a client
 attach() { # <client id>
@@ -122,6 +153,15 @@ band() { # <request id>
   echo "$command"
   sleep 3
   echo "after-in-again $(record_state "$home")" >>"$notes"
+  plant_ready other-session "$home"
+  echo "$clear_ready"
+  sleep 3
+  rm -f "$home/sessions/other-session.json"
+  echo "after-clear $(record_state "$home")" >>"$notes"
+  echo "clear-file $(clear_state "$home")" >>"$notes"
+  echo "$command"
+  sleep 3
+  echo "after-in-last $(record_state "$home")" >>"$notes"
 ) | PIPCAST_HOME="$home" \
   PIPCAST_STATION_BIN="$station" \
   PIPCAST_TARGET_BUNDLE_ID=com.example.pipcast.never-frontmost \
@@ -183,6 +223,10 @@ check "launch --home $home --assets $root/plugin/station --target-bundle-id com.
 check "after-out none" "$notes" "the second /pipcast removed the record"
 check "$tuned_out" "$out" "the second /pipcast answered that it tuned out"
 check "after-in-again ok" "$notes" "a third /pipcast wrote the record again"
+check "$cleared_one_more" "$out" "/pipcast clear counted the other session that was READY and took this one off the air"
+check "after-clear none" "$notes" "/pipcast clear took the READY session off the air at once, its record gone"
+check "clear-file ok" "$notes" "/pipcast clear wrote the moment to clear.json"
+check "after-in-last ok" "$notes" "a last /pipcast wrote the record again"
 check "after-end none" "$notes" "the session ending took the record with it"
 check "running 0" "$notes" "nothing is left running"
 check "auto-unshown none" "$notes" "with nothing saved for Tune in every new session, a session nothing shows stays off the air"

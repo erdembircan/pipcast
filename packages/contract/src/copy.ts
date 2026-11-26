@@ -11,7 +11,7 @@ import type { ErrorKind, StoryKind } from './types.ts'
 
 export const COMMAND_NAME = 'pipcast'
 
-export const COMMAND_DESCRIPTION = 'Tune this session in to KLWD or out, air KLWD WEATHER, or change a setting'
+export const COMMAND_DESCRIPTION = 'Tune this session in to KLWD or out, take READY sessions off the air, air KLWD WEATHER, or change a setting'
 
 export const REPLY = {
   tunedIn: 'Tuned in to KLWD. It shows when you switch to another app.',
@@ -20,7 +20,22 @@ export const REPLY = {
   weather: "KLWD WEATHER airs if you switch to another app in the next 10 seconds. In the week's first day, or once the week is used up, there's no forecast to show.",
   weatherOffAir: 'This session is off the air. Run /pipcast to tune in, then /pipcast weather.',
   weatherAlone: '/pipcast weather takes nothing after it.',
+  clearAlone: '/pipcast clear takes nothing after it.',
+  cannotClear: 'Pipcast could not take the READY sessions off the air. Run /pipcast clear to try again.',
 } as const
+
+// What /pipcast clear says: `others` is how many other sessions on air were
+// READY, each going off at its next heartbeat; `ownToo` when this session was
+// READY too and is off the air already.
+// "2 READY sessions go off the air within seconds. Press TUNE IN in a session to bring it back."
+export function clearedReply(others: number, ownToo: boolean): string {
+  const back = 'Press TUNE IN in a session to bring it back.'
+  if (others === 0) {
+    return ownToo ? "This session was the only one READY, and it's off the air now. Press TUNE IN to bring it back." : 'No session on air is READY.'
+  }
+  const sessions = `${others} ${ownToo ? 'more ' : ''}READY ${plural(others, 'session goes', 'sessions go')}`
+  return ownToo ? `This session is off the air now, and ${sessions} off within seconds. ${back}` : `${sessions} off the air within seconds. ${back}`
+}
 
 export const TOAST_CANNOT_START = 'Pipcast: KLWD could not start.'
 
@@ -51,8 +66,8 @@ export const OPTION_WORDS: Record<string, OptionWords> = {
   },
 }
 
-// What the slash menu shows after /pipcast: "[weather | auto|transparency|oldtv on|off]"
-export const COMMAND_ARGUMENT_HINT = `[weather | ${Object.keys(OPTION_WORDS).join('|')} on|off]`
+// What the slash menu shows after /pipcast: "[clear | weather | auto|transparency|oldtv on|off]"
+export const COMMAND_ARGUMENT_HINT = `[clear | weather | ${Object.keys(OPTION_WORDS).join('|')} on|off]`
 
 // "Tune in every new session is on. Each new session in the desktop app tunes in to KLWD as it opens."
 export function optionState(word: string, enabled: boolean): string {
@@ -62,7 +77,7 @@ export function optionState(word: string, enabled: boolean): string {
 }
 
 export const OPTION_REPLY = {
-  unknown: (word: string) => `/pipcast has no option called ${word}. Options: ${Object.keys(OPTION_WORDS).join(', ')}. To air KLWD WEATHER, run /pipcast weather.`,
+  unknown: (word: string) => `/pipcast has no option called ${word}. Options: ${Object.keys(OPTION_WORDS).join(', ')}. To air KLWD WEATHER, run /pipcast weather. To take every READY session off the air, run /pipcast clear.`,
   badValue: (word: string) => `/pipcast ${word} takes on or off.`,
   cannotRead: (word: string) => `Pipcast could not read the ${word} setting. Run /pipcast ${word} to try again.`,
   cannotSave: (word: string, enabled: boolean) => `Pipcast could not save the ${word} setting. Run /pipcast ${word} ${enabled ? 'on' : 'off'} to try again.`,

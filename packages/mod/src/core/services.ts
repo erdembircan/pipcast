@@ -2,7 +2,7 @@
 // through the Io port, which register.tsx builds from `$`.
 
 import { storePaths } from '../../../contract/src/paths.ts'
-import { isStationAlive, parseControl, parseSharedOptions, parseStationStatus, trimRecord } from '../../../contract/src/validate.ts'
+import { isLive, isStationAlive, parseClear, parseControl, parseSessionRecord, parseSharedOptions, parseStationStatus, trimRecord } from '../../../contract/src/validate.ts'
 import type { SessionRecord, SharedOptions } from '../../../contract/src/types.ts'
 import type { SessionModel } from './model.ts'
 
@@ -131,22 +131,27 @@ export async function tuneOut(io: Io, home: string, id: string): Promise<void> {
 // from its last tool call and from its finish
 export const READY_IDLE_MS = 3_600_000
 
-function idleTooLong(record: SessionRecord, tunedInAt: number, now: number): boolean {
-  if (record.state !== 'ready') {
-    return false
-  }
-  const since = Math.max(
+// The moment a ready session's hour counts from, and the moment /pipcast clear
+// compares: the latest of when it went ready, when it tuned in, its newest
+// story and its newest activity line
+export function readySince(record: SessionRecord, tunedInAt: number): number {
+  return Math.max(
     record.stateAt,
     tunedInAt,
     ...record.stories.map((story) => story.at),
     ...record.activity.map((line) => line.at),
   )
-  return now - since >= READY_IDLE_MS
 }
 
-// Why a heartbeat took the session off the air: the window's close, or an
-// hour ready; null while it stays on
-export type OffAir = 'closed' | 'idle' | null
+function idleTooLong(record: SessionRecord, tunedInAt: number, now: number): boolean {
+  if (record.state !== 'ready') {
+    return false
+  }
+  return now - readySince(record, tunedInAt) >= READY_IDLE_MS
+}
+
+// Why a heartbeat took the session off the air: the window's close, a /pipcast clear while it was ready, or an hour ready; null while it stays on
+export type OffAir = 'closed' | 'cleared' | 'idle' | null
 
 // The heartbeat of a tuned-in session
 export async function checkIn(io: Io, model: SessionModel, tunedInAt: number): Promise<{ off: OffAir }> {
@@ -157,6 +162,11 @@ export async function checkIn(io: Io, model: SessionModel, tunedInAt: number): P
   if (closedAt !== null && closedAt >= tunedInAt) {
     await io.remove(paths.session(model.record.id))
     return { off: 'closed' }
+  }
+  const { clearedAt } = parseClear(await readJson(io, paths.clear))
+  if (clearedAt !== null && model.record.state === 'ready' && readySince(model.record, tunedInAt) <= clearedAt) {
+    await io.remove(paths.session(model.record.id))
+    return { off: 'cleared' }
   }
   if (idleTooLong(model.record, tunedInAt, now)) {
     await io.remove(paths.session(model.record.id))
@@ -173,6 +183,26 @@ export async function checkIn(io: Io, model: SessionModel, tunedInAt: number): P
 // it is missing or not one
 export async function readSharedOptions(io: Io, home: string): Promise<SharedOptions | null> {
   return parseSharedOptions(await readJson(io, storePaths(home).options))
+}
+
+// /pipcast clear: writes the moment to clear.json, through a temporary file
+// named after the writer, and counts the other sessions on air that are
+// READY now, each of which goes off the air at its next heartbeat
+export async function clearReady(io: Io, home: string, own: string): Promise<number> {
+  const paths = storePaths(home)
+  const now = await io.now()
+  await io.write(paths.clear, JSON.stringify({ v: 1, clearedAt: now }), `${paths.clear}.${own}.tmp`)
+  let others = 0
+  for (const name of await io.list(paths.sessions)) {
+    if (!name.endsWith('.json') || name === `${own}.json`) {
+      continue
+    }
+    const found = parseSessionRecord(await readJson(io, `${paths.sessions}/${name}`))
+    if (found !== null && isLive(found, now) && found.state === 'ready' && readySince(found, found.tunedInAt) <= now) {
+      others += 1
+    }
+  }
+  return others
 }
 
 // Writes options.json through a temporary file named after the writer, so two

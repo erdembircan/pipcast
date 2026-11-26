@@ -9,6 +9,7 @@ import {
   isLive,
   isStationAlive,
   onAir,
+  parseClear,
   parseControl,
   parsePrefs,
   parseSessionRecord,
@@ -315,6 +316,13 @@ describe('the station files', () => {
     expect(parseControl({ v: 1, closedAt: 'x' })).toEqual({ v: 1, closedAt: null })
     expect(parseControl({ v: 2, closedAt: 5 })).toEqual({ v: 1, closedAt: null })
     expect(parseControl(null)).toEqual({ v: 1, closedAt: null })
+  })
+
+  it('parses the clear file', () => {
+    expect(parseClear({ v: 1, clearedAt: 123 })).toEqual({ v: 1, clearedAt: 123 })
+    expect(parseClear({ clearedAt: 123 })).toEqual({ v: 1, clearedAt: null })
+    expect(parseClear({ v: 1, clearedAt: 'x' })).toEqual({ v: 1, clearedAt: null })
+    expect(parseClear(null)).toEqual({ v: 1, clearedAt: null })
   })
 
   it('parses the prefs, with defaults', () => {
