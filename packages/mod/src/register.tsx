@@ -655,6 +655,10 @@ async function startSession($: EngineInterface): Promise<void> {
       await readLimitsNow($)
       tunedInAt = own.tunedInAt
       await save($)
+      // A /pipcast clear took it off the air as it saved
+      if (tunedInAt === null) {
+        return
+      }
       // A reload after a change brings the new value; the station follows it
       await shareOwnOptions($)
       await ensureStation(io, home)
@@ -869,6 +873,9 @@ async function askForWeather($: EngineInterface): Promise<string> {
   }
   model = record.askedForWeather(model, now)
   await save($)
+  if (tunedInAt === null) {
+    return REPLY.weatherOffAir
+  }
   return REPLY.weather
 }
 

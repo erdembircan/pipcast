@@ -386,6 +386,32 @@ scenario('a READY session whose record was deleted by /pipcast clear writes noth
   await ui.unmount()
 })
 
+scenario('a reload of a READY session that a /pipcast clear found takes it off the air, and starts nothing', { transcriptDir: PROJECT_DIR }, async (w, $) => {
+  await tuneIn($)
+  await w.clock.advance(5000)
+  const launched = w.launched.length
+  w.files.set(`${HOME}/clear.json`, JSON.stringify({ v: 1, clearedAt: T0 + 5000 }))
+  // The module starts over; $.state says tuned in
+  await $.session.start(START)
+  expect(w.record()).toBeNull()
+  const ui = await mounted($)
+  expect((await ui.find({ type: 'Button' }))?.key).toBe('tune-in')
+  await ui.unmount()
+  expect(w.launched.length).toBe(launched)
+  w.reads.length = 0
+  await w.clock.advance(3 * 60_000)
+  expect(w.reads.filter((path) => path === TITLE_FILE)).toEqual([])
+  expect(w.record()).toBeNull()
+})
+
+scenario('/pipcast weather in a READY session a clear has just found says it is off the air', {}, async (w, $) => {
+  await tuneIn($)
+  await w.clock.advance(5000)
+  w.files.set(`${HOME}/clear.json`, JSON.stringify({ v: 1, clearedAt: T0 + 5000 }))
+  expect((await option($, 'weather')).text).toBe(REPLY.weatherOffAir)
+  expect(w.record()).toBeNull()
+})
+
 scenario('a READY session that went READY after the clear writes its record as before', {}, async (w, $) => {
   await tuneIn($)
   await w.clock.advance(5000)

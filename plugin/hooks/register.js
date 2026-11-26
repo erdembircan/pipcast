@@ -2065,6 +2065,9 @@ async function startSession($) {
       await readLimitsNow($);
       tunedInAt = own.tunedInAt;
       await save($);
+      if (tunedInAt === null) {
+        return;
+      }
       await shareOwnOptions($);
       await ensureStation(io, home);
       startTitleChecks($);
@@ -2246,6 +2249,9 @@ async function askForWeather($) {
   }
   model = askedForWeather(model, now);
   await save($);
+  if (tunedInAt === null) {
+    return REPLY.weatherOffAir;
+  }
   return REPLY.weather;
 }
 async function clearReadySessions($) {
