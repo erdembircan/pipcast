@@ -114,7 +114,9 @@ export function createDirector(options: DirectorOptions = {}): { tick(input: Tic
     }
   }
 
-  // Empties the queue: every story, STORM WARNING, report on the hour and KLWD WEATHER waiting its turn. Says whether a warning went. In place: the board reads this same array.
+  // Empties the queue: every story, STORM WARNING, report on the hour and
+  // KLWD WEATHER waiting its turn. Says whether a warning went. In place: the
+  // board reads this same array.
   function dropWaiting(): boolean {
     const warning = queue.some((item) => item.kind === 'warning')
     queue.length = 0
