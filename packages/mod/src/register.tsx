@@ -82,10 +82,13 @@ let readings: Promise<void> = Promise.resolve()
 // A look at the background commands a held finish waits on is running
 let looking = false
 
-// Whether another mod drew a line beneath ours. With none, next(e) answers with
-// the engine's own drawing ({ type: 'engine' }), which the desktop draws as an
-// empty block: set in our column, it would leave the md gap above the plate.
-// An empty Box draws nothing either.
+// Whether anything was drawn beneath our line in our own row. The engine gives
+// each mod a row of the band and stacks the rows itself, so next(e) holds only
+// what a hook beneath ours drew for our row; an older engine handed us the
+// lines of every mod beneath. Mostly it is the engine's own drawing
+// ({ type: 'engine' }), which the desktop draws as an empty block: set in our
+// column, it would leave the md gap above the plate. An empty Box draws
+// nothing either.
 const hasContent = (drawn: RenderElement) => drawn.type !== 'engine' && (drawn.type !== 'Box' || (drawn.children?.length ?? 0) > 0)
 
 function enqueue(task: () => Promise<void>): Promise<void> {
@@ -1153,9 +1156,9 @@ export function register(on: On, options: PluginOptions) {
   })
 
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
-    // The band is one tree for every mod: each adds its own line and passes the
-    // lines beneath through as they came. Ours goes under what another mod drew;
-    // we never open that up or set it in our row.
+    // The band is a row for each mod, stacked by the engine. Ours is our line
+    // alone, unless something was drawn beneath it in our row: that stays as it
+    // came, on its own line above ours. We never open it up or lay it beside ours.
     const beneath = await next(e)
     if (e.surface !== 'desktop' || e.props.hasSurvey) {
       return beneath

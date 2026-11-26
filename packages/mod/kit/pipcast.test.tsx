@@ -16,6 +16,11 @@ const START = { cwd: ROOT, surface: 'desktop', isInteractive: true } as const
 // own drawing
 const OWN_DRAWING: RenderElement = { type: 'engine', ref: 0 }
 
+// The band's row one mod drew, found by the mark the engine sets on it
+function rowOf(root: RenderElement, plugin: string): RenderElement | undefined {
+  return root.children?.find((child): child is RenderElement => typeof child !== 'string' && child.part?.plugin === plugin)
+}
+
 type Run = ($: Engine, on: On) => Promise<void>
 
 // A test in the world above: the session starts first and ends last, so one
@@ -23,13 +28,23 @@ type Run = ($: Engine, on: On) => Promise<void>
 function scenario(name: string, options: WorldOptions, body: (w: ReturnType<typeof world>, $: Engine) => Promise<void>) {
   const run: Run = async ($, on) => {
     const w = world(on, options)
+    if (options.otherBand === 'inOurRow' || options.otherBand === 'empty') {
+      on('ui.render', { component: 'AbovePrompt', plugin: 'pipcast' }, ($ui, e) => {
+        const { Box, Text } = $ui.ui.resolve(e)
+        if (options.otherBand === 'empty') {
+          return <Box />
+        }
+        return (
+          <Box>
+            <Text>in our row</Text>
+          </Box>
+        )
+      })
+    }
     on('ui.render', { component: 'AbovePrompt' }, ($ui, e) => {
       const { Box, Text } = $ui.ui.resolve(e)
       if (options.otherBand === 'nothing') {
         return OWN_DRAWING
-      }
-      if (options.otherBand === 'empty') {
-        return <Box />
       }
       if (options.otherBand === 'row') {
         return (
@@ -99,7 +114,7 @@ const shown = ($: Engine, clientId = 'window-1', surface: 'desktop' | 'mobile' =
 // /pipcast with words after it
 const option = ($: Engine, args: string) => $.command.run({ ...RUN, args })
 
-scenario('the band on the desktop: our own line under another mod\'s', {}, async (_w, $) => {
+scenario('the band on the desktop: our own line, and another mod\'s on a row of its own', {}, async (_w, $) => {
   const ui = await mounted($)
   const svgs = await ui.findAll({ type: 'Svg' })
   expect(svgs.map((svg) => svg.props.alt)).toEqual([BAND_ALT.in])
@@ -107,30 +122,24 @@ scenario('the band on the desktop: our own line under another mod\'s', {}, async
   expect(button?.key).toBe('tune-in')
   expect(button?.props.plain).toBe(true)
   expect(await ui.find({ type: 'Text', text: 'another band' })).toBeDefined()
-  const drawn = JSON.stringify(await ui.drawn())
-  expect(drawn.indexOf('another band')).toBeLessThan(drawn.indexOf('KLWD'))
 
   const root = await ui.drawn()
-  expect(root.type).toBe('Box')
-  expect(root.props).toEqual({ flexDirection: 'column', rowGap: 'md' })
-  const [beneath, ours, ...rest] = root.children ?? []
-  expect(rest).toEqual([])
-  expect(JSON.stringify(beneath)).toContain('another band')
+  const ours = rowOf(root, 'pipcast')
+  const theirs = rowOf(root, 'test')
   expect(ours?.type).toBe('Box')
   expect(ours?.props).toEqual({ alignItems: 'center' })
   expect(ours?.children?.map((child) => child.type)).toEqual(['Box'])
   expect(ours?.children?.[0]?.children?.map((child) => child.type)).toEqual(['Svg', 'Box'])
-  expect(JSON.stringify(beneath)).not.toContain('Svg')
+  expect(JSON.stringify(ours)).not.toContain('another band')
+  expect(JSON.stringify(theirs)).toContain('another band')
+  expect(JSON.stringify(theirs)).not.toContain('Svg')
   await ui.unmount()
 })
 
 scenario('the band leaves another mod\'s line exactly as it was drawn', { otherBand: 'row' }, async (_w, $) => {
   const ui = await mounted($)
   const root = await ui.drawn()
-  expect(root.type).toBe('Box')
-  expect(root.props).toEqual({ flexDirection: 'column', rowGap: 'md' })
-  expect(root.children?.length).toBe(2)
-  const other = root.children?.[0]
+  const other = rowOf(root, 'test')
   expect(other?.type).toBe('Box')
   expect(other?.props).toEqual({ alignItems: 'center', columnGap: 3, flexWrap: 'wrap' })
   expect(other?.children).toMatchObject([
@@ -169,13 +178,29 @@ scenario('the band draws alone when nothing else is in the band', { otherBand: '
   await ui.unmount()
 })
 
-scenario('the band draws alone over an empty Box', { otherBand: 'empty' }, async (_w, $) => {
+scenario('an empty Box beneath ours in our own row leaves our line as it draws alone', { otherBand: 'empty' }, async (_w, $) => {
   const ui = await mounted($)
-  const drawn = await ui.drawn()
-  expect(drawn.type).toBe('Box')
-  expect(drawn.props).toEqual({ alignItems: 'center' })
-  expect(drawn.children?.map((child) => child.type)).toEqual(['Box'])
-  expect(drawn.children?.[0]?.children?.map((child) => child.type)).toEqual(['Svg', 'Box'])
+  const ours = rowOf(await ui.drawn(), 'pipcast')
+  expect(ours?.type).toBe('Box')
+  expect(ours?.props).toEqual({ alignItems: 'center' })
+  expect(ours?.children?.map((child) => child.type)).toEqual(['Box'])
+  expect(ours?.children?.[0]?.children?.map((child) => child.type)).toEqual(['Svg', 'Box'])
+  await ui.unmount()
+})
+
+scenario('a line drawn beneath ours in our own row stays above the plate, md apart', { otherBand: 'inOurRow' }, async (_w, $) => {
+  const ui = await mounted($)
+  const ours = rowOf(await ui.drawn(), 'pipcast')
+  expect(ours?.type).toBe('Box')
+  expect(ours?.props).toEqual({ flexDirection: 'column', rowGap: 'md' })
+  const [beneath, line, ...rest] = ours?.children ?? []
+  expect(rest).toEqual([])
+  expect(JSON.stringify(beneath)).toContain('in our row')
+  expect(JSON.stringify(beneath)).not.toContain('Svg')
+  expect(line?.type).toBe('Box')
+  expect(line?.props).toEqual({ alignItems: 'center' })
+  expect(line?.children?.map((child) => child.type)).toEqual(['Box'])
+  expect(line?.children?.[0]?.children?.map((child) => child.type)).toEqual(['Svg', 'Box'])
   await ui.unmount()
 })
 
@@ -203,9 +228,9 @@ scenario('the plate\'s button stays inside its box', {}, async (_w, $) => {
   expect((label as string).replaceAll('\u2002', '')).toBe('')
   expect((label as string).length).toBe(Math.floor((width as number) / 8))
   expect(JSON.stringify(drawn)).not.toContain('\u2026')
-  // Our line is [plate Box]; the plate Box holds [the picture, the button's Box]
-  const ours = drawn.children?.[1]
-  const plateBox = ours !== undefined && typeof ours !== 'string' ? ours.children?.[0] : undefined
+  // Our row is [plate Box]; the plate Box holds [the picture, the button's Box]
+  const ours = rowOf(drawn, 'pipcast')
+  const plateBox = ours?.children?.[0]
   const holder = plateBox !== undefined && typeof plateBox !== 'string' ? plateBox.children?.[1] : undefined
   expect(holder).toMatchObject({ type: 'Box', props: { position: 'absolute', left: -2, right: -2 } })
   await ui.unmount()
