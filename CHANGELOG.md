@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-11-26
+
 ### Added
 
 - `/pipcast weather` airs KLWD WEATHER now: CURRENT CONDITIONS and EXTENDED FORECAST, with STORMTRACKER when there's a storm. Switch to another app within 10 seconds of running it and the forecast airs, bringing a tucked-away window out as BREAKING NEWS does; stay in Claude longer and it doesn't air. In the week's first day, or once the week is used up, there's no forecast to show.
@@ -61,7 +63,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - The window never takes the keyboard and hides while Claude is in front. Drag it to another corner, resize it, tuck it into the side of the screen, or let it fade with **Transparent window**. Hover over it for **Close**, **Mute** and **Back to Claude**.
 - **TUNE IN** and **TUNE OUT** in the band above the prompt box, and `/pipcast`, `/pipcast auto` and `/pipcast transparency`. **Tune in every new session** is on by default.
 
-[Unreleased]: https://github.com/erdembircan/pipcast/compare/v1.3.0...HEAD
+[Unreleased]: https://github.com/erdembircan/pipcast/compare/v1.4.0...HEAD
+[1.4.0]: https://github.com/erdembircan/pipcast/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/erdembircan/pipcast/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/erdembircan/pipcast/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/erdembircan/pipcast/compare/v1.0.0...v1.1.0
