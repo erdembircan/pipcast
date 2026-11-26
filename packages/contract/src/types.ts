@@ -87,6 +87,8 @@ export interface SessionRecord {
   // The account's usage limits as this session last read them; none on a
   // record written before they were read
   limits?: UsageLimit[]
+  // When /pipcast weather last asked for KLWD WEATHER, in ms; none until it has
+  weatherAskedAt?: number
 }
 
 export interface StationStatus {

@@ -30,7 +30,7 @@ A session that was already open, or one you resume, goes on air when you press *
 
 **On the hour**, the station clock strikes, Clawd reads the headlines, and THE HOUR IN REVIEW shows what each session did: the lines it changed, or how long it has been waiting on you.
 
-**KLWD WEATHER** forecasts whether your week's usage limit lasts until it resets, with your usage as the weather: the crawl says how the week ends, the report on the hour adds the current conditions and the extended forecast, and when the week looks like running out first, STORM WARNING breaks in, at most once an hour, and STORMTRACKER follows the storm to the hour it hits. At :15, :30 and :45 the board turns to EXTENDED FORECAST for 10 seconds and back, the way it turns between pages of sessions.
+**KLWD WEATHER** forecasts whether your week's usage limit lasts until it resets, with your usage as the weather: the crawl says how the week ends, the report on the hour adds the current conditions and the extended forecast, and when the week looks like running out first, STORM WARNING breaks in, at most once an hour, and STORMTRACKER follows the storm to the hour it hits. At :15, :30 and :45 the board turns to EXTENDED FORECAST for 10 seconds and back, the way it turns between pages of sessions. Run `/pipcast weather` and switch to another app within 10 seconds to see the forecast now.
 
 ## The window
 
@@ -83,7 +83,7 @@ Everything stays on your Mac. Pipcast sends nothing anywhere, and has no account
 
 It keeps its files in one folder, `~/Library/Application Support/Pipcast`, which only your user can open:
 
-- a file for each session on air, with its project's folder name, its title, its state, what Claude is doing, the question Claude asked or what a permission is for, Claude's last words when a turn ends, the lines and files it changed in each hour, and your account's usage limits. A session deletes its file when it goes off the air or ends. A file left behind by a session that stopped without ending, as when Claude Code is force-quit, is deleted the next time a session goes on air, once it's an hour old.
+- a file for each session on air, with its project's folder name, its title, its state, what Claude is doing, the question Claude asked or what a permission is for, Claude's last words when a turn ends, the lines and files it changed in each hour, your account's usage limits, and when you last ran `/pipcast weather`. A session deletes its file when it goes off the air or ends. A file left behind by a session that stopped without ending, as when Claude Code is force-quit, is deleted the next time a session goes on air, once it's an hour old.
 - the window's corner and size, whether it's tucked into the side, whether sound is on, when the hour last aired, when the window was last closed, **Transparent window** and **Old TV**, and the station's process number and version
 - your week's usage, as the share used at times since the week's limit last reset, at most one reading each hour, for the weekly forecast, and when the last storm warning aired. The readings start over when the week resets.
 - the station's own log of what its window did, for fixing problems, cut back at 1 MB

@@ -10,7 +10,7 @@ import { classifyReading, forecastWeek, hourlyPoints, MAX_POINTS, recordReading,
 import type { Forecast, WeekHistory, WeekReading } from './forecast.ts'
 import { newestWeekReading } from './limits.ts'
 import type { Segment } from './story.ts'
-import { ALERT_MS, ALERT_OUTRO_MS, REDUCED_OPENER_MS, STORMTRACKER_MS, WARNING_EVERY_MS } from './timing.ts'
+import { ALERT_MS, ALERT_OUTRO_MS, REDUCED_OPENER_MS, STORMTRACKER_MS, WARNING_EVERY_MS, WEATHER_PAGE_MS } from './timing.ts'
 import type { Step } from './types.ts'
 
 export interface WeatherDeskOptions {
@@ -333,4 +333,23 @@ export function warningSegment(forecast: Outlooked, now: number, reducedMotion: 
     return { id, steps: [opener, tracker], endCue: 'breaking-out' }
   }
   return { id, steps: [opener, tracker, outro] }
+}
+
+// KLWD WEATHER on request (/pipcast weather): CURRENT CONDITIONS, EXTENDED
+// FORECAST and, with a storm, STORMTRACKER, the report's weather pages with
+// the beat in D major under them. It has no open, jingle or outro: the board
+// cuts to the pages and back, and the beat phases out as it returns.
+export function weatherSegment(forecast: Outlooked, now: number): Segment {
+  const weather = weatherScene(forecast, now)
+  const page = (mode: 'weather-now' | 'weather-days' | 'stormtracker', length: number): Step => ({
+    role: 'weather',
+    length,
+    bed: 'beat-major',
+    scene: ({ now: at, ticker }): Scene => ({ mode, clock: clock(at), ticker, weather }),
+  })
+  const steps = [page('weather-now', WEATHER_PAGE_MS), page('weather-days', WEATHER_PAGE_MS)]
+  if (forecast.outlook === 'storm') {
+    steps.push(page('stormtracker', STORMTRACKER_MS))
+  }
+  return { id: `weather:${now}`, steps }
 }

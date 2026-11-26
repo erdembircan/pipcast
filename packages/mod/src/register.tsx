@@ -844,6 +844,18 @@ async function setOption($: EngineInterface, option: OptionSpec, enabled: boolea
   }
 }
 
+// /pipcast weather: the record keeps the moment, and the director airs KLWD
+// WEATHER if the window shows within WEATHER_ASK_GRACE_MS of it
+async function askForWeather($: EngineInterface): Promise<string> {
+  const now = await $.clock.now()
+  if (model === null || tunedInAt === null) {
+    return REPLY.weatherOffAir
+  }
+  model = record.askedForWeather(model, now)
+  await save($)
+  return REPLY.weather
+}
+
 async function onTurnStart($: EngineInterface, turnId: string): Promise<void> {
   await ensureSession($)
   if (model === null) {
@@ -993,6 +1005,10 @@ export function register(on: On, options: PluginOptions) {
         return { text: OPTION_REPLY.unknown(request.word) }
       case 'bad-value':
         return { text: OPTION_REPLY.badValue(request.option.word) }
+      case 'weather':
+        return { text: await askForWeather($) }
+      case 'weather-extra':
+        return { text: REPLY.weatherAlone }
       case 'toggle':
         break
     }

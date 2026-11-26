@@ -7,6 +7,7 @@ export type QueueItem =
   | { kind: 'story'; sessionId: string; story: Story }
   | { kind: 'hour'; hour: number }
   | { kind: 'warning' }
+  | { kind: 'weather' }
 
 // A story whose segment has ended, remembered for the ticker
 export interface Carried {

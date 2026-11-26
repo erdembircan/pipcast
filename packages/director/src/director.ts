@@ -1,4 +1,4 @@
-import { hourStart, STORY_FRESH_MS } from '@pipcast/contract'
+import { CLOCK_SKEW_MS, hourStart, STORY_FRESH_MS, WEATHER_ASK_GRACE_MS } from '@pipcast/contract'
 import type { Bed, SessionRecord, Snapshot, Sound, Story, WeatherMemory } from '@pipcast/contract'
 import type { Scene, WeatherScene } from '@pipcast/design'
 
@@ -9,7 +9,7 @@ import { movedOn, storySegment } from './story.ts'
 import type { Segment } from './story.ts'
 import { GAP_MS, HOUR_MS, IDENT_LEAD_MS, LAST_REPORT_KEEP_MS, quarterOf, WEATHER_PAGE_MS } from './timing.ts'
 import type { BoardState, Carried, QueueItem, ReportMemory } from './types.ts'
-import { createWeatherDesk, hasOutlook, warningSegment, weatherScene } from './weather.ts'
+import { createWeatherDesk, hasOutlook, warningSegment, weatherScene, weatherSegment } from './weather.ts'
 
 export interface DirectorOptions {
   reducedMotion?: boolean
@@ -63,6 +63,17 @@ interface OnAir {
   bed: Bed | undefined
 }
 
+// The newest /pipcast weather request among the sessions on air, or 0 when none has asked. One stamped ahead of now by more than the clock's allowance is no request
+function newestAsk(snapshot: Snapshot, now: number): number {
+  let newest = 0
+  for (const session of snapshot.sessions) {
+    if (session.weatherAskedAt !== undefined && session.weatherAskedAt <= now + CLOCK_SKEW_MS && session.weatherAskedAt > newest) {
+      newest = session.weatherAskedAt
+    }
+  }
+  return newest
+}
+
 export function createDirector(options: DirectorOptions = {}): { tick(input: Tick): Program } {
   const reducedMotion = options.reducedMotion === true
   const quarters = options.quarters ?? quarterOf
@@ -87,6 +98,9 @@ export function createDirector(options: DirectorOptions = {}): { tick(input: Tic
   let servedQuarter = 0
   let dueQuarter: number | null = null
   let turn: { weather: WeatherScene; startedAt: number } | null = null
+  // The newest /pipcast weather request dealt with: queued, or dropped for
+  // missing its grace. 0 before the first
+  let servedAsk = 0
 
   function boardState(): BoardState {
     const story = onAir?.item.kind === 'story' ? onAir.item.story : null
@@ -100,9 +114,9 @@ export function createDirector(options: DirectorOptions = {}): { tick(input: Tic
     }
   }
 
-  // Empties the queue: every story, STORM WARNING and report on the hour
-  // waiting its turn. Says whether a warning went. In place: the board reads
-  // this same array.
+  // Empties the queue: every story, STORM WARNING, report on the hour and
+  // KLWD WEATHER waiting its turn. Says whether a warning went. In place: the
+  // board reads this same array.
   function dropWaiting(): boolean {
     const warning = queue.some((item) => item.kind === 'warning')
     queue.length = 0
@@ -251,13 +265,35 @@ export function createDirector(options: DirectorOptions = {}): { tick(input: Tic
         }
       }
 
+      // The weather on request. /pipcast weather is typed in Claude, where the
+      // window is hidden, so a request is the one thing that waits for it: it
+      // joins the queue if the window shows within WEATHER_ASK_GRACE_MS, and is
+      // dropped if it doesn't. From there it is in the queue as a story is.
+      // The newest request of the sessions on air counts; one is dealt with
+      // once, and one that comes while KLWD WEATHER waits or is on air adds
+      // nothing
+      const asked = newestAsk(snapshot, now)
+      if (asked > servedAsk) {
+        if (now - asked > WEATHER_ASK_GRACE_MS) {
+          servedAsk = asked
+        } else if (visible) {
+          servedAsk = asked
+          const waits = queue.some((item) => item.kind === 'weather') || onAir?.item.kind === 'weather'
+          if (!waits && hasOutlook(desk.forecast())) {
+            queue.push({ kind: 'weather' })
+          }
+        }
+      }
+
       // The quarter hours. Each :15, :30 and :45 is dealt with once, at the
       // moment it begins; one that is due is dropped when its quarter is over, or
       // when the forecast has no outlook
       const quarter = quarters(now)
       if (quarter !== null && quarter > servedQuarter) {
         servedQuarter = quarter
-        dueQuarter = quarter
+        // KLWD WEATHER on air or waiting shows EXTENDED FORECAST itself
+        const weatherNear = queue.some((item) => item.kind === 'weather') || onAir?.item.kind === 'weather'
+        dueQuarter = weatherNear ? null : quarter
       }
       if (dueQuarter !== null && (quarter !== dueQuarter || !hasOutlook(desk.forecast()))) {
         dueQuarter = null
@@ -333,6 +369,15 @@ export function createDirector(options: DirectorOptions = {}): { tick(input: Tic
             onAir = { item, segment: warningSegment(forecast, now, reducedMotion), index: 0, stepStartedAt: now, bed: undefined }
             // The hour is counted from when it airs, as the report's is
             desk.markDue(now)
+          } else if (item.kind === 'weather') {
+            // Goes by a forecast worked out as it starts, as a report does
+            const forecast = desk.refresh(now)
+            if (!hasOutlook(forecast)) {
+              continue
+            }
+            onAir = { item, segment: weatherSegment(forecast, now), index: 0, stepStartedAt: now, bed: undefined }
+            // It shows EXTENDED FORECAST: a quarter hour due now is served by it
+            dueQuarter = null
           } else {
             if (snapshot === null) {
               continue

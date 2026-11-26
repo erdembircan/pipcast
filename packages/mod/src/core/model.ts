@@ -122,6 +122,11 @@ export function newModel(id: string, project: string, fallback: string, now: num
   }
 }
 
+// /pipcast weather asked for KLWD WEATHER: the record keeps when
+export function askedForWeather(m: SessionModel, now: number): SessionModel {
+  return withRecord(m, { ...m.record, weatherAskedAt: now })
+}
+
 export function turnStarted(m: SessionModel, now: number, turnId: string): SessionModel {
   const turn: Turn = { id: turnId, startedAt: now, ended: false }
   return withRecord(m, withState(m.record, 'working', now), { turn, waitingOn: null, held: null })

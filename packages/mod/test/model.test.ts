@@ -39,6 +39,18 @@ describe('newModel', () => {
   })
 })
 
+describe('askedForWeather', () => {
+  it('keeps the moment on the record', () => {
+    expect(fresh().record).not.toHaveProperty('weatherAskedAt')
+    expect(m.askedForWeather(fresh(), T + 500).record.weatherAskedAt).toBe(T + 500)
+  })
+
+  it('stays on the record through later changes', () => {
+    const asked = m.askedForWeather(fresh(), T + 500)
+    expect(m.turnStarted(asked, T + 1000, 't1').record.weatherAskedAt).toBe(T + 500)
+  })
+})
+
 describe('turnStarted', () => {
   it('makes the session working and starts a fresh turn', () => {
     const model = working()

@@ -58,6 +58,7 @@
 
   // packages/contract/src/constants.ts
   var STORY_FRESH_MS = 12e4;
+  var WEATHER_ASK_GRACE_MS = 1e4;
   var WEATHER_MAX_POINTS = 200;
 
   // packages/contract/src/format.ts
@@ -155,7 +156,7 @@
       off: "KLWD comes through sharp and clean."
     }
   };
-  var COMMAND_ARGUMENT_HINT = `[${Object.keys(OPTION_WORDS).join("|")} on|off]`;
+  var COMMAND_ARGUMENT_HINT = `[weather | ${Object.keys(OPTION_WORDS).join("|")} on|off]`;
   var LEAD = {
     comingUp: "COMING UP",
     breaking: "BREAKING",
@@ -330,6 +331,7 @@
 
   // packages/contract/src/validate.ts
   var LIMIT_KINDS = ["session", "week"];
+  var CLOCK_SKEW_MS = 5e3;
   function isObject(value) {
     return typeof value === "object" && value !== null && !Array.isArray(value);
   }
@@ -1212,6 +1214,20 @@
     }
     return { id, steps: [opener, tracker, outro] };
   }
+  function weatherSegment(forecast, now) {
+    const weather = weatherScene(forecast, now);
+    const page = (mode, length) => ({
+      role: "weather",
+      length,
+      bed: "beat-major",
+      scene: ({ now: at2, ticker }) => ({ mode, clock: clock(at2), ticker, weather })
+    });
+    const steps = [page("weather-now", WEATHER_PAGE_MS), page("weather-days", WEATHER_PAGE_MS)];
+    if (forecast.outlook === "storm") {
+      steps.push(page("stormtracker", STORMTRACKER_MS));
+    }
+    return { id: `weather:${now}`, steps };
+  }
 
   // packages/director/src/board.ts
   var MAX_TICKER = 6;
@@ -1550,6 +1566,15 @@
   }
 
   // packages/director/src/director.ts
+  function newestAsk(snapshot, now) {
+    let newest2 = 0;
+    for (const session of snapshot.sessions) {
+      if (session.weatherAskedAt !== void 0 && session.weatherAskedAt <= now + CLOCK_SKEW_MS && session.weatherAskedAt > newest2) {
+        newest2 = session.weatherAskedAt;
+      }
+    }
+    return newest2;
+  }
   function createDirector(options = {}) {
     const reducedMotion = options.reducedMotion === true;
     const quarters = options.quarters ?? quarterOf;
@@ -1570,6 +1595,7 @@
     let servedQuarter = 0;
     let dueQuarter = null;
     let turn = null;
+    let servedAsk = 0;
     function boardState() {
       const story = onAir?.item.kind === "story" ? onAir.item.story : null;
       return {
@@ -1696,10 +1722,23 @@
             desk.markDue(now);
           }
         }
+        const asked = newestAsk(snapshot, now);
+        if (asked > servedAsk) {
+          if (now - asked > WEATHER_ASK_GRACE_MS) {
+            servedAsk = asked;
+          } else if (visible) {
+            servedAsk = asked;
+            const waits = queue.some((item) => item.kind === "weather") || onAir?.item.kind === "weather";
+            if (!waits && hasOutlook(desk.forecast())) {
+              queue.push({ kind: "weather" });
+            }
+          }
+        }
         const quarter = quarters(now);
         if (quarter !== null && quarter > servedQuarter) {
           servedQuarter = quarter;
-          dueQuarter = quarter;
+          const weatherNear = queue.some((item) => item.kind === "weather") || onAir?.item.kind === "weather";
+          dueQuarter = weatherNear ? null : quarter;
         }
         if (dueQuarter !== null && (quarter !== dueQuarter || !hasOutlook(desk.forecast()))) {
           dueQuarter = null;
@@ -1762,6 +1801,13 @@
               }
               onAir = { item, segment: warningSegment(forecast, now, reducedMotion), index: 0, stepStartedAt: now, bed: void 0 };
               desk.markDue(now);
+            } else if (item.kind === "weather") {
+              const forecast = desk.refresh(now);
+              if (!hasOutlook(forecast)) {
+                continue;
+              }
+              onAir = { item, segment: weatherSegment(forecast, now), index: 0, stepStartedAt: now, bed: void 0 };
+              dueQuarter = null;
             } else {
               if (snapshot === null) {
                 continue;

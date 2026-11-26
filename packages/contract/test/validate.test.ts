@@ -64,6 +64,22 @@ describe('parseSessionRecord', () => {
     expect(parseSessionRecord(JSON.parse(JSON.stringify(full)))).toEqual(full)
   })
 
+  it('keeps weatherAskedAt when it is a number', () => {
+    const asked = record({ weatherAskedAt: NOW - 5000 })
+    expect(parseSessionRecord(JSON.parse(JSON.stringify(asked)))).toEqual(asked)
+  })
+
+  it.each([
+    ['missing', undefined],
+    ['a string', '5'],
+    ['true', true],
+    ['NaN', Number.NaN],
+  ])('leaves weatherAskedAt out when it is %s', (_name, value) => {
+    const parsed = parseSessionRecord({ ...record(), weatherAskedAt: value })
+    expect(parsed).not.toBeNull()
+    expect(parsed).not.toHaveProperty('weatherAskedAt')
+  })
+
   it('gives null for anything that is not a record', () => {
     expect(parseSessionRecord(null)).toBeNull()
     expect(parseSessionRecord('x')).toBeNull()

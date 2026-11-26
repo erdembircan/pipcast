@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
   BAND_ALT,
+  REPLY,
+  WEATHER_ASK_GRACE_MS,
   LEAD,
   OUTLOOK_WORDS,
   WEATHER,
@@ -168,9 +170,15 @@ describe('the weekly forecast', () => {
   })
 })
 
+describe('the command', () => {
+  it('names the grace /pipcast weather waits for in its reply', () => {
+    expect(REPLY.weather).toContain(`${WEATHER_ASK_GRACE_MS / 1000} seconds`)
+  })
+})
+
 describe('the options', () => {
   it('shows every option word after /pipcast', () => {
-    expect(COMMAND_ARGUMENT_HINT).toBe('[auto|transparency|oldtv on|off]')
+    expect(COMMAND_ARGUMENT_HINT).toBe('[weather | auto|transparency|oldtv on|off]')
   })
 
   it('says what Old TV is set to', () => {

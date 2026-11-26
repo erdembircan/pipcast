@@ -27,7 +27,7 @@ const LIMIT_KINDS: readonly string[] = ['session', 'week']
 const HOUR_KEY = /^\d{4}-\d{2}-\d{2}T\d{2}$/
 
 // How far ahead of now a check-in may be before it is not believed
-const CLOCK_SKEW_MS = 5000
+export const CLOCK_SKEW_MS = 5000
 
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -165,6 +165,7 @@ export function parseSessionRecord(value: unknown): SessionRecord | null {
     activity: parseList(value.activity, parseActivity),
     hours: parseList(value.hours, parseHour),
     limits: parseLimits(value.limits),
+    ...(isNumber(value.weatherAskedAt) ? { weatherAskedAt: value.weatherAskedAt } : {}),
   }
 }
 

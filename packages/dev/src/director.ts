@@ -54,6 +54,14 @@ interface Landed {
   session: SessionRecord
 }
 
+// A session without its /pipcast weather request: a cue's director never sees
+// one, since the station's own director airs it, and the two would air it twice
+function unasked(session: SessionRecord): SessionRecord {
+  const copy = { ...session }
+  delete copy.weatherAskedAt
+  return copy
+}
+
 interface Run {
   cue: DevCue
   director: { tick(input: Tick): Program }
@@ -138,14 +146,14 @@ export function createDevDirector(options: DevDirectorOptions): DevDirector {
     }
     const week = current.week
     if (week === null) {
-      return { ...snapshot, sessions, limits: current.limits }
+      return { ...snapshot, sessions: sessions.map(unasked), limits: current.limits }
     }
     // Every session reads the made-up week's limit besides its own other limits
     sessions = sessions.map((session) => ({
       ...session,
       limits: [...(session.limits ?? []).filter((limit) => limit.kind !== 'week'), ...(reading ? [week.reading] : [])],
     }))
-    return { ...snapshot, sessions, limits: current.limits }
+    return { ...snapshot, sessions: sessions.map(unasked), limits: current.limits }
   }
 
   // One tick of the cue's director: the next story lands, then it ticks
