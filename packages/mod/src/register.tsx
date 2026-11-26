@@ -211,7 +211,7 @@ async function save($: EngineInterface): Promise<void> {
       const io = ioFor($)
       const now = await $.clock.now()
       const home = await io.storeHome()
-      // A session that was ready at a /pipcast clear writes nothing: the heartbeat's check-in takes it off the air
+      // A session that was ready at a /pipcast clear writes nothing, and the check-in that follows takes it off the air
       if (m.record.state === 'ready' && wasCleared(m.record, at, await readClearedAt(io, home))) {
         cleared = true
         return

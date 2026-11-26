@@ -196,7 +196,10 @@ export async function readSharedOptions(io: Io, home: string): Promise<SharedOpt
   return parseSharedOptions(await readJson(io, storePaths(home).options))
 }
 
-// /pipcast clear: writes the moment to clear.json, through a temporary file named after the writer, and deletes the record of every other session on air that is READY now, returning how many. clear.json keeps them off: their own mods write those records no more (wasCleared)
+// /pipcast clear: writes the moment to clear.json, through a temporary file
+// named after the writer, and deletes the record of every other session on air
+// that is READY now, returning how many. clear.json keeps them off: their own
+// mods write those records no more (wasCleared)
 export async function clearReady(io: Io, home: string, own: string): Promise<number> {
   const paths = storePaths(home)
   const now = await io.now()
