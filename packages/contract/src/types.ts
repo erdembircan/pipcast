@@ -104,6 +104,12 @@ export interface StationControl {
   closedAt: number | null
 }
 
+// clear.json: when /pipcast clear last took the READY sessions off the air, written by the mods
+export interface ReadyClear {
+  v: 1
+  clearedAt: number | null
+}
+
 export interface StationPrefs {
   v: 1
   sound: boolean

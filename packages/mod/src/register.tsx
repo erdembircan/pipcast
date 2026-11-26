@@ -2,7 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, On, PluginOptions, RenderElement, Timer } from 'claude-code'
 
 import { ACTIVITY_WRITE_MS, HEARTBEAT_MS } from '../../contract/src/constants.ts'
-import { COMMAND_ARGUMENT_HINT, COMMAND_DESCRIPTION, COMMAND_NAME, OPTION_REPLY, REPLY, TOAST_CANNOT_START, fallbackTitle, optionState } from '../../contract/src/copy.ts'
+import { COMMAND_ARGUMENT_HINT, COMMAND_DESCRIPTION, COMMAND_NAME, OPTION_REPLY, REPLY, TOAST_CANNOT_START, clearedReply, fallbackTitle, optionState } from '../../contract/src/copy.ts'
 import { defaultHome, storePaths } from '../../contract/src/paths.ts'
 import type { SharedOptions } from '../../contract/src/types.ts'
 import { parseSessionRecord } from '../../contract/src/validate.ts'
@@ -24,11 +24,14 @@ import { lookAtShells, lookDue, stillWorking } from './core/shells.ts'
 import { waitsOn } from './core/wake.ts'
 import {
   checkIn,
+  clearReady,
   ensureStation,
+  readClearedAt,
   readSharedOptions,
   shareOptions,
   tuneIn,
   tuneOut,
+  wasCleared,
   writeRecord,
 } from './core/services.ts'
 import type { Io, OffAir, TuneInResult } from './core/services.ts'
@@ -197,6 +200,7 @@ function ioFor($: EngineInterface): Io {
 
 // Saves the record, when tuned in
 async function save($: EngineInterface): Promise<void> {
+  let cleared = false
   await enqueue(async () => {
     const m = model
     const at = tunedInAt
@@ -206,12 +210,21 @@ async function save($: EngineInterface): Promise<void> {
     try {
       const io = ioFor($)
       const now = await $.clock.now()
-      await writeRecord(io, await io.storeHome(), m, at, now)
+      const home = await io.storeHome()
+      // A session that was ready at a /pipcast clear writes nothing, and the check-in that follows takes it off the air
+      if (m.record.state === 'ready' && wasCleared(m.record, at, await readClearedAt(io, home))) {
+        cleared = true
+        return
+      }
+      await writeRecord(io, home, m, at, now)
       lastWriteAt = now
     } catch (error) {
       failure($, 'writing the record', error)
     }
   })
+  if (cleared) {
+    await beat($)
+  }
 }
 
 // An activity line writes at most every ACTIVITY_WRITE_MS; a timer catches the last
@@ -566,7 +579,7 @@ async function lookAgain($: EngineInterface): Promise<void> {
 }
 
 // The heartbeat: a tuned-in session checks in, or goes off the air when the
-// window was closed or it has been ready for an hour; a held finish's
+// window was closed, it was ready at a /pipcast clear or it has been ready for an hour; a held finish's
 // background commands are looked at again
 async function beat($: EngineInterface): Promise<void> {
   await lookAgain($)
@@ -642,6 +655,10 @@ async function startSession($: EngineInterface): Promise<void> {
       await readLimitsNow($)
       tunedInAt = own.tunedInAt
       await save($)
+      // A /pipcast clear took it off the air as it saved
+      if (tunedInAt === null) {
+        return
+      }
       // A reload after a change brings the new value; the station follows it
       await shareOwnOptions($)
       await ensureStation(io, home)
@@ -856,7 +873,31 @@ async function askForWeather($: EngineInterface): Promise<string> {
   }
   model = record.askedForWeather(model, now)
   await save($)
+  if (tunedInAt === null) {
+    return REPLY.weatherOffAir
+  }
   return REPLY.weather
+}
+
+// /pipcast clear: every session READY now goes off the air at once: the others' records are deleted, and this one tunes out
+async function clearReadySessions($: EngineInterface): Promise<string> {
+  try {
+    const io = ioFor($)
+    const home = await io.storeHome()
+    const own = await $.session.id()
+    let others = 0
+    await enqueue(async () => {
+      others = await clearReady(io, home, own)
+    })
+    const ownToo = model !== null && tunedInAt !== null && model.record.state === 'ready'
+    if (ownToo) {
+      await tuneOutNow($)
+    }
+    return clearedReply(others, ownToo)
+  } catch (error) {
+    failure($, 'clearing READY sessions', error)
+    return REPLY.cannotClear
+  }
 }
 
 async function onTurnStart($: EngineInterface, turnId: string): Promise<void> {
@@ -1012,6 +1053,10 @@ export function register(on: On, options: PluginOptions) {
         return { text: await askForWeather($) }
       case 'weather-extra':
         return { text: REPLY.weatherAlone }
+      case 'clear':
+        return { text: await clearReadySessions($) }
+      case 'clear-extra':
+        return { text: REPLY.clearAlone }
       case 'toggle':
         break
     }

@@ -30,7 +30,7 @@ Pipcast installs from [erdembircan-plugins](https://github.com/erdembircan/plugi
 3. When the session needs your input, finishes, or stops on an error, KLWD airs it as BREAKING NEWS.
 4. Click **Back to Claude** on the window, or switch to Claude yourself, and the window gets out of the way.
 
-A session that was already open, or one you resume, goes on air when you press **TUNE IN** in the band above the prompt box, or run `/pipcast`. The band shows **TUNE IN** in gold while the session is off the air and **TUNE OUT** in blue while it's on. Press **TUNE OUT**, or run `/pipcast` again, to take the session off the air. A session that has been **READY** for an hour goes off the air by itself. Press **TUNE IN** to bring it back.
+A session that was already open, or one you resume, goes on air when you press **TUNE IN** in the band above the prompt box, or run `/pipcast`. The band shows **TUNE IN** in gold while the session is off the air and **TUNE OUT** in blue while it's on. Press **TUNE OUT**, or run `/pipcast` again, to take the session off the air. A session that has been **READY** for an hour goes off the air by itself, and `/pipcast clear`, run in any session, takes every **READY** session off the air at once. Press **TUNE IN** to bring one back.
 
 ![TUNE IN under the pointer in the band above Claude's prompt box; KLWD's board in the corner of the screen, over a browser; a session that needs your input, on air at the anchor desk; and Back to Claude bringing up the question Claude asked](assets/screenshots/in-use.jpg)
 
@@ -115,6 +115,7 @@ Run `/pipcast auto`, `/pipcast transparency` or `/pipcast oldtv` on its own to s
 | Command | Does |
 | --- | --- |
 | `/pipcast` | Tunes this session in, or out if it's on air |
+| `/pipcast clear` | Takes every **READY** session off the air at once |
 | `/pipcast auto [on\|off]` | Shows or sets **Tune in every new session** |
 | `/pipcast transparency [on\|off]` | Shows or sets **Transparent window** |
 | `/pipcast oldtv [on\|off]` | Shows or sets **Old TV** |
@@ -133,16 +134,17 @@ The mod reads:
 - Claude's last message when a turn ends
 - the session's title, from the file Claude Code keeps beside the session's transcript in `~/.claude/projects`, and the note there that names the folder a subagent works in
 - your account's usage limits, as Claude Code reports them
+- the other sessions' files in Pipcast's folder, when you run `/pipcast clear`, to find the **READY** sessions, whose files it deletes to take them off the air
 - the environment variables `HOME`, `CLAUDE_CONFIG_DIR` and `CLAUDE_CODE_EXECPATH`, and `PIPCAST_HOME`, `PIPCAST_STATION_BIN` and `PIPCAST_TARGET_BUNDLE_ID`, which are for Pipcast's own tests
 
-What it reads about a session goes only into that session's file, for the station to show. It writes the file only while the session is on air, and it runs these programs and no others:
+What it reads about a session goes only into that session's file, for the station to show, and what it counts for `/pipcast clear` only into its reply. It writes the file only while the session is on air, and it runs these programs and no others:
 
 - `git`, only to read (`rev-parse`, `diff-index` and `ls-files`), in the folders where Claude works, and it reads the files there that git doesn't track yet, to count the lines each session changes
 - `ps`, `lsof`, `head` and `tail`, when a turn ends with commands still running in the background, to tell from their processes and the start and end of their output whether they're still at work
 - `find`, to find the folder of the session's transcript when no hook has said where it is
 - `ps`, when you run `/pipcast auto`, `/pipcast transparency` or `/pipcast oldtv`, to find the Claude Code program the session runs on: it lists your processes with their commands, finds among them the `ps` it started by a tag of its own, and keeps only the program that started that `ps`
 - that Claude Code program's `claude plugin list` and `claude plugin configure`, to read and save Pipcast's three settings, when you run `/pipcast auto`, `/pipcast transparency` or `/pipcast oldtv`
-- `mkdir`, `mv`, `rm` and `chmod`, on its own files
+- `mkdir`, `mv`, `rm` and `chmod`, on Pipcast's own files
 - the station
 
 **The station** is a small macOS app that comes with Pipcast: the program `station/pipcast-station` in the plugin, built from the Swift source in Pipcast's repository. The mod starts it when the first session goes on air, and it quits a few seconds after the last one goes off. It reads the sessions' files, shows the broadcast in its window, a web page that comes with the plugin, and plays the jingles and the beat in `station/sounds`. It works out the weekly forecast itself, from the usage limits in the sessions' files, and draws STORMTRACKER's globe in its web page with WebGL, on NASA's Blue Marble pictures of the Earth in `station/web/textures`. With **Old TV** on, it lays the old television over its window's picture with macOS's own Core Image filters. It checks which app is in front, to hide while Claude is, and where the pointer is, to show the window's controls. Its window never takes the keyboard, so macOS treats the station as an app in the background, and three private macOS switches, looked up as it runs, make up for that: one draws the window's glass controls as an active window's, one lets the station set the pointer for resizing, and one keeps the window off Claude's full-screen desktop. One more private switch, in WebKit and looked up as it runs too, lets its page hand the pictures of the Earth beside it to STORMTRACKER's globe, which WebKit otherwise refuses. For Pipcast's own checks, it has a `snapshot` command that draws a still of its page, and it saves pictures of its own window, and no other, when `PIPCAST_SELF_CAPTURE` or `PIPCAST_SELF_CAPTURE_PAIR` is set. It asks for no permission: no screen recording, no accessibility, no automation.
@@ -156,6 +158,7 @@ Everything stays on your Mac. Pipcast sends nothing anywhere, and has no account
 It keeps its files in one folder, `~/Library/Application Support/Pipcast`, which only your user can open:
 
 - a file for each session on air, with its project's folder name, its title, its state, what Claude is doing, the question Claude asked or what a permission is for, Claude's last words when a turn ends, the lines and files it changed in each hour, your account's usage limits, and when you last ran `/pipcast weather`. A session deletes its file when it goes off the air or ends. A file left behind by a session that stopped without ending, as when Claude Code is force-quit, is deleted the next time a session goes on air, once it's an hour old.
+- when you last ran `/pipcast clear`, so each session that was **READY** then stays off the air
 - the window's corner and size, whether it's tucked into the side, whether sound is on, when the hour last aired, when the window was last closed, **Transparent window** and **Old TV**, and the station's process number and version
 - your week's usage, as the share used at times since the week's limit last reset, at most one reading each hour, for the weekly forecast, and when the last storm warning aired. The readings start over when the week resets.
 - the station's own log of what its window did, for fixing problems, cut back at 1 MB

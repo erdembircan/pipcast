@@ -45,6 +45,16 @@ describe('parseRequest', () => {
     expect(parseRequest('weatherx')).toEqual({ kind: 'unknown', word: 'weatherx' })
   })
 
+  it('reads clear on its own as taking the READY sessions off the air, in any case and spacing', () => {
+    expect(parseRequest('clear')).toEqual({ kind: 'clear' })
+    expect(parseRequest('  CLEAR ')).toEqual({ kind: 'clear' })
+  })
+
+  it('refuses words after clear, and takes a longer word for an unknown option', () => {
+    expect(parseRequest('clear now')).toEqual({ kind: 'clear-extra' })
+    expect(parseRequest('clearx')).toEqual({ kind: 'unknown', word: 'clearx' })
+  })
+
   it('names a word it does not know as it was typed', () => {
     expect(parseRequest('Volume on')).toEqual({ kind: 'unknown', word: 'Volume' })
   })

@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { defaultHome, storePaths } from '@pipcast/contract'
 import type { SessionRecord } from '@pipcast/contract'
 import * as m from '../src/core/model.ts'
-import { ORPHAN_MS, READY_IDLE_MS, checkIn, ensureStation, readSharedOptions, recordOf, shareOptions, sweepOrphans, tuneIn, tuneOut } from '../src/core/services.ts'
+import { ORPHAN_MS, READY_IDLE_MS, checkIn, clearReady, ensureStation, readClearedAt, readSharedOptions, recordOf, shareOptions, sweepOrphans, tuneIn, tuneOut, wasCleared } from '../src/core/services.ts'
 import type { Io, RunResult } from '../src/core/services.ts'
 
 const HOME = '/store'
@@ -316,6 +316,192 @@ describe('checkIn', () => {
     state.now = T + READY_IDLE_MS
     expect(await checkIn(state.io, mine(), T)).toEqual({ off: 'closed' })
     expect(stored(state)).toBeUndefined()
+  })
+})
+
+describe('checkIn after /pipcast clear', () => {
+  const alive = (state: Fake) =>
+    state.files.set(paths.station, JSON.stringify({ v: 1, pid: 1, startedAt: T - 1000, heartbeatAt: state.now, version: '1' }))
+  const cleared = (state: Fake, clearedAt: number) => state.files.set(paths.clear, JSON.stringify({ v: 1, clearedAt }))
+
+  it('takes a session that was ready at the clear off the air, and removes its record', async () => {
+    const state = fake()
+    await tuneIn(state.io, mine())
+    cleared(state, T + 5000)
+    state.now = T + 10_000
+    expect(await checkIn(state.io, mine(), T)).toEqual({ off: 'cleared' })
+    expect(stored(state)).toBeUndefined()
+  })
+
+  it('takes a session that went ready at the very moment of the clear off the air', async () => {
+    const state = fake()
+    await tuneIn(state.io, mine())
+    cleared(state, T)
+    state.now = T + 10_000
+    expect((await checkIn(state.io, mine(), T)).off).toBe('cleared')
+  })
+
+  it('keeps a session that went ready after the clear', async () => {
+    const state = fake()
+    alive(state)
+    await tuneIn(state.io, mine())
+    cleared(state, T - 1)
+    state.now = T + 10_000
+    alive(state)
+    expect((await checkIn(state.io, mine(), T - 5000)).off).toBeNull()
+    expect(stored(state)).toBeDefined()
+  })
+
+  it('keeps a session that tuned in after the clear', async () => {
+    const state = fake()
+    alive(state)
+    await tuneIn(state.io, mine())
+    cleared(state, T - 1)
+    state.now = T + 10_000
+    alive(state)
+    expect((await checkIn(state.io, m.newModel('me', 'proj', 'My title', T - 60_000), T)).off).toBeNull()
+  })
+
+  it('keeps a session that started working before its heartbeat, although it was ready at the clear', async () => {
+    const state = fake()
+    alive(state)
+    const working = m.turnStarted(mine(), T + 2000, 't1')
+    await tuneIn(state.io, working)
+    cleared(state, T + 1000)
+    state.now = T + 10_000
+    alive(state)
+    expect((await checkIn(state.io, working, T)).off).toBeNull()
+    expect(stored(state)).toBeDefined()
+  })
+
+  it('keeps a session whose newest activity line or story came after the clear', async () => {
+    const state = fake()
+    alive(state)
+    const busy = m.activity(mine(), T + 2000, 'running the test suite')
+    const done = m.finished(m.activity(mine(), T + 1500, 'running the test suite'), T + 3000, { lastWords: 'Done.', waiting: { shells: [], others: false } })
+    cleared(state, T + 1000)
+    state.now = T + 10_000
+    alive(state)
+    expect((await checkIn(state.io, busy, T)).off).toBeNull()
+    expect((await checkIn(state.io, done, T)).off).toBeNull()
+  })
+
+  it('ignores a clear file that is broken, or missing', async () => {
+    const state = fake()
+    alive(state)
+    await tuneIn(state.io, mine())
+    state.now = T + 10_000
+    alive(state)
+    expect((await checkIn(state.io, mine(), T)).off).toBeNull()
+    state.files.set(paths.clear, '{broken')
+    expect((await checkIn(state.io, mine(), T)).off).toBeNull()
+    state.files.set(paths.clear, JSON.stringify({ clearedAt: T + 5 }))
+    expect((await checkIn(state.io, mine(), T)).off).toBeNull()
+    state.files.set(paths.clear, JSON.stringify({ v: 1, clearedAt: 'x' }))
+    expect((await checkIn(state.io, mine(), T)).off).toBeNull()
+  })
+
+  it('says the window was closed when a clear applies as well', async () => {
+    const state = fake()
+    await tuneIn(state.io, mine())
+    state.files.set(paths.control, JSON.stringify({ v: 1, closedAt: T }))
+    cleared(state, T + 5000)
+    state.now = T + 10_000
+    expect(await checkIn(state.io, mine(), T)).toEqual({ off: 'closed' })
+    expect(stored(state)).toBeUndefined()
+  })
+})
+
+describe('clearReady', () => {
+  const put = (state: Fake, name: string, text: string) => state.files.set(`${paths.sessions}/${name}`, text)
+  const record = (id: string, patch: Partial<SessionRecord>): string =>
+    JSON.stringify({
+      v: 1,
+      id,
+      title: id,
+      project: 'p',
+      state: 'ready',
+      stateAt: T - 5000,
+      tunedInAt: T - 20_000,
+      checkedInAt: T,
+      stories: [],
+      activity: [],
+      hours: [],
+      limits: [],
+      ...patch,
+    })
+
+  it('writes clear.json through a temporary file named after the writer', async () => {
+    const state = fake()
+    expect(await clearReady(state.io, HOME, 'me')).toBe(0)
+    expect(JSON.parse(state.files.get(paths.clear) ?? '')).toEqual({ v: 1, clearedAt: T })
+    expect(state.temps).toEqual([`${paths.clear}.me.tmp`])
+  })
+
+  it('deletes exactly the other sessions on air that are ready, and counts them', async () => {
+    const state = fake()
+    put(state, 'me.json', record('me', {}))
+    put(state, 'a.json', record('a', {}))
+    put(state, 'b.json', record('b', { stateAt: T - 30_000, tunedInAt: T - 40_000 }))
+    put(state, 'working.json', record('working', { state: 'working' }))
+    put(state, 'asking.json', record('asking', { state: 'needs-input' }))
+    put(state, 'broken.json', record('broken', { state: 'error' }))
+    put(state, 'stale.json', record('stale', { checkedInAt: T - 45_001 }))
+    put(state, 'junk.json', '{not json')
+    put(state, 'odd.json', JSON.stringify({ v: 1, id: 'odd' }))
+    put(state, 'c.json.tmp', record('c', {}))
+    expect(await clearReady(state.io, HOME, 'me')).toBe(2)
+    const left = [...state.files.keys()].map((path) => path.replace(`${paths.sessions}/`, '')).sort()
+    expect(left).toEqual([paths.clear, 'asking.json', 'broken.json', 'c.json.tmp', 'junk.json', 'me.json', 'odd.json', 'stale.json', 'working.json'].sort())
+  })
+
+  it('leaves its own record in place, and deletes nothing when no other session is ready', async () => {
+    const state = fake()
+    put(state, 'me.json', record('me', {}))
+    put(state, 'a.json', record('a', { state: 'working' }))
+    expect(await clearReady(state.io, HOME, 'me')).toBe(0)
+    expect([...state.files.keys()].sort()).toEqual([paths.clear, `${paths.sessions}/a.json`, `${paths.sessions}/me.json`].sort())
+  })
+})
+
+describe('wasCleared', () => {
+  const ready = (patch: Partial<SessionRecord> = {}): SessionRecord => ({ ...m.newModel('me', 'proj', 'My title', T).record, ...patch })
+
+  it('is true for a ready session that went ready, tuned in and spoke no later than the clear', () => {
+    expect(wasCleared(ready(), T, T)).toBe(true)
+    expect(wasCleared(ready(), T, T + 1)).toBe(true)
+  })
+
+  it('is false when there was no clear', () => {
+    expect(wasCleared(ready(), T, null)).toBe(false)
+  })
+
+  it('is false for a session that went ready after the clear, or tuned in after it', () => {
+    expect(wasCleared(ready(), T, T - 1)).toBe(false)
+    expect(wasCleared(ready({ stateAt: T - 10_000 }), T, T - 1)).toBe(false)
+  })
+
+  it('is false for a session that is not ready', () => {
+    for (const state of ['working', 'needs-input', 'error'] as const) {
+      expect(wasCleared(ready({ state }), T, T + 1000)).toBe(false)
+    }
+  })
+
+  it('counts from the newest story and the newest activity line', () => {
+    const busy = m.activity(m.newModel('me', 'proj', 'My title', T - 10_000), T + 500, 'running the test suite').record
+    expect(wasCleared(busy, T - 10_000, T + 499)).toBe(false)
+    expect(wasCleared(busy, T - 10_000, T + 500)).toBe(true)
+  })
+})
+
+describe('readClearedAt', () => {
+  it('reads the moment, and is null when the file is missing or not one', async () => {
+    const state = fake()
+    expect(await readClearedAt(state.io, HOME)).toBeNull()
+    state.files.set(paths.clear, JSON.stringify({ v: 1, clearedAt: T }))
+    expect(await readClearedAt(state.io, HOME)).toBe(T)
+    state.files.set(paths.clear, '{broken')
+    expect(await readClearedAt(state.io, HOME)).toBeNull()
   })
 })
 

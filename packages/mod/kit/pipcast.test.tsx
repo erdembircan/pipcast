@@ -3,7 +3,7 @@ import type { Engine } from 'claude-code/testing'
 import { expect, test } from 'claude-code/testing'
 
 import { ACTIVITY_WRITE_MS, HEARTBEAT_MS } from '../../contract/src/constants.ts'
-import { BAND_ALT, ERROR_WORDS, OPTION_REPLY, REPLY, TOAST_CANNOT_START, optionState } from '../../contract/src/copy.ts'
+import { BAND_ALT, ERROR_WORDS, OPTION_REPLY, REPLY, TOAST_CANNOT_START, clearedReply, optionState } from '../../contract/src/copy.ts'
 import { hourKey } from '../../contract/src/format.ts'
 import { TITLE_CHECK_MS } from '../src/core/title.ts'
 import { READY_IDLE_MS } from '../src/core/services.ts'
@@ -336,7 +336,125 @@ scenario('/pipcast weather takes nothing after it', {}, async (w, $) => {
   expect(w.record()).not.toHaveProperty('weatherAskedAt')
 })
 
-scenario('a station that will not start leaves a toast and no record', { launchExit: 1, launchOut: '' }, async (w, $) => {
+scenario('/pipcast clear, tuned in and READY, tunes this session out at once', {}, async (w, $) => {
+  await tuneIn($)
+  const ui = await mounted($)
+  expect((await ui.find({ type: 'Button' }))?.key).toBe('tune-out')
+  expect((await option($, 'clear')).text).toBe(clearedReply(0, true))
+  expect(w.record()).toBeNull()
+  expect((await ui.find({ type: 'Button' }))?.key).toBe('tune-in')
+  expect(JSON.parse(w.files.get(`${HOME}/clear.json`) ?? '')).toEqual({ v: 1, clearedAt: T0 })
+  await ui.unmount()
+})
+
+scenario('/pipcast clear, tuned in and working, stays on and deletes the other READY sessions on air, and no other record', {}, async (w, $) => {
+  await tuneIn($)
+  await turn($)
+  w.other('ready', T0 - 10_000, T0, 'ready')
+  w.other('busy', T0 - 10_000)
+  w.other('stale', T0 - 100_000, T0 - 60_000, 'ready')
+  expect((await option($, 'clear')).text).toBe(clearedReply(1, false))
+  expect(w.record()?.state).toBe('working')
+  expect(w.hasRecord('ready')).toBe(false)
+  expect(w.hasRecord('busy')).toBe(true)
+  expect(w.hasRecord('stale')).toBe(true)
+  expect(JSON.parse(w.files.get(`${HOME}/clear.json`) ?? '')).toEqual({ v: 1, clearedAt: T0 })
+})
+
+scenario('/pipcast clear deletes the others too when this session is READY, and tunes it out', {}, async (w, $) => {
+  await tuneIn($)
+  w.other('one', T0 - 10_000, T0, 'ready')
+  w.other('two', T0 - 10_000, T0, 'ready')
+  expect((await option($, 'clear')).text).toBe(clearedReply(2, true))
+  expect(w.record()).toBeNull()
+  expect(w.hasRecord('one')).toBe(false)
+  expect(w.hasRecord('two')).toBe(false)
+})
+
+scenario('a READY session whose record was deleted by /pipcast clear writes nothing at its next save, and goes off the air', {}, async (w, $) => {
+  await tuneIn($)
+  const ui = await mounted($)
+  expect((await ui.find({ type: 'Button' }))?.key).toBe('tune-out')
+  await w.clock.advance(5000)
+  // Another session's /pipcast clear: the moment, and this session's record deleted
+  w.files.set(`${HOME}/clear.json`, JSON.stringify({ v: 1, clearedAt: T0 + 5000 }))
+  w.files.delete(RECORD)
+  // A save that is no heartbeat: the session is named by a hook
+  await $.classic.UserPromptSubmit({ prompt: 'go', session_title: 'Renamed by a hook', ...located } as never)
+  expect(w.record()).toBeNull()
+  expect((await ui.find({ type: 'Button' }))?.key).toBe('tune-in')
+  await ui.unmount()
+})
+
+scenario('a reload of a READY session that a /pipcast clear found takes it off the air, and starts nothing', { transcriptDir: PROJECT_DIR }, async (w, $) => {
+  await tuneIn($)
+  await w.clock.advance(5000)
+  const launched = w.launched.length
+  w.files.set(`${HOME}/clear.json`, JSON.stringify({ v: 1, clearedAt: T0 + 5000 }))
+  // The module starts over; $.state says tuned in
+  await $.session.start(START)
+  expect(w.record()).toBeNull()
+  const ui = await mounted($)
+  expect((await ui.find({ type: 'Button' }))?.key).toBe('tune-in')
+  await ui.unmount()
+  expect(w.launched.length).toBe(launched)
+  w.reads.length = 0
+  await w.clock.advance(3 * 60_000)
+  expect(w.reads.filter((path) => path === TITLE_FILE)).toEqual([])
+  expect(w.record()).toBeNull()
+})
+
+scenario('/pipcast weather in a READY session a clear has just found says it is off the air', {}, async (w, $) => {
+  await tuneIn($)
+  await w.clock.advance(5000)
+  w.files.set(`${HOME}/clear.json`, JSON.stringify({ v: 1, clearedAt: T0 + 5000 }))
+  expect((await option($, 'weather')).text).toBe(REPLY.weatherOffAir)
+  expect(w.record()).toBeNull()
+})
+
+scenario('a READY session that went READY after the clear writes its record as before', {}, async (w, $) => {
+  await tuneIn($)
+  await w.clock.advance(5000)
+  w.files.set(`${HOME}/clear.json`, JSON.stringify({ v: 1, clearedAt: T0 - 1 }))
+  await $.classic.UserPromptSubmit({ prompt: 'go', session_title: 'Renamed by a hook', ...located } as never)
+  expect(w.record()?.title).toBe('Renamed by a hook')
+})
+
+scenario('a READY session goes off the air at its next heartbeat after another session ran /pipcast clear', {}, async (w, $) => {
+  await tuneIn($)
+  w.files.set(`${HOME}/clear.json`, JSON.stringify({ v: 1, clearedAt: T0 + 5000 }))
+  await w.clock.advance(10_000)
+  expect(w.record()).toBeNull()
+  const ui = await mounted($)
+  expect((await ui.find({ type: 'Button' }))?.key).toBe('tune-in')
+  await ui.unmount()
+})
+
+scenario('a session that went READY after the clear stays on the air', {}, async (w, $) => {
+  await tuneIn($)
+  w.files.set(`${HOME}/clear.json`, JSON.stringify({ v: 1, clearedAt: T0 - 1 }))
+  await w.clock.advance(10_000)
+  expect(w.record()?.checkedInAt).toBe(T0 + 10_000)
+})
+
+scenario('/pipcast clear takes nothing after it, and writes nothing', {}, async (w, $) => {
+  await tuneIn($)
+  const before = w.record()
+  expect((await option($, 'clear now')).text).toBe(REPLY.clearAlone)
+  expect(w.record()).toEqual(before)
+  expect(w.files.has(`${HOME}/clear.json`)).toBe(false)
+})
+
+scenario('/pipcast clear, off the air, still writes the moment and deletes the READY records it counts', {}, async (w, $) => {
+  w.other('ready', T0 - 10_000, T0, 'ready')
+  expect((await option($, 'clear')).text).toBe(clearedReply(1, false))
+  expect(w.hasRecord('ready')).toBe(false)
+  expect(w.writes).toContain(`${HOME}/clear.json.${ID}.tmp`)
+  expect(JSON.parse(w.files.get(`${HOME}/clear.json`) ?? '')).toEqual({ v: 1, clearedAt: T0 })
+  expect(w.record()).toBeNull()
+})
+
+scenario('a station that will not start leaves a toast and no record',{ launchExit: 1, launchOut: '' }, async (w, $) => {
   const ui = await mounted($)
   await ui.press({ key: 'tune-in' })
   await ui.redraw()
@@ -1350,7 +1468,7 @@ scenario('the words after /pipcast are read in any case and spacing', {}, async 
 
 scenario('an option /pipcast does not know, or a value that is not on or off, saves nothing', {}, async (w, $) => {
   expect((await option($, 'volume on')).text).toBe(OPTION_REPLY.unknown('volume'))
-  expect(OPTION_REPLY.unknown('volume')).toBe('/pipcast has no option called volume. Options: auto, transparency, oldtv. To air KLWD WEATHER, run /pipcast weather.')
+  expect(OPTION_REPLY.unknown('volume')).toBe('/pipcast has no option called volume. Options: auto, transparency, oldtv. To air KLWD WEATHER, run /pipcast weather. To take every READY session off the air, run /pipcast clear.')
   expect((await option($, 'auto maybe')).text).toBe(OPTION_REPLY.badValue('auto'))
   expect((await option($, 'auto on now')).text).toBe(OPTION_REPLY.badValue('auto'))
   expect(w.engineCalls).toEqual([])

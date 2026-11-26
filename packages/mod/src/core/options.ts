@@ -50,6 +50,8 @@ export type Request =
   | { kind: 'bad-value'; option: OptionSpec }
   | { kind: 'weather' }
   | { kind: 'weather-extra' }
+  | { kind: 'clear' }
+  | { kind: 'clear-extra' }
 
 export function parseRequest(args: string): Request {
   const typed = args.trim().split(/\s+/).filter((word) => word !== '')
@@ -59,6 +61,9 @@ export function parseRequest(args: string): Request {
   }
   if (first === 'weather') {
     return value === undefined ? { kind: 'weather' } : { kind: 'weather-extra' }
+  }
+  if (first === 'clear') {
+    return value === undefined ? { kind: 'clear' } : { kind: 'clear-extra' }
   }
   const option = OPTIONS.find((candidate) => candidate.word === first)
   if (option === undefined) {

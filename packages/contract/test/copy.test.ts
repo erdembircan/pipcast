@@ -9,6 +9,7 @@ import {
   ERROR_WORDS,
   COMMAND_ARGUMENT_HINT,
   afterReportLine,
+  clearedReply,
   deskLine,
   doing,
   errorWords,
@@ -176,9 +177,29 @@ describe('the command', () => {
   })
 })
 
+describe('what /pipcast clear says', () => {
+  it('says no session was READY', () => {
+    expect(clearedReply(0, false)).toBe('No session on air is READY.')
+  })
+
+  it('says this session was the only one READY', () => {
+    expect(clearedReply(0, true)).toBe('Took this session, the only one READY, off the air. Press TUNE IN to bring it back.')
+  })
+
+  it('counts the other READY sessions, one or more', () => {
+    expect(clearedReply(1, false)).toBe('Took 1 READY session off the air. Press TUNE IN in a session to bring it back.')
+    expect(clearedReply(3, false)).toBe('Took 3 READY sessions off the air. Press TUNE IN in a session to bring it back.')
+  })
+
+  it('counts the others more when this session was READY too', () => {
+    expect(clearedReply(1, true)).toBe('Took this session and 1 more READY session off the air. Press TUNE IN in a session to bring it back.')
+    expect(clearedReply(2, true)).toBe('Took this session and 2 more READY sessions off the air. Press TUNE IN in a session to bring it back.')
+  })
+})
+
 describe('the options', () => {
   it('shows every option word after /pipcast', () => {
-    expect(COMMAND_ARGUMENT_HINT).toBe('[weather | auto|transparency|oldtv on|off]')
+    expect(COMMAND_ARGUMENT_HINT).toBe('[clear | weather | auto|transparency|oldtv on|off]')
   })
 
   it('says what Old TV is set to', () => {
