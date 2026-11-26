@@ -347,7 +347,7 @@ scenario('/pipcast clear, tuned in and READY, tunes this session out at once', {
   await ui.unmount()
 })
 
-scenario('/pipcast clear, tuned in and working, stays on and counts the other READY sessions on air', {}, async (w, $) => {
+scenario('/pipcast clear, tuned in and working, stays on and deletes the other READY sessions on air, and no other record', {}, async (w, $) => {
   await tuneIn($)
   await turn($)
   w.other('ready', T0 - 10_000, T0, 'ready')
@@ -355,19 +355,43 @@ scenario('/pipcast clear, tuned in and working, stays on and counts the other RE
   w.other('stale', T0 - 100_000, T0 - 60_000, 'ready')
   expect((await option($, 'clear')).text).toBe(clearedReply(1, false))
   expect(w.record()?.state).toBe('working')
-  // Another session's record is the owner's to take off the air, at its next heartbeat
-  expect(w.hasRecord('ready')).toBe(true)
+  expect(w.hasRecord('ready')).toBe(false)
+  expect(w.hasRecord('busy')).toBe(true)
+  expect(w.hasRecord('stale')).toBe(true)
   expect(JSON.parse(w.files.get(`${HOME}/clear.json`) ?? '')).toEqual({ v: 1, clearedAt: T0 })
 })
 
-scenario('/pipcast clear counts the others when this session is READY too', {}, async (w, $) => {
+scenario('/pipcast clear deletes the others too when this session is READY, and tunes it out', {}, async (w, $) => {
   await tuneIn($)
   w.other('one', T0 - 10_000, T0, 'ready')
   w.other('two', T0 - 10_000, T0, 'ready')
   expect((await option($, 'clear')).text).toBe(clearedReply(2, true))
   expect(w.record()).toBeNull()
-  expect(w.hasRecord('one')).toBe(true)
-  expect(w.hasRecord('two')).toBe(true)
+  expect(w.hasRecord('one')).toBe(false)
+  expect(w.hasRecord('two')).toBe(false)
+})
+
+scenario('a READY session whose record was deleted by /pipcast clear writes nothing at its next save, and goes off the air', {}, async (w, $) => {
+  await tuneIn($)
+  const ui = await mounted($)
+  expect((await ui.find({ type: 'Button' }))?.key).toBe('tune-out')
+  await w.clock.advance(5000)
+  // Another session's /pipcast clear: the moment, and this session's record deleted
+  w.files.set(`${HOME}/clear.json`, JSON.stringify({ v: 1, clearedAt: T0 + 5000 }))
+  w.files.delete(RECORD)
+  // A save that is no heartbeat: the session is named by a hook
+  await $.classic.UserPromptSubmit({ prompt: 'go', session_title: 'Renamed by a hook', ...located } as never)
+  expect(w.record()).toBeNull()
+  expect((await ui.find({ type: 'Button' }))?.key).toBe('tune-in')
+  await ui.unmount()
+})
+
+scenario('a READY session that went READY after the clear writes its record as before', {}, async (w, $) => {
+  await tuneIn($)
+  await w.clock.advance(5000)
+  w.files.set(`${HOME}/clear.json`, JSON.stringify({ v: 1, clearedAt: T0 - 1 }))
+  await $.classic.UserPromptSubmit({ prompt: 'go', session_title: 'Renamed by a hook', ...located } as never)
+  expect(w.record()?.title).toBe('Renamed by a hook')
 })
 
 scenario('a READY session goes off the air at its next heartbeat after another session ran /pipcast clear', {}, async (w, $) => {
@@ -395,9 +419,10 @@ scenario('/pipcast clear takes nothing after it, and writes nothing', {}, async 
   expect(w.files.has(`${HOME}/clear.json`)).toBe(false)
 })
 
-scenario('/pipcast clear, off the air, still writes the moment and counts', {}, async (w, $) => {
+scenario('/pipcast clear, off the air, still writes the moment and deletes the READY records it counts', {}, async (w, $) => {
   w.other('ready', T0 - 10_000, T0, 'ready')
   expect((await option($, 'clear')).text).toBe(clearedReply(1, false))
+  expect(w.hasRecord('ready')).toBe(false)
   expect(w.writes).toContain(`${HOME}/clear.json.${ID}.tmp`)
   expect(JSON.parse(w.files.get(`${HOME}/clear.json`) ?? '')).toEqual({ v: 1, clearedAt: T0 })
   expect(w.record()).toBeNull()

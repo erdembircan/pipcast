@@ -183,17 +183,17 @@ describe('what /pipcast clear says', () => {
   })
 
   it('says this session was the only one READY', () => {
-    expect(clearedReply(0, true)).toBe("This session was the only one READY, and it's off the air now. Press TUNE IN to bring it back.")
+    expect(clearedReply(0, true)).toBe('Took this session, the only one READY, off the air. Press TUNE IN to bring it back.')
   })
 
   it('counts the other READY sessions, one or more', () => {
-    expect(clearedReply(1, false)).toBe('1 READY session goes off the air within seconds. Press TUNE IN in a session to bring it back.')
-    expect(clearedReply(3, false)).toBe('3 READY sessions go off the air within seconds. Press TUNE IN in a session to bring it back.')
+    expect(clearedReply(1, false)).toBe('Took 1 READY session off the air. Press TUNE IN in a session to bring it back.')
+    expect(clearedReply(3, false)).toBe('Took 3 READY sessions off the air. Press TUNE IN in a session to bring it back.')
   })
 
   it('counts the others more when this session was READY too', () => {
-    expect(clearedReply(1, true)).toBe('This session is off the air now, and 1 more READY session goes off within seconds. Press TUNE IN in a session to bring it back.')
-    expect(clearedReply(2, true)).toBe('This session is off the air now, and 2 more READY sessions go off within seconds. Press TUNE IN in a session to bring it back.')
+    expect(clearedReply(1, true)).toBe('Took this session and 1 more READY session off the air. Press TUNE IN in a session to bring it back.')
+    expect(clearedReply(2, true)).toBe('Took this session and 2 more READY sessions off the air. Press TUNE IN in a session to bring it back.')
   })
 })
 

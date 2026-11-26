@@ -25,16 +25,15 @@ export const REPLY = {
 } as const
 
 // What /pipcast clear says: `others` is how many other sessions on air were
-// READY, each going off at its next heartbeat; `ownToo` when this session was
-// READY too and is off the air already.
-// "2 READY sessions go off the air within seconds. Press TUNE IN in a session to bring it back."
+// READY and are off the air now; `ownToo` when this session was READY too.
+// "Took 2 READY sessions off the air. Press TUNE IN in a session to bring it back."
 export function clearedReply(others: number, ownToo: boolean): string {
   const back = 'Press TUNE IN in a session to bring it back.'
   if (others === 0) {
-    return ownToo ? "This session was the only one READY, and it's off the air now. Press TUNE IN to bring it back." : 'No session on air is READY.'
+    return ownToo ? 'Took this session, the only one READY, off the air. Press TUNE IN to bring it back.' : 'No session on air is READY.'
   }
-  const sessions = `${others} ${ownToo ? 'more ' : ''}READY ${plural(others, 'session goes', 'sessions go')}`
-  return ownToo ? `This session is off the air now, and ${sessions} off within seconds. ${back}` : `${sessions} off the air within seconds. ${back}`
+  const sessions = `${others} ${ownToo ? 'more ' : ''}READY ${plural(others, 'session', 'sessions')}`
+  return ownToo ? `Took this session and ${sessions} off the air. ${back}` : `Took ${sessions} off the air. ${back}`
 }
 
 export const TOAST_CANNOT_START = 'Pipcast: KLWD could not start.'

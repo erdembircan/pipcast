@@ -5,7 +5,7 @@
 # options.json telling the station the window is transparent, the station
 # launched), a second /pipcast has to tune out (the record gone), and, with
 # another session's READY record planted in the store, /pipcast clear has to
-# take this session off the air at once, count the other, and write clear.json.
+# take this session off the air at once, delete the other's record, and write clear.json.
 # A session that ends while tuned in has to take its record with it. In the second, with
 # nothing saved for Tune in every new session, which leaves it on, and
 # Transparent window off, the session has to stay off the air while nothing
@@ -156,6 +156,11 @@ band() { # <request id>
   plant_ready other-session "$home"
   echo "$clear_ready"
   sleep 3
+  if [[ -e "$home/sessions/other-session.json" ]]; then
+    echo "planted-after-clear present" >>"$notes"
+  else
+    echo "planted-after-clear none" >>"$notes"
+  fi
   rm -f "$home/sessions/other-session.json"
   echo "after-clear $(record_state "$home")" >>"$notes"
   echo "clear-file $(clear_state "$home")" >>"$notes"
@@ -223,8 +228,9 @@ check "launch --home $home --assets $root/plugin/station --target-bundle-id com.
 check "after-out none" "$notes" "the second /pipcast removed the record"
 check "$tuned_out" "$out" "the second /pipcast answered that it tuned out"
 check "after-in-again ok" "$notes" "a third /pipcast wrote the record again"
-check "$cleared_one_more" "$out" "/pipcast clear counted the other session that was READY and took this one off the air"
-check "after-clear none" "$notes" "/pipcast clear took the READY session off the air at once, its record gone"
+check "$cleared_one_more" "$out" "/pipcast clear answered that it took the other READY session and this one off the air"
+check "planted-after-clear none" "$notes" "/pipcast clear deleted the other READY session's record at once"
+check "after-clear none" "$notes""/pipcast clear took the READY session off the air at once, its record gone"
 check "clear-file ok" "$notes" "/pipcast clear wrote the moment to clear.json"
 check "after-in-last ok" "$notes" "a last /pipcast wrote the record again"
 check "after-end none" "$notes" "the session ending took the record with it"

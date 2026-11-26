@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { defaultHome, storePaths } from '@pipcast/contract'
 import type { SessionRecord } from '@pipcast/contract'
 import * as m from '../src/core/model.ts'
-import { ORPHAN_MS, READY_IDLE_MS, checkIn, clearReady, ensureStation, readSharedOptions, recordOf, shareOptions, sweepOrphans, tuneIn, tuneOut } from '../src/core/services.ts'
+import { ORPHAN_MS, READY_IDLE_MS, checkIn, clearReady, ensureStation, readClearedAt, readSharedOptions, recordOf, shareOptions, sweepOrphans, tuneIn, tuneOut, wasCleared } from '../src/core/services.ts'
 import type { Io, RunResult } from '../src/core/services.ts'
 
 const HOME = '/store'
@@ -438,7 +438,7 @@ describe('clearReady', () => {
     expect(state.temps).toEqual([`${paths.clear}.me.tmp`])
   })
 
-  it('counts the other sessions on air that are ready, and no other', async () => {
+  it('deletes exactly the other sessions on air that are ready, and counts them', async () => {
     const state = fake()
     put(state, 'me.json', record('me', {}))
     put(state, 'a.json', record('a', {}))
@@ -451,14 +451,57 @@ describe('clearReady', () => {
     put(state, 'odd.json', JSON.stringify({ v: 1, id: 'odd' }))
     put(state, 'c.json.tmp', record('c', {}))
     expect(await clearReady(state.io, HOME, 'me')).toBe(2)
+    const left = [...state.files.keys()].map((path) => path.replace(`${paths.sessions}/`, '')).sort()
+    expect(left).toEqual([paths.clear, 'asking.json', 'broken.json', 'c.json.tmp', 'junk.json', 'me.json', 'odd.json', 'stale.json', 'working.json'].sort())
   })
 
-  it('deletes no record, its own included', async () => {
+  it('leaves its own record in place, and deletes nothing when no other session is ready', async () => {
     const state = fake()
     put(state, 'me.json', record('me', {}))
-    put(state, 'a.json', record('a', {}))
-    await clearReady(state.io, HOME, 'me')
+    put(state, 'a.json', record('a', { state: 'working' }))
+    expect(await clearReady(state.io, HOME, 'me')).toBe(0)
     expect([...state.files.keys()].sort()).toEqual([paths.clear, `${paths.sessions}/a.json`, `${paths.sessions}/me.json`].sort())
+  })
+})
+
+describe('wasCleared', () => {
+  const ready = (patch: Partial<SessionRecord> = {}): SessionRecord => ({ ...m.newModel('me', 'proj', 'My title', T).record, ...patch })
+
+  it('is true for a ready session that went ready, tuned in and spoke no later than the clear', () => {
+    expect(wasCleared(ready(), T, T)).toBe(true)
+    expect(wasCleared(ready(), T, T + 1)).toBe(true)
+  })
+
+  it('is false when there was no clear', () => {
+    expect(wasCleared(ready(), T, null)).toBe(false)
+  })
+
+  it('is false for a session that went ready after the clear, or tuned in after it', () => {
+    expect(wasCleared(ready(), T, T - 1)).toBe(false)
+    expect(wasCleared(ready({ stateAt: T - 10_000 }), T, T - 1)).toBe(false)
+  })
+
+  it('is false for a session that is not ready', () => {
+    for (const state of ['working', 'needs-input', 'error'] as const) {
+      expect(wasCleared(ready({ state }), T, T + 1000)).toBe(false)
+    }
+  })
+
+  it('counts from the newest story and the newest activity line', () => {
+    const busy = m.activity(m.newModel('me', 'proj', 'My title', T - 10_000), T + 500, 'running the test suite').record
+    expect(wasCleared(busy, T - 10_000, T + 499)).toBe(false)
+    expect(wasCleared(busy, T - 10_000, T + 500)).toBe(true)
+  })
+})
+
+describe('readClearedAt', () => {
+  it('reads the moment, and is null when the file is missing or not one', async () => {
+    const state = fake()
+    expect(await readClearedAt(state.io, HOME)).toBeNull()
+    state.files.set(paths.clear, JSON.stringify({ v: 1, clearedAt: T }))
+    expect(await readClearedAt(state.io, HOME)).toBe(T)
+    state.files.set(paths.clear, '{broken')
+    expect(await readClearedAt(state.io, HOME)).toBeNull()
   })
 })
 

@@ -143,6 +143,18 @@ export function readySince(record: SessionRecord, tunedInAt: number): number {
   )
 }
 
+// Whether a /pipcast clear at `clearedAt`, null when there was none, found the
+// session ready: its state is ready now and it went ready, or tuned in, or
+// last spoke, no later than the clear
+export function wasCleared(record: SessionRecord, tunedInAt: number, clearedAt: number | null): boolean {
+  return clearedAt !== null && record.state === 'ready' && readySince(record, tunedInAt) <= clearedAt
+}
+
+// clear.json's moment; null when it is missing or not one
+export async function readClearedAt(io: Io, home: string): Promise<number | null> {
+  return parseClear(await readJson(io, storePaths(home).clear)).clearedAt
+}
+
 function idleTooLong(record: SessionRecord, tunedInAt: number, now: number): boolean {
   if (record.state !== 'ready') {
     return false
@@ -163,8 +175,7 @@ export async function checkIn(io: Io, model: SessionModel, tunedInAt: number): P
     await io.remove(paths.session(model.record.id))
     return { off: 'closed' }
   }
-  const { clearedAt } = parseClear(await readJson(io, paths.clear))
-  if (clearedAt !== null && model.record.state === 'ready' && readySince(model.record, tunedInAt) <= clearedAt) {
+  if (wasCleared(model.record, tunedInAt, await readClearedAt(io, home))) {
     await io.remove(paths.session(model.record.id))
     return { off: 'cleared' }
   }
@@ -185,9 +196,7 @@ export async function readSharedOptions(io: Io, home: string): Promise<SharedOpt
   return parseSharedOptions(await readJson(io, storePaths(home).options))
 }
 
-// /pipcast clear: writes the moment to clear.json, through a temporary file
-// named after the writer, and counts the other sessions on air that are
-// READY now, each of which goes off the air at its next heartbeat
+// /pipcast clear: writes the moment to clear.json, through a temporary file named after the writer, and deletes the record of every other session on air that is READY now, returning how many. clear.json keeps them off: their own mods write those records no more (wasCleared)
 export async function clearReady(io: Io, home: string, own: string): Promise<number> {
   const paths = storePaths(home)
   const now = await io.now()
@@ -199,6 +208,7 @@ export async function clearReady(io: Io, home: string, own: string): Promise<num
     }
     const found = parseSessionRecord(await readJson(io, `${paths.sessions}/${name}`))
     if (found !== null && isLive(found, now) && found.state === 'ready' && readySince(found, found.tunedInAt) <= now) {
+      await io.remove(`${paths.sessions}/${name}`)
       others += 1
     }
   }

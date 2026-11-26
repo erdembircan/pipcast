@@ -44,10 +44,10 @@ var REPLY = {
 function clearedReply(others, ownToo) {
   const back = "Press TUNE IN in a session to bring it back.";
   if (others === 0) {
-    return ownToo ? "This session was the only one READY, and it's off the air now. Press TUNE IN to bring it back." : "No session on air is READY.";
+    return ownToo ? "Took this session, the only one READY, off the air. Press TUNE IN to bring it back." : "No session on air is READY.";
   }
-  const sessions = `${others} ${ownToo ? "more " : ""}READY ${plural(others, "session goes", "sessions go")}`;
-  return ownToo ? `This session is off the air now, and ${sessions} off within seconds. ${back}` : `${sessions} off the air within seconds. ${back}`;
+  const sessions = `${others} ${ownToo ? "more " : ""}READY ${plural(others, "session", "sessions")}`;
+  return ownToo ? `Took this session and ${sessions} off the air. ${back}` : `Took ${sessions} off the air. ${back}`;
 }
 var TOAST_CANNOT_START = "Pipcast: KLWD could not start.";
 var OPTION_WORDS = {
@@ -1449,6 +1449,12 @@ function readySince(record, tunedInAt2) {
     ...record.activity.map((line) => line.at)
   );
 }
+function wasCleared(record, tunedInAt2, clearedAt) {
+  return clearedAt !== null && record.state === "ready" && readySince(record, tunedInAt2) <= clearedAt;
+}
+async function readClearedAt(io, home) {
+  return parseClear(await readJson(io, storePaths(home).clear)).clearedAt;
+}
 function idleTooLong(record, tunedInAt2, now) {
   if (record.state !== "ready") {
     return false;
@@ -1464,8 +1470,7 @@ async function checkIn(io, model2, tunedInAt2) {
     await io.remove(paths.session(model2.record.id));
     return { off: "closed" };
   }
-  const { clearedAt } = parseClear(await readJson(io, paths.clear));
-  if (clearedAt !== null && model2.record.state === "ready" && readySince(model2.record, tunedInAt2) <= clearedAt) {
+  if (wasCleared(model2.record, tunedInAt2, await readClearedAt(io, home))) {
     await io.remove(paths.session(model2.record.id));
     return { off: "cleared" };
   }
@@ -1493,6 +1498,7 @@ async function clearReady(io, home, own) {
     }
     const found = parseSessionRecord(await readJson(io, `${paths.sessions}/${name}`));
     if (found !== null && isLive(found, now) && found.state === "ready" && readySince(found, found.tunedInAt) <= now) {
+      await io.remove(`${paths.sessions}/${name}`);
       others += 1;
     }
   }
@@ -1682,6 +1688,7 @@ function ioFor($) {
   };
 }
 async function save($) {
+  let cleared = false;
   await enqueue(async () => {
     const m = model;
     const at = tunedInAt;
@@ -1691,12 +1698,20 @@ async function save($) {
     try {
       const io = ioFor($);
       const now = await $.clock.now();
-      await writeRecord(io, await io.storeHome(), m, at, now);
+      const home = await io.storeHome();
+      if (m.record.state === "ready" && wasCleared(m.record, at, await readClearedAt(io, home))) {
+        cleared = true;
+        return;
+      }
+      await writeRecord(io, home, m, at, now);
       lastWriteAt = now;
     } catch (error) {
       failure($, "writing the record", error);
     }
   });
+  if (cleared) {
+    await beat($);
+  }
 }
 async function saveActivity($) {
   if (tunedInAt === null || activityTimer !== void 0) {

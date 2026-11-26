@@ -26,10 +26,12 @@ import {
   checkIn,
   clearReady,
   ensureStation,
+  readClearedAt,
   readSharedOptions,
   shareOptions,
   tuneIn,
   tuneOut,
+  wasCleared,
   writeRecord,
 } from './core/services.ts'
 import type { Io, OffAir, TuneInResult } from './core/services.ts'
@@ -198,6 +200,7 @@ function ioFor($: EngineInterface): Io {
 
 // Saves the record, when tuned in
 async function save($: EngineInterface): Promise<void> {
+  let cleared = false
   await enqueue(async () => {
     const m = model
     const at = tunedInAt
@@ -207,12 +210,21 @@ async function save($: EngineInterface): Promise<void> {
     try {
       const io = ioFor($)
       const now = await $.clock.now()
-      await writeRecord(io, await io.storeHome(), m, at, now)
+      const home = await io.storeHome()
+      // A session that was ready at a /pipcast clear writes nothing: the heartbeat's check-in takes it off the air
+      if (m.record.state === 'ready' && wasCleared(m.record, at, await readClearedAt(io, home))) {
+        cleared = true
+        return
+      }
+      await writeRecord(io, home, m, at, now)
       lastWriteAt = now
     } catch (error) {
       failure($, 'writing the record', error)
     }
   })
+  if (cleared) {
+    await beat($)
+  }
 }
 
 // An activity line writes at most every ACTIVITY_WRITE_MS; a timer catches the last
@@ -860,7 +872,7 @@ async function askForWeather($: EngineInterface): Promise<string> {
   return REPLY.weather
 }
 
-// /pipcast clear: every session READY now goes off the air, this one at once and the rest at their next heartbeat
+// /pipcast clear: every session READY now goes off the air at once: the others' records are deleted, and this one tunes out
 async function clearReadySessions($: EngineInterface): Promise<string> {
   try {
     const io = ioFor($)
