@@ -170,7 +170,7 @@ describe('the weekly forecast', () => {
 
 describe('the options', () => {
   it('shows every option word after /pipcast', () => {
-    expect(COMMAND_ARGUMENT_HINT).toBe('[auto|transparency|oldtv on|off]')
+    expect(COMMAND_ARGUMENT_HINT).toBe('[weather | auto|transparency|oldtv on|off]')
   })
 
   it('says what Old TV is set to', () => {

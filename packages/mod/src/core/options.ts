@@ -48,12 +48,17 @@ export type Request =
   | { kind: 'set'; option: OptionSpec; enabled: boolean }
   | { kind: 'unknown'; word: string }
   | { kind: 'bad-value'; option: OptionSpec }
+  | { kind: 'weather' }
+  | { kind: 'weather-extra' }
 
 export function parseRequest(args: string): Request {
   const typed = args.trim().split(/\s+/).filter((word) => word !== '')
   const [first, value, ...rest] = typed.map((word) => word.toLowerCase())
   if (first === undefined) {
     return { kind: 'toggle' }
+  }
+  if (first === 'weather') {
+    return value === undefined ? { kind: 'weather' } : { kind: 'weather-extra' }
   }
   const option = OPTIONS.find((candidate) => candidate.word === first)
   if (option === undefined) {

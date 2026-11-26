@@ -77,6 +77,8 @@ The FORECAST line on the crawl says how the week ends and when it resets. The re
 
 At :15, :30 and :45 the board turns to EXTENDED FORECAST for 10 seconds and back, the way it turns between pages of sessions. It's no segment, with no jingle, and it never brings a tucked-away window out. It's skipped while the window is hidden or tucked into the side, and in the week's first day, when there's no outlook. A turn that comes due while a segment is on air waits for it, and is dropped if the quarter hour ends first. The top of the hour is the report on the hour, as ever.
 
+To see the forecast now, run `/pipcast weather` in a session that's on air, then switch to another app within 10 seconds. KLWD WEATHER airs CURRENT CONDITIONS and EXTENDED FORECAST, with STORMTRACKER when there's a storm, and brings a tucked-away window out for them, as BREAKING NEWS does. If you're still in Claude after 10 seconds, it doesn't air. If KLWD is already showing, as it is when you run the command in a terminal, it airs straight away. In the week's first day, or once the week is used up, there's no forecast to show.
+
 When the week looks like running out first, STORM WARNING breaks in with its own alert, and STORMTRACKER follows the storm across the map to the hour it's forecast to hit. It airs at most once an hour, and only while the forecast still says so; the report on the hour shows STORMTRACKER too.
 
 ## The window
@@ -116,6 +118,7 @@ Run `/pipcast auto`, `/pipcast transparency` or `/pipcast oldtv` on its own to s
 | `/pipcast auto [on\|off]` | Shows or sets **Tune in every new session** |
 | `/pipcast transparency [on\|off]` | Shows or sets **Transparent window** |
 | `/pipcast oldtv [on\|off]` | Shows or sets **Old TV** |
+| `/pipcast weather` | Airs KLWD WEATHER now, if you switch to another app within 10 seconds |
 
 ## What Pipcast runs and reads
 
@@ -152,7 +155,7 @@ Everything stays on your Mac. Pipcast sends nothing anywhere, and has no account
 
 It keeps its files in one folder, `~/Library/Application Support/Pipcast`, which only your user can open:
 
-- a file for each session on air, with its project's folder name, its title, its state, what Claude is doing, the question Claude asked or what a permission is for, Claude's last words when a turn ends, the lines and files it changed in each hour, and your account's usage limits. A session deletes its file when it goes off the air or ends. A file left behind by a session that stopped without ending, as when Claude Code is force-quit, is deleted the next time a session goes on air, once it's an hour old.
+- a file for each session on air, with its project's folder name, its title, its state, what Claude is doing, the question Claude asked or what a permission is for, Claude's last words when a turn ends, the lines and files it changed in each hour, your account's usage limits, and when you last ran `/pipcast weather`. A session deletes its file when it goes off the air or ends. A file left behind by a session that stopped without ending, as when Claude Code is force-quit, is deleted the next time a session goes on air, once it's an hour old.
 - the window's corner and size, whether it's tucked into the side, whether sound is on, when the hour last aired, when the window was last closed, **Transparent window** and **Old TV**, and the station's process number and version
 - your week's usage, as the share used at times since the week's limit last reset, at most one reading each hour, for the weekly forecast, and when the last storm warning aired. The readings start over when the week resets.
 - the station's own log of what its window did, for fixing problems, cut back at 1 MB

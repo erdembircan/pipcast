@@ -58,6 +58,7 @@
 
   // packages/contract/src/constants.ts
   var STORY_FRESH_MS = 12e4;
+  var WEATHER_ASK_GRACE_MS = 1e4;
   var WEATHER_MAX_POINTS = 200;
 
   // packages/contract/src/format.ts
@@ -138,6 +139,14 @@
   }
 
   // packages/contract/src/copy.ts
+  var REPLY = {
+    tunedIn: "Tuned in to KLWD. It shows when you switch to another app.",
+    tunedOut: "Tuned out of KLWD.",
+    cannotStart: "KLWD could not start. Run /pipcast to try again.",
+    weather: `KLWD WEATHER airs if you switch to another app in the next ${WEATHER_ASK_GRACE_MS / 1e3} seconds. In the week's first day, or once the week is used up, there's no forecast to show.`,
+    weatherOffAir: "This session is off the air. Run /pipcast to tune in, then /pipcast weather.",
+    weatherAlone: "/pipcast weather takes nothing after it."
+  };
   var OPTION_WORDS = {
     auto: {
       title: "Tune in every new session",
@@ -155,7 +164,7 @@
       off: "KLWD comes through sharp and clean."
     }
   };
-  var COMMAND_ARGUMENT_HINT = `[${Object.keys(OPTION_WORDS).join("|")} on|off]`;
+  var COMMAND_ARGUMENT_HINT = `[weather | ${Object.keys(OPTION_WORDS).join("|")} on|off]`;
   var LEAD = {
     comingUp: "COMING UP",
     breaking: "BREAKING",
@@ -1212,6 +1221,20 @@
     }
     return { id, steps: [opener, tracker, outro] };
   }
+  function weatherSegment(forecast, now) {
+    const weather = weatherScene(forecast, now);
+    const page = (mode, length) => ({
+      role: "weather",
+      length,
+      bed: "beat-major",
+      scene: ({ now: at2, ticker }) => ({ mode, clock: clock(at2), ticker, weather })
+    });
+    const steps = [page("weather-now", WEATHER_PAGE_MS), page("weather-days", WEATHER_PAGE_MS)];
+    if (forecast.outlook === "storm") {
+      steps.push(page("stormtracker", STORMTRACKER_MS));
+    }
+    return { id: `weather:${now}`, steps };
+  }
 
   // packages/director/src/board.ts
   var MAX_TICKER = 6;
@@ -1550,6 +1573,15 @@
   }
 
   // packages/director/src/director.ts
+  function newestAsk(snapshot) {
+    let newest2 = 0;
+    for (const session of snapshot.sessions) {
+      if (session.weatherAskedAt !== void 0 && session.weatherAskedAt > newest2) {
+        newest2 = session.weatherAskedAt;
+      }
+    }
+    return newest2;
+  }
   function createDirector(options = {}) {
     const reducedMotion = options.reducedMotion === true;
     const quarters = options.quarters ?? quarterOf;
@@ -1570,6 +1602,7 @@
     let servedQuarter = 0;
     let dueQuarter = null;
     let turn = null;
+    let servedAsk = 0;
     function boardState() {
       const story = onAir?.item.kind === "story" ? onAir.item.story : null;
       return {
@@ -1696,6 +1729,18 @@
             desk.markDue(now);
           }
         }
+        const asked = newestAsk(snapshot);
+        if (asked > servedAsk) {
+          if (now - asked > WEATHER_ASK_GRACE_MS) {
+            servedAsk = asked;
+          } else if (visible) {
+            servedAsk = asked;
+            const waits = queue.some((item) => item.kind === "weather") || onAir?.item.kind === "weather";
+            if (!waits && hasOutlook(desk.forecast())) {
+              queue.push({ kind: "weather" });
+            }
+          }
+        }
         const quarter = quarters(now);
         if (quarter !== null && quarter > servedQuarter) {
           servedQuarter = quarter;
@@ -1762,6 +1807,12 @@
               }
               onAir = { item, segment: warningSegment(forecast, now, reducedMotion), index: 0, stepStartedAt: now, bed: void 0 };
               desk.markDue(now);
+            } else if (item.kind === "weather") {
+              const forecast = desk.refresh(now);
+              if (!hasOutlook(forecast)) {
+                continue;
+              }
+              onAir = { item, segment: weatherSegment(forecast, now), index: 0, stepStartedAt: now, bed: void 0 };
             } else {
               if (snapshot === null) {
                 continue;

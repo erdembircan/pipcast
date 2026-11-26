@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- `/pipcast weather` airs KLWD WEATHER now: CURRENT CONDITIONS and EXTENDED FORECAST, with STORMTRACKER when there's a storm. Switch to another app within 10 seconds of running it and the forecast airs, bringing a tucked-away window out as BREAKING NEWS does; stay in Claude longer and it doesn't air. In the week's first day, or once the week is used up, there's no forecast to show.
+
 ### Changed
 
 - Pipcast is no longer headed for Anthropic's plugin directory. It installs from erdembircan-plugins, as it has since 1.0.0, and its README no longer says it's in review there.

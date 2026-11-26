@@ -26,6 +26,10 @@ export const MIN_SCALE = 0.5
 // A story older than this when the station first sees it does not air
 export const STORY_FRESH_MS = 120_000
 
+// How long a /pipcast weather request waits for the window to show: it is
+// asked for in Claude, where the window is hidden
+export const WEATHER_ASK_GRACE_MS = 10_000
+
 // How the station mixes the beat. It comes in over BED_IN_MS on the last notes
 // of its line, rising evenly from silence, so that its first downbeat lands at
 // full, and goes out over BED_OUT_MS falling as the square of what is left,

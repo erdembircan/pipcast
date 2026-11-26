@@ -35,6 +35,16 @@ describe('parseRequest', () => {
     expect(parseRequest('  AUTO   On ')).toEqual({ kind: 'set', option: auto, enabled: true })
   })
 
+  it('reads weather on its own as asking for KLWD WEATHER, in any case and spacing', () => {
+    expect(parseRequest('weather')).toEqual({ kind: 'weather' })
+    expect(parseRequest('  WEATHER ')).toEqual({ kind: 'weather' })
+  })
+
+  it('refuses words after weather, and takes a longer word for an unknown option', () => {
+    expect(parseRequest('weather now')).toEqual({ kind: 'weather-extra' })
+    expect(parseRequest('weatherx')).toEqual({ kind: 'unknown', word: 'weatherx' })
+  })
+
   it('names a word it does not know as it was typed', () => {
     expect(parseRequest('Volume on')).toEqual({ kind: 'unknown', word: 'Volume' })
   })

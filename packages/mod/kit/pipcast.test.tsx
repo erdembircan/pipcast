@@ -291,6 +291,26 @@ scenario('/pipcast tunes in, then out', {}, async (w, $) => {
   expect(w.record()).toBeNull()
 })
 
+scenario('/pipcast weather, tuned in, keeps the moment in the record', {}, async (w, $) => {
+  await tuneIn($)
+  await w.clock.advance(3000)
+  expect((await option($, 'weather')).text).toBe(REPLY.weather)
+  expect(w.record()?.weatherAskedAt).toBe(T0 + 3000)
+})
+
+scenario('/pipcast weather, off the air, says to tune in and writes nothing', {}, async (w, $) => {
+  expect((await option($, 'weather')).text).toBe(REPLY.weatherOffAir)
+  expect(w.record()).toBeNull()
+})
+
+scenario('/pipcast weather takes nothing after it', {}, async (w, $) => {
+  await tuneIn($)
+  const before = w.record()
+  expect((await option($, 'weather now')).text).toBe(REPLY.weatherAlone)
+  expect(w.record()).toEqual(before)
+  expect(w.record()).not.toHaveProperty('weatherAskedAt')
+})
+
 scenario('a station that will not start leaves a toast and no record', { launchExit: 1, launchOut: '' }, async (w, $) => {
   const ui = await mounted($)
   await ui.press({ key: 'tune-in' })
@@ -1305,6 +1325,7 @@ scenario('the words after /pipcast are read in any case and spacing', {}, async 
 
 scenario('an option /pipcast does not know, or a value that is not on or off, saves nothing', {}, async (w, $) => {
   expect((await option($, 'volume on')).text).toBe(OPTION_REPLY.unknown('volume'))
+  expect(OPTION_REPLY.unknown('volume')).toBe('/pipcast has no option called volume. Options: auto, transparency, oldtv. To air KLWD WEATHER, run /pipcast weather.')
   expect((await option($, 'auto maybe')).text).toBe(OPTION_REPLY.badValue('auto'))
   expect((await option($, 'auto on now')).text).toBe(OPTION_REPLY.badValue('auto'))
   expect(w.engineCalls).toEqual([])

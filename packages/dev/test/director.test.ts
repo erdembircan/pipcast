@@ -546,6 +546,24 @@ describe('the dev director', () => {
     }
   })
 
+  it('leaves a /pipcast weather request to the station’s own director: a cue’s never airs it', () => {
+    const { memory, limit } = pageWeek()
+    const a = session('a', { limits: [limit] })
+    const h = devHarness(T0, [a], { weather: memory })
+    h.until(T0 + 3000)
+    h.dev.cue(cue({ id: 'c1', segment: 'story', stories: [{ kind: 'ready' }] }))
+    const open = h.step()
+    expect(open.program.key).toBe('story:dev-c1-0:1:0')
+    // A request comes while the cue is on air
+    h.world.sessions = [{ ...a, weatherAskedAt: open.now + 250 }]
+    h.until(open.now + 120_000)
+    const all = keys(h.history)
+    const weather = all.filter((key) => key.startsWith('weather:')).map((key) => key.replace(/:\d+$/, ''))
+    // One segment at most: the station's own director's, after the cue is off the air
+    expect(new Set(weather).size).toBe(1)
+    expect(all.findIndex((key) => key.startsWith('weather:'))).toBeGreaterThan(all.findLastIndex((key) => key.startsWith('story:dev-c1')))
+  })
+
   it('drops what is not a cue, and a cue that comes twice, saying why', () => {
     const h = devHarness(T0, [session('a')])
     h.dev.cue('{')

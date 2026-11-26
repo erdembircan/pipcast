@@ -165,6 +165,7 @@ export function parseSessionRecord(value: unknown): SessionRecord | null {
     activity: parseList(value.activity, parseActivity),
     hours: parseList(value.hours, parseHour),
     limits: parseLimits(value.limits),
+    ...(isNumber(value.weatherAskedAt) ? { weatherAskedAt: value.weatherAskedAt } : {}),
   }
 }
 

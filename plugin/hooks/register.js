@@ -10,6 +10,7 @@ var MAX_STORIES = 10;
 var MAX_ACTIVITY = 3;
 var MAX_HOURS = 3;
 var STATION_STALE_MS = 2e4;
+var WEATHER_ASK_GRACE_MS = 1e4;
 var STORE_FOLDER = "Pipcast";
 var COMMAND_MAX = 60;
 var QUESTION_MAX = 200;
@@ -26,11 +27,14 @@ function hourKey(ms) {
 
 // packages/contract/src/copy.ts
 var COMMAND_NAME = "pipcast";
-var COMMAND_DESCRIPTION = "Tune this session in to KLWD, or tune it out";
+var COMMAND_DESCRIPTION = "Tune this session in to KLWD or out, air KLWD WEATHER, or change a setting";
 var REPLY = {
   tunedIn: "Tuned in to KLWD. It shows when you switch to another app.",
   tunedOut: "Tuned out of KLWD.",
-  cannotStart: "KLWD could not start. Run /pipcast to try again."
+  cannotStart: "KLWD could not start. Run /pipcast to try again.",
+  weather: `KLWD WEATHER airs if you switch to another app in the next ${WEATHER_ASK_GRACE_MS / 1e3} seconds. In the week's first day, or once the week is used up, there's no forecast to show.`,
+  weatherOffAir: "This session is off the air. Run /pipcast to tune in, then /pipcast weather.",
+  weatherAlone: "/pipcast weather takes nothing after it."
 };
 var TOAST_CANNOT_START = "Pipcast: KLWD could not start.";
 var OPTION_WORDS = {
@@ -50,14 +54,14 @@ var OPTION_WORDS = {
     off: "KLWD comes through sharp and clean."
   }
 };
-var COMMAND_ARGUMENT_HINT = `[${Object.keys(OPTION_WORDS).join("|")} on|off]`;
+var COMMAND_ARGUMENT_HINT = `[weather | ${Object.keys(OPTION_WORDS).join("|")} on|off]`;
 function optionState(word, enabled) {
   const words = OPTION_WORDS[word];
   const state = `${words?.title ?? word} is ${enabled ? "on" : "off"}.`;
   return words === void 0 ? state : `${state} ${enabled ? words.on : words.off}`;
 }
 var OPTION_REPLY = {
-  unknown: (word) => `/pipcast has no option called ${word}. Options: ${Object.keys(OPTION_WORDS).join(", ")}.`,
+  unknown: (word) => `/pipcast has no option called ${word}. Options: ${Object.keys(OPTION_WORDS).join(", ")}. To air KLWD WEATHER, run /pipcast weather.`,
   badValue: (word) => `/pipcast ${word} takes on or off.`,
   cannotRead: (word) => `Pipcast could not read the ${word} setting. Run /pipcast ${word} to try again.`,
   cannotSave: (word, enabled) => `Pipcast could not save the ${word} setting. Run /pipcast ${word} ${enabled ? "on" : "off"} to try again.`
@@ -321,7 +325,8 @@ function parseSessionRecord(value) {
     stories: parseList(value.stories, parseStory),
     activity: parseList(value.activity, parseActivity),
     hours: parseList(value.hours, parseHour),
-    limits: parseLimits(value.limits)
+    limits: parseLimits(value.limits),
+    ...isNumber(value.weatherAskedAt) ? { weatherAskedAt: value.weatherAskedAt } : {}
   };
 }
 function trimRecord(record) {
@@ -1074,6 +1079,9 @@ function newModel(id, project, fallback, now) {
     held: null
   };
 }
+function askedForWeather(m, now) {
+  return withRecord(m, { ...m.record, weatherAskedAt: now });
+}
 function turnStarted(m, now, turnId) {
   const turn = { id: turnId, startedAt: now, ended: false };
   return withRecord(m, withState(m.record, "working", now), { turn, waitingOn: null, held: null });
@@ -1241,6 +1249,9 @@ function parseRequest(args) {
   const [first, value, ...rest] = typed.map((word) => word.toLowerCase());
   if (first === void 0) {
     return { kind: "toggle" };
+  }
+  if (first === "weather") {
+    return value === void 0 ? { kind: "weather" } : { kind: "weather-extra" };
   }
   const option = OPTIONS.find((candidate) => candidate.word === first);
   if (option === void 0) {
@@ -2163,6 +2174,14 @@ async function setOption($, option, enabled) {
     return OPTION_REPLY.cannotSave(option.word, enabled);
   }
 }
+async function askForWeather($) {
+  if (model === null || tunedInAt === null) {
+    return REPLY.weatherOffAir;
+  }
+  model = askedForWeather(model, await $.clock.now());
+  await save($);
+  return REPLY.weather;
+}
 async function onTurnStart($, turnId) {
   await ensureSession($);
   if (model === null) {
@@ -2288,6 +2307,10 @@ function register(on, options) {
         return { text: OPTION_REPLY.unknown(request.word) };
       case "bad-value":
         return { text: OPTION_REPLY.badValue(request.option.word) };
+      case "weather":
+        return { text: await askForWeather($) };
+      case "weather-extra":
+        return { text: REPLY.weatherAlone };
       case "toggle":
         break;
     }
